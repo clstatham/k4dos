@@ -2,21 +2,32 @@ use core::{mem::size_of, panic::PanicInfo};
 
 use spin::Once;
 use x86_64::instructions::interrupts;
-use xmas_elf::{ElfFile, sections::{ShType, SectionData}, symbol_table::Entry};
+use xmas_elf::{
+    sections::{SectionData, ShType},
+    symbol_table::Entry,
+    ElfFile,
+};
 
-use crate::{util::{SavedInterruptStatus, KResult}, kerrmsg};
+use crate::{
+    kerrmsg,
+    util::{KResult, SavedInterruptStatus},
+};
 
 pub static KERNEL_ELF: Once<ElfFile<'static>> = Once::new();
 
 pub fn unwind_stack() -> KResult<()> {
     let _guard = SavedInterruptStatus::save();
 
-    let kernel_elf = KERNEL_ELF.get().ok_or(kerrmsg!("KERNEL_ELF not initialized"))?;
+    let kernel_elf = KERNEL_ELF
+        .get()
+        .ok_or(kerrmsg!("KERNEL_ELF not initialized"))?;
     let mut symbol_table = None;
 
     for section in kernel_elf.section_iter() {
         if section.get_type() == Ok(ShType::SymTab) {
-            let section_data = section.get_data(&kernel_elf).map_err(|_| kerrmsg!("Failed to get kernel section data"))?;
+            let section_data = section
+                .get_data(&kernel_elf)
+                .map_err(|_| kerrmsg!("Failed to get kernel section data"))?;
 
             if let SectionData::SymbolTable64(symtab) = section_data {
                 symbol_table = Some(symtab);
@@ -78,7 +89,7 @@ extern "C" fn rust_panic(info: &PanicInfo) -> ! {
     interrupts::disable();
     let default_panic = &format_args!("");
     let panic_msg = info.message().unwrap_or(default_panic);
-    
+
     log::error!("Panicked at '{}'", panic_msg);
     if let Some(panic_location) = info.location() {
         log::error!("{}", panic_location);
@@ -86,7 +97,7 @@ extern "C" fn rust_panic(info: &PanicInfo) -> ! {
 
     log::error!("");
     match unwind_stack() {
-        Ok(()) => {},
+        Ok(()) => {}
         Err(e) => log::error!("Error unwinding stack: {:?}", e.msg()),
     }
 

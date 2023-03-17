@@ -16,10 +16,8 @@ pub fn arch_main() {
 
     let memmap = MEMMAP.get_response().get_mut().unwrap().memmap_mut();
 
-    
-
     crate::PHYSICAL_OFFSET.store(
-        HHDM.get_response().get().unwrap().offset,
+        HHDM.get_response().get().unwrap().offset as usize,
         core::sync::atomic::Ordering::SeqCst,
     );
 
@@ -35,7 +33,3 @@ pub fn arch_main() {
         ElfFile::new(elf_slice).unwrap()
     });
 }
-
-
-
-

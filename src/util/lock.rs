@@ -3,13 +3,12 @@ use core::mem::ManuallyDrop;
 use core::ops::{Deref, DerefMut};
 
 use spin::mutex::{SpinMutex, SpinMutexGuard};
-use x86::current::rflags::{RFlags, self};
+use x86::current::rflags::{self, RFlags};
 
 // use crate::interrupts::SavedInterruptStatus;
 use crate::{kerrmsg, terminal_println};
 
 use super::error::KResult;
-
 
 pub struct SavedInterruptStatus {
     rflags: RFlags,

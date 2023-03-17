@@ -11,13 +11,13 @@ use crate::{
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[repr(transparent)]
 pub struct PhysAddr {
-    addr: u64,
+    addr: usize,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[repr(transparent)]
 pub struct VirtAddr {
-    addr: u64,
+    addr: usize,
 }
 
 #[derive(Debug)]
@@ -28,12 +28,12 @@ pub enum AddrReadError {
 
 impl PhysAddr {
     #[inline]
-    pub const unsafe fn new_unchecked(addr: u64) -> Self {
+    pub const unsafe fn new_unchecked(addr: usize) -> Self {
         Self { addr }
     }
 
     #[inline]
-    pub fn new(addr: u64) -> Self {
+    pub fn new(addr: usize) -> Self {
         assert_eq!(
             addr.get_bits(52..64),
             0,
@@ -48,15 +48,13 @@ impl PhysAddr {
     }
 
     #[inline]
-    pub const fn value(&self) -> u64 {
+    pub const fn value(&self) -> usize {
         self.addr
     }
 
     #[inline]
     pub fn as_hhdm_virt(&self) -> VirtAddr {
-        VirtAddr::new(
-            crate::phys_offset().value() + self.value()
-        )
+        VirtAddr::new(crate::phys_offset().value() + self.value())
     }
 }
 
@@ -98,65 +96,34 @@ impl fmt::Pointer for PhysAddr {
     }
 }
 
-impl Add<u64> for PhysAddr {
+impl Add<usize> for PhysAddr {
     type Output = Self;
-    fn add(self, rhs: u64) -> Self::Output {
+    fn add(self, rhs: usize) -> Self::Output {
         PhysAddr::new(self.addr + rhs)
     }
 }
 
-impl AddAssign<u64> for PhysAddr {
-    fn add_assign(&mut self, rhs: u64) {
+impl AddAssign<usize> for PhysAddr {
+    fn add_assign(&mut self, rhs: usize) {
         *self = *self + rhs;
     }
 }
 
-#[cfg(target_pointer_width = "64")]
-impl Add<usize> for PhysAddr {
+impl Sub<usize> for PhysAddr {
     type Output = Self;
-    fn add(self, rhs: usize) -> Self::Output {
-        self + rhs as u64
-    }
-}
-
-#[cfg(target_pointer_width = "64")]
-impl AddAssign<usize> for PhysAddr {
-    fn add_assign(&mut self, rhs: usize) {
-        self.add_assign(rhs as u64)
-    }
-}
-
-impl Sub<u64> for PhysAddr {
-    type Output = Self;
-    fn sub(self, rhs: u64) -> Self::Output {
+    fn sub(self, rhs: usize) -> Self::Output {
         PhysAddr::new(self.addr.checked_sub(rhs).unwrap())
     }
 }
 
-impl SubAssign<u64> for PhysAddr {
-    fn sub_assign(&mut self, rhs: u64) {
+impl SubAssign<usize> for PhysAddr {
+    fn sub_assign(&mut self, rhs: usize) {
         *self = *self - rhs;
     }
 }
 
-#[cfg(target_pointer_width = "64")]
-impl Sub<usize> for PhysAddr {
-    type Output = Self;
-    #[inline]
-    fn sub(self, rhs: usize) -> Self::Output {
-        self - rhs as u64
-    }
-}
-
-#[cfg(target_pointer_width = "64")]
-impl SubAssign<usize> for PhysAddr {
-    fn sub_assign(&mut self, rhs: usize) {
-        self.sub_assign(rhs as u64)
-    }
-}
-
 impl Sub<PhysAddr> for PhysAddr {
-    type Output = u64;
+    type Output = usize;
     fn sub(self, rhs: PhysAddr) -> Self::Output {
         self.value().checked_sub(rhs.value()).unwrap()
     }
@@ -164,7 +131,7 @@ impl Sub<PhysAddr> for PhysAddr {
 
 impl VirtAddr {
     #[inline]
-    pub const fn new(addr: u64) -> Self {
+    pub const fn new(addr: usize) -> Self {
         Self { addr }
     }
 
@@ -174,7 +141,7 @@ impl VirtAddr {
     }
 
     #[inline]
-    pub const fn value(&self) -> u64 {
+    pub const fn value(&self) -> usize {
         self.addr
     }
 
@@ -228,7 +195,7 @@ impl VirtAddr {
     #[inline]
     pub fn align_down<U>(&self, align: U) -> Self
     where
-        U: Into<u64>,
+        U: Into<usize>,
     {
         VirtAddr::new(align_down(self.addr, align.into()))
     }
@@ -236,7 +203,7 @@ impl VirtAddr {
     #[inline]
     pub fn align_up<U>(&self, align: U) -> Self
     where
-        U: Into<u64>,
+        U: Into<usize>,
     {
         VirtAddr::new(align_up(self.addr, align.into()))
     }
@@ -285,72 +252,38 @@ impl fmt::Pointer for VirtAddr {
     }
 }
 
-impl Add<u64> for VirtAddr {
-    type Output = Self;
-    #[inline]
-    fn add(self, rhs: u64) -> Self::Output {
-        VirtAddr::new(self.addr + rhs)
-    }
-}
-
-impl AddAssign<u64> for VirtAddr {
-    #[inline]
-    fn add_assign(&mut self, rhs: u64) {
-        *self = *self + rhs;
-    }
-}
-
-#[cfg(target_pointer_width = "64")]
 impl Add<usize> for VirtAddr {
     type Output = Self;
     #[inline]
     fn add(self, rhs: usize) -> Self::Output {
-        self + rhs as u64
+        VirtAddr::new(self.addr + rhs)
     }
 }
 
-#[cfg(target_pointer_width = "64")]
 impl AddAssign<usize> for VirtAddr {
     #[inline]
     fn add_assign(&mut self, rhs: usize) {
-        self.add_assign(rhs as u64)
+        *self = *self + rhs;
     }
 }
 
-impl Sub<u64> for VirtAddr {
-    type Output = Self;
-    #[inline]
-    fn sub(self, rhs: u64) -> Self::Output {
-        VirtAddr::new(self.addr.checked_sub(rhs).unwrap())
-    }
-}
-
-impl SubAssign<u64> for VirtAddr {
-    #[inline]
-    fn sub_assign(&mut self, rhs: u64) {
-        *self = *self - rhs;
-    }
-}
-
-#[cfg(target_pointer_width = "64")]
 impl Sub<usize> for VirtAddr {
     type Output = Self;
     #[inline]
     fn sub(self, rhs: usize) -> Self::Output {
-        self - rhs as u64
+        VirtAddr::new(self.addr.checked_sub(rhs).unwrap())
     }
 }
 
-#[cfg(target_pointer_width = "64")]
 impl SubAssign<usize> for VirtAddr {
     #[inline]
     fn sub_assign(&mut self, rhs: usize) {
-        self.sub_assign(rhs as u64)
+        *self = *self - rhs;
     }
 }
 
 impl Sub<VirtAddr> for VirtAddr {
-    type Output = u64;
+    type Output = usize;
     #[inline]
     fn sub(self, rhs: VirtAddr) -> Self::Output {
         self.value().checked_sub(rhs.value()).unwrap()
