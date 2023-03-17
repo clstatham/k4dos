@@ -247,7 +247,10 @@ macro_rules! range_impl {
             }
 
             pub fn iter(&self) -> $iter {
-                $iter { current: self.start, limit: self.end }
+                $iter {
+                    current: self.start,
+                    limit: self.end,
+                }
             }
         }
 

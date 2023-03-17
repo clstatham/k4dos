@@ -225,7 +225,6 @@ impl VirtAddr {
         VirtAddr::new(align_up(self.addr, align.into()))
     }
 
-
     pub fn p4_index(&self) -> usize {
         ((self.addr / PAGE_SIZE) >> 27) & 0x1FF
     }

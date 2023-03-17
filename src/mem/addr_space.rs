@@ -1,8 +1,19 @@
-use x86_64::{registers::control::{Cr3, Cr3Flags}, structures::paging::PhysFrame};
+use x86_64::{
+    registers::control::{Cr3, Cr3Flags},
+    structures::paging::PhysFrame,
+};
 
-use crate::{util::KResult, kerr};
+use crate::{kerr, util::KResult};
 
-use super::{paging::{units::{AllocatedFrames, FrameRange, Frame}, table::{PagingError, PageTable, active_table}, mapper::Mapper}, allocator::alloc_kernel_frames, addr::PhysAddr};
+use super::{
+    addr::PhysAddr,
+    allocator::alloc_kernel_frames,
+    paging::{
+        mapper::Mapper,
+        table::{active_table, PageTable, PagingError},
+        units::{AllocatedFrames, Frame, FrameRange},
+    },
+};
 
 pub struct AddressSpace {
     cr3: AllocatedFrames,
@@ -11,7 +22,8 @@ pub struct AddressSpace {
 impl AddressSpace {
     pub fn new() -> KResult<Self, PagingError> {
         let cr3 = unsafe {
-            let frame = alloc_kernel_frames(1).map_err(|e| kerr!(PagingError::FrameAllocationFailed(e)))?;
+            let frame =
+                alloc_kernel_frames(1).map_err(|e| kerr!(PagingError::FrameAllocationFailed(e)))?;
             let phys_addr = frame.start_address();
             let virt_addr = phys_addr.as_hhdm_virt();
 
@@ -38,7 +50,10 @@ impl AddressSpace {
         let cr3 = Cr3::read().0.start_address().as_u64() as usize;
         let cr3 = PhysAddr::new(cr3);
         let cr3 = unsafe {
-            AllocatedFrames::assume_allocated(FrameRange::new(Frame::containing_address(cr3), Frame::containing_address(cr3)))
+            AllocatedFrames::assume_allocated(FrameRange::new(
+                Frame::containing_address(cr3),
+                Frame::containing_address(cr3),
+            ))
         };
         Self { cr3 }
     }
@@ -49,11 +64,16 @@ impl AddressSpace {
 
     pub fn switch(&self) {
         unsafe {
-            Cr3::write(PhysFrame::containing_address(x86_64::PhysAddr::new(self.cr3.start_address().value() as u64)), Cr3Flags::empty());
+            Cr3::write(
+                PhysFrame::containing_address(x86_64::PhysAddr::new(
+                    self.cr3.start_address().value() as u64,
+                )),
+                Cr3Flags::empty(),
+            );
         }
     }
 
     pub fn mapper(&mut self) -> Mapper {
-        unsafe { Mapper::new(&mut *self.cr3.start_address().as_hhdm_virt().as_mut_ptr() )}
+        unsafe { Mapper::new(&mut *self.cr3.start_address().as_hhdm_virt().as_mut_ptr()) }
     }
 }

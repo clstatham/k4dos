@@ -3,11 +3,11 @@ use core::ops::{Index, IndexMut};
 use alloc::vec::Vec;
 use arrayvec::ArrayVec;
 use buddy_system_allocator::LockedHeap;
-use limine::{LimineMemmapEntry, NonNullPtr, LimineMemoryMapEntryType};
+use limine::{LimineMemmapEntry, LimineMemoryMapEntryType, NonNullPtr};
 use spin::Once;
 
-use super::addr::{PhysAddr, VirtAddr, canonicalisze_physaddr};
-use super::consts::{PAGE_SIZE, MAX_LOW_VADDR, MIN_HIGH_VADDR};
+use super::addr::{PhysAddr, VirtAddr};
+use super::consts::{MAX_LOW_VADDR, MIN_HIGH_VADDR, PAGE_SIZE};
 use super::paging::units::{
     AllocatedFrames, AllocatedPages, Frame, FrameRange, Page, PageIndex, PageRange,
 };
@@ -67,7 +67,8 @@ pub fn alloc_kernel_pages_at(
 }
 
 pub fn free_kernel_frames(frames: &mut AllocatedFrames) -> KResult<(), AllocationError> {
-    KERNEL_FRAME_ALLOCATOR.get()
+    KERNEL_FRAME_ALLOCATOR
+        .get()
         .ok_or(kerrmsg!("KERNEL_FRAME_ALLOCATOR not initialized"))?
         .try_lock()
         .map_err(|_| kerr!(AllocationError))?
@@ -76,7 +77,8 @@ pub fn free_kernel_frames(frames: &mut AllocatedFrames) -> KResult<(), Allocatio
 }
 
 pub fn free_kernel_pages(pages: &mut AllocatedPages) -> KResult<(), AllocationError> {
-    KERNEL_PAGE_ALLOCATOR.get()
+    KERNEL_PAGE_ALLOCATOR
+        .get()
         .ok_or(kerrmsg!("KERNEL_PAGE_ALLOCATOR not initialized"))?
         .try_lock()
         .map_err(|_| kerr!(AllocationError))?
@@ -88,7 +90,9 @@ pub fn init(memmap: &mut [NonNullPtr<LimineMemmapEntry>]) -> KResult<()> {
     let mut frame_alloc = FrameAllocator::new_static();
     for entry in memmap {
         let entry = unsafe { &*entry.as_ptr() };
-        if entry.typ == LimineMemoryMapEntryType::KernelAndModules || entry.typ == LimineMemoryMapEntryType::Usable {
+        if entry.typ == LimineMemoryMapEntryType::KernelAndModules
+            || entry.typ == LimineMemoryMapEntryType::Usable
+        {
             let start = entry.base as usize;
             let end = start + entry.len as usize;
             let frames = FrameRange::new(
@@ -111,7 +115,7 @@ pub fn init(memmap: &mut [NonNullPtr<LimineMemmapEntry>]) -> KResult<()> {
         Page::containing_address(VirtAddr::new(align_down(usize::MAX, PAGE_SIZE))),
     );
     unsafe { page_alloc.insert_free_region(pages) };
-    KERNEL_PAGE_ALLOCATOR.call_once(|| SpinLock::new(page_alloc));    
+    KERNEL_PAGE_ALLOCATOR.call_once(|| SpinLock::new(page_alloc));
 
     Ok(())
 }
