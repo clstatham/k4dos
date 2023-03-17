@@ -43,13 +43,13 @@ pub fn _print(args: fmt::Arguments) {
 }
 
 #[macro_export]
-macro_rules! print {
+macro_rules! terminal_print {
     ($($t:tt)*) => { $crate::io::_print(format_args!($($t)*)) };
 }
 
 #[macro_export]
-macro_rules! println {
-    ()          => { $crate::print!("\n"); };
+macro_rules! terminal_println {
+    ()          => { $crate::terminal_print!("\n"); };
     // On nightly, `format_args_nl!` could also be used.
-    ($($t:tt)*) => { $crate::print!("{}\n", format_args!($($t)*)); };
+    ($($t:tt)*) => { $crate::terminal_print!("{}\n", format_args!($($t)*)); };
 }

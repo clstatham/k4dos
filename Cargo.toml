@@ -11,3 +11,16 @@ spin = "0.9"
 bit_field = "0.10.2"
 x86 = "0.52.0"
 x86_64 = "0.14.10"
+log = "0.4.17"
+pic8259 = "0.10.2"
+bitflags = "2.0.1"
+uart_16550 = "0.2.18"
+crossbeam-utils = { version = "0.8.12", default-features = false }
+atomic_refcell = "0.1.8"
+buddy_system_allocator = { version = "0.8.0", features = ["const_fn"] }
+pc-keyboard = "0.7.0"
+memoffset = { version = "0.7.1", features = ["unstable_const"] }
+
+[dependencies.lazy_static]
+version = "1.4.0"
+features = ["spin_no_std"]

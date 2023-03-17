@@ -1,7 +1,9 @@
 #[macro_use]
 pub mod error;
+pub mod lock;
 
 pub use self::error::*;
+pub use self::lock::*;
 
 #[inline]
 pub const fn align_down(val: u64, align: u64) -> u64 {

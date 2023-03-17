@@ -3,16 +3,20 @@
 #![feature(pointer_is_aligned)]
 
 mod io;
+#[macro_use]
+pub mod serial;
+pub mod logging;
 pub mod mem;
 pub mod util;
+pub mod arch;
 
 use core::sync::atomic::AtomicU64;
 
-use limine::{LimineBootInfoRequest, LimineHhdmRequest};
+use limine::LimineBootInfoRequest;
 use mem::addr::VirtAddr;
+use x86_64::instructions::hlt;
 
 static BOOTLOADER_INFO: LimineBootInfoRequest = LimineBootInfoRequest::new(0);
-static HHDM: LimineHhdmRequest = LimineHhdmRequest::new(0);
 
 pub static PHYSICAL_OFFSET: AtomicU64 = AtomicU64::new(0);
 
@@ -23,37 +27,28 @@ pub fn phys_offset() -> VirtAddr {
 
 #[no_mangle]
 pub extern "C" fn _start() -> ! {
-    // println!("hello, world!");
-
     if let Some(bootinfo) = BOOTLOADER_INFO.get_response().get() {
-        println!(
+        serial_println!(
             "booted by {} v{}",
             bootinfo.name.to_str().unwrap().to_str().unwrap(),
             bootinfo.version.to_str().unwrap().to_str().unwrap(),
         );
     }
 
-    // unsafe {
-    PHYSICAL_OFFSET.store(
-        HHDM.get_response().get().unwrap().offset,
-        core::sync::atomic::Ordering::SeqCst,
-    );
-    // }
-
-    println!("{:?}", phys_offset());
+    arch::arch_main();
 
     hcf();
 }
 
 #[panic_handler]
 fn rust_panic(info: &core::panic::PanicInfo) -> ! {
-    println!("PANIC: {}", info);
+    serial_println!("PANIC: {}", info);
     hcf();
 }
 
-/// Die, spectacularly.
 pub fn hcf() -> ! {
     loop {
+        hlt();
         core::hint::spin_loop();
     }
 }
