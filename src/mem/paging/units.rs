@@ -149,7 +149,7 @@ impl Debug for Page {
 pub struct PageMergeError;
 
 macro_rules! range_impl {
-    ($name:ident, $addr:ident, $unit:ident) => {
+    ($name:ident, $addr:ident, $unit:ident, $iter:ident) => {
         #[derive(Clone, Copy)]
         pub struct $name {
             start: $unit,
@@ -182,7 +182,7 @@ macro_rules! range_impl {
 
             #[inline]
             pub fn size_in_pages(self) -> usize {
-                (self.start.index().0 - self.end.index().0) as usize
+                (self.end.index().0 - self.start.index().0) as usize + 1
             }
 
             #[inline]
@@ -245,12 +245,34 @@ macro_rules! range_impl {
                 }
                 self.start <= unit && self.end >= unit
             }
+
+            pub fn iter(&self) -> $iter {
+                $iter { current: self.start, limit: self.end }
+            }
+        }
+
+        pub struct $iter {
+            current: $unit,
+            limit: $unit,
+        }
+
+        impl Iterator for $iter {
+            type Item = $unit;
+            fn next(&mut self) -> Option<Self::Item> {
+                if self.current > self.limit {
+                    None
+                } else {
+                    let current = self.current;
+                    self.current += 1;
+                    Some(current)
+                }
+            }
         }
     };
 }
 
-range_impl!(FrameRange, PhysAddr, Frame);
-range_impl!(PageRange, VirtAddr, Page);
+range_impl!(FrameRange, PhysAddr, Frame, FrameIter);
+range_impl!(PageRange, VirtAddr, Page, PageIter);
 
 impl Debug for FrameRange {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {

@@ -3,6 +3,7 @@ use core::ops::{Index, IndexMut};
 use alloc::vec::Vec;
 use arrayvec::ArrayVec;
 use buddy_system_allocator::LockedHeap;
+use limine::{LimineMemmapEntry, NonNullPtr, LimineMemoryMapEntryType};
 use spin::Once;
 
 use super::addr::{PhysAddr, VirtAddr, canonicalisze_physaddr};
@@ -83,19 +84,26 @@ pub fn free_kernel_pages(pages: &mut AllocatedPages) -> KResult<(), AllocationEr
     Ok(())
 }
 
-pub fn init() -> KResult<()> {
+pub fn init(memmap: &mut [NonNullPtr<LimineMemmapEntry>]) -> KResult<()> {
     let mut frame_alloc = FrameAllocator::new_static();
-    let frames = FrameRange::new(
-        Frame::at_index(PageIndex(1)),
-        Frame::containing_address(PhysAddr::new(canonicalisze_physaddr(align_down(usize::MAX, PAGE_SIZE)))),
-    );
-    unsafe { frame_alloc.insert_free_region(frames) };
+    for entry in memmap {
+        let entry = unsafe { &*entry.as_ptr() };
+        if entry.typ == LimineMemoryMapEntryType::KernelAndModules || entry.typ == LimineMemoryMapEntryType::Usable {
+            let start = entry.base as usize;
+            let end = start + entry.len as usize;
+            let frames = FrameRange::new(
+                Frame::containing_address(PhysAddr::new(start)),
+                Frame::containing_address(PhysAddr::new(end)),
+            );
+            unsafe { frame_alloc.insert_free_region(frames) };
+        }
+    }
     KERNEL_FRAME_ALLOCATOR.call_once(|| SpinLock::new(frame_alloc));
 
     let mut page_alloc = PageAllocator::new_static();
     let pages = PageRange::new(
         Page::at_index(PageIndex(1)),
-        Page::containing_address(VirtAddr::new(MAX_LOW_VADDR)),
+        Page::containing_address(VirtAddr::new(MAX_LOW_VADDR) - 1),
     );
     unsafe { page_alloc.insert_free_region(pages) };
     let pages = PageRange::new(
@@ -376,7 +384,6 @@ macro_rules! allocator_impl {
                     self.insert_free_region(allocation.clone());
                 }
                 self.merge_contiguous_chunks();
-                // todo!("free()")
             }
         }
     };

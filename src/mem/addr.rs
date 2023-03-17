@@ -8,6 +8,8 @@ use crate::{
     util::{align_down, align_up, KResult},
 };
 
+use super::consts::PAGE_SIZE;
+
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[repr(transparent)]
 pub struct PhysAddr {
@@ -65,6 +67,11 @@ impl PhysAddr {
     #[inline]
     pub fn as_hhdm_virt(&self) -> VirtAddr {
         VirtAddr::new(crate::phys_offset().value() + self.value())
+    }
+
+    #[inline]
+    pub fn is_aligned(&self, align: usize) -> bool {
+        self.addr % align == 0
     }
 }
 
@@ -216,6 +223,20 @@ impl VirtAddr {
         U: Into<usize>,
     {
         VirtAddr::new(align_up(self.addr, align.into()))
+    }
+
+
+    pub fn p4_index(&self) -> usize {
+        ((self.addr / PAGE_SIZE) >> 27) & 0x1FF
+    }
+    pub fn p3_index(&self) -> usize {
+        ((self.addr / PAGE_SIZE) >> 18) & 0x1FF
+    }
+    pub fn p2_index(&self) -> usize {
+        ((self.addr / PAGE_SIZE) >> 9) & 0x1FF
+    }
+    pub fn p1_index(&self) -> usize {
+        (self.addr / PAGE_SIZE) & 0x1FF
     }
 }
 
