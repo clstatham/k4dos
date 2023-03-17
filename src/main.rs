@@ -1,6 +1,6 @@
 #![no_std]
 #![no_main]
-#![feature(pointer_is_aligned, panic_info_message, lang_items)]
+#![feature(pointer_is_aligned, panic_info_message, lang_items, abi_x86_interrupt)]
 
 extern crate alloc;
 

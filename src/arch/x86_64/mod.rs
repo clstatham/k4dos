@@ -7,6 +7,9 @@ use crate::mem::{
     allocator::{KERNEL_FRAME_ALLOCATOR, KERNEL_PAGE_ALLOCATOR},
 };
 
+pub mod gdt;
+pub mod idt;
+
 static HHDM: LimineHhdmRequest = LimineHhdmRequest::new(0);
 static MEMMAP: LimineMemmapRequest = LimineMemmapRequest::new(0);
 static KERNEL_FILE: LimineKernelFileRequest = LimineKernelFileRequest::new(0);
@@ -61,6 +64,12 @@ pub fn arch_main() {
             .lock()
             .convert_to_heap_allocated();
     }
+
+    log::info!("Loading GDT.");
+    gdt::init();
+
+    log::info!("Loading IDT.");
+    idt::init();
 
     log::info!("It did not crash!");
 }
