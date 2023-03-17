@@ -38,5 +38,7 @@ target/limine/limine-deploy $KERNEL.iso
 qemu-system-x86_64 \
     -machine q35 -cpu qemu64 -M smm=off \
     -D target/log.txt -d int,guest_errors -no-reboot -no-shutdown \
+    -s -S \
     -serial stdio \
-    $KERNEL.iso
+    -m 1G \
+    -cdrom $KERNEL.iso
