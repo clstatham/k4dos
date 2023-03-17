@@ -2,6 +2,8 @@ use limine::*;
 use x86_64::instructions::interrupts;
 use xmas_elf::ElfFile;
 
+use crate::mem::{self, allocator::{alloc_kernel_frames, free_kernel_frames}};
+
 static HHDM: LimineHhdmRequest = LimineHhdmRequest::new(0);
 static MEMMAP: LimineMemmapRequest = LimineMemmapRequest::new(0);
 static KERNEL_FILE: LimineKernelFileRequest = LimineKernelFileRequest::new(0);
@@ -32,4 +34,11 @@ pub fn arch_main() {
         let elf_slice = unsafe { core::slice::from_raw_parts(start, kernel_file.length as usize) };
         ElfFile::new(elf_slice).unwrap()
     });
+
+    mem::allocator::init().expect("Error initializing kernel frame and page allocators");
+
+    let mut frames = alloc_kernel_frames(1).unwrap();
+    free_kernel_frames(&mut frames).unwrap();
+
+    log::info!("It did not crash!");
 }

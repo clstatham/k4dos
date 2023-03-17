@@ -3,8 +3,10 @@ use core::{
     ops::{Add, AddAssign, Sub, SubAssign},
 };
 
-use crate::mem::{addr::{PhysAddr, VirtAddr}, consts::PAGE_SIZE};
-
+use crate::mem::{
+    addr::{PhysAddr, VirtAddr},
+    consts::PAGE_SIZE,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[repr(transparent)]
@@ -210,7 +212,7 @@ macro_rules! range_impl {
                 if other.is_empty() {
                     return Ok(());
                 }
-                if other.start != self.end && other.end != self.start {
+                if other.start != self.end + 1 && other.end + 1 != self.start {
                     return Err($crate::kerr!(PageMergeError));
                 }
                 if other.start < self.start {
@@ -337,7 +339,11 @@ macro_rules! mapped_impl {
 
         impl $name {
             #[inline]
-            pub unsafe fn assume_mapped(pages: $ap, frames: AllocatedFrames, flags: PageTableFlags) -> Self {
+            pub unsafe fn assume_mapped(
+                pages: $ap,
+                frames: AllocatedFrames,
+                flags: PageTableFlags,
+            ) -> Self {
                 Self {
                     pages,
                     frames,

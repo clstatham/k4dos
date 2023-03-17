@@ -2,6 +2,8 @@
 #![no_main]
 #![feature(pointer_is_aligned, panic_info_message, lang_items)]
 
+extern crate alloc;
+
 mod io;
 #[macro_use]
 pub mod serial;

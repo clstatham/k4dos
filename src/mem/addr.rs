@@ -14,6 +14,16 @@ pub struct PhysAddr {
     addr: usize,
 }
 
+#[inline]
+pub const fn canonicalisze_physaddr(addr: usize) -> usize {
+    addr & 0x000F_FFFF_FFFF_FFFF
+}
+
+#[inline]
+pub const fn canonicalisze_virtaddr(addr: usize) -> usize {
+    ((addr << 16) as isize >> 16) as usize
+}
+
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[repr(transparent)]
 pub struct VirtAddr {
