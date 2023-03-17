@@ -1,9 +1,8 @@
-use alloc::vec::Vec;
 use limine::*;
 use x86_64::instructions::interrupts;
 use xmas_elf::ElfFile;
 
-use crate::mem::{self, paging::mapper::Mapper};
+use crate::mem::{self, paging::mapper::Mapper, allocator::{KERNEL_PAGE_ALLOCATOR, KERNEL_FRAME_ALLOCATOR}};
 
 static HHDM: LimineHhdmRequest = LimineHhdmRequest::new(0);
 static MEMMAP: LimineMemmapRequest = LimineMemmapRequest::new(0);
@@ -40,15 +39,17 @@ pub fn arch_main() {
     mem::allocator::init(memmap).expect("Error initializing kernel frame and page allocators");
     
     log::info!("Remapping kernel to new page table.");
-    let kernel_pt = mem::remap_kernel().expect("Error remapping kernel");
-    let mut kernel_mapper = unsafe { Mapper::new(kernel_pt) };
+    let mut kernel_addr_space = mem::remap_kernel().expect("Error remapping kernel");
+    // let mut kernel_mapper = unsafe { Mapper::new(kernel_pt) };
 
     log::info!("Setting up kernel heap.");
-    let _heap_mp = mem::init_heap(&mut kernel_mapper).expect("Error setting up heap");
+    let _heap_mp = mem::init_heap(&mut kernel_addr_space.mapper()).expect("Error setting up heap");
 
-    log::info!("Kernel heap set up.");
-
-    let v: Vec<u8> = Vec::with_capacity(100000);
+    log::info!("Converting kernel frame and page allocators to use heap.");
+    {
+        KERNEL_FRAME_ALLOCATOR.get().unwrap().lock().convert_to_heap_allocated();
+        KERNEL_PAGE_ALLOCATOR.get().unwrap().lock().convert_to_heap_allocated();
+    }
 
     log::info!("It did not crash!");
 }

@@ -3,30 +3,25 @@ use xmas_elf::sections::ShType;
 
 use crate::{util::KResult, kerr, backtrace::KERNEL_ELF, mem::{addr::PhysAddr, paging::table::PageTable, allocator::alloc_kernel_frames}, kerrmsg};
 
-use self::{paging::{units::{MappedPages, Page}, table::{PagingError, active_table}, mapper::Mapper}, allocator::{alloc_kernel_pages_at, GLOBAL_ALLOC}, addr::VirtAddr, consts::{KERNEL_HEAP_START, KERNEL_HEAP_SIZE, PAGE_SIZE}};
+use self::{paging::{units::{MappedPages, Page}, table::{PagingError, active_table}, mapper::Mapper}, allocator::{alloc_kernel_pages_at, GLOBAL_ALLOC}, addr::VirtAddr, consts::{KERNEL_HEAP_START, KERNEL_HEAP_SIZE, PAGE_SIZE}, addr_space::AddressSpace};
 
 pub mod addr;
 pub mod allocator;
 pub mod consts;
 pub mod paging;
+pub mod addr_space;
 
-pub fn remap_kernel() -> KResult<&'static mut PageTable, PagingError> {
+pub fn remap_kernel() -> KResult<AddressSpace, PagingError> {
     // let kernel_elf = KERNEL_ELF.get().unwrap();
-    log::info!("Active page table at {:?}", PhysAddr::new(Cr3::read().0.start_address().as_u64() as usize));
-    let active_table = active_table();
+    let active = AddressSpace::current();
+    log::info!("Active page table at {:?}", active.cr3());
+    
+    let new_space = AddressSpace::new()?;
 
-    // TODO
+    // and that's all we gotta do, because Limine and Offset Page Tables RULE!
 
-    // let frame = alloc_kernel_frames(1).unwrap();
-    // let new_table: &mut PageTable = unsafe { &mut *frame.start_address().as_hhdm_virt().as_mut_ptr() };
-    // log::info!("Will create new page table at {:?}", frame.start_address());
-
-    // for section in kernel_elf.section_iter() {
-    //     log::info!("Section start: {:#x}", section.address());
-    //     log::info!("Section size: {:#x}", section.size());
-    //     log::info!("");
-    // }
-    Ok(active_table)
+    new_space.switch();
+    Ok(new_space)
 }
 
 pub fn init_heap(kernel_mapper: &mut Mapper) -> KResult<MappedPages, PagingError> {
