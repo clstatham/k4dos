@@ -46,14 +46,14 @@ impl Scheduler {
                     unsafe { self.current_task.force_unlock() };
                     unsafe { self.run_queue.force_unlock() };
                     arch_context_switch(self.preempt_task.arch_mut(), current_task.arch_mut());
-                    return;
+                    // return;
                 }
             }
 
-            *current_lock = None;
-            unsafe { self.current_task.force_unlock() };
-            unsafe { self.run_queue.force_unlock() };
-            arch_context_switch(self.preempt_task.arch_mut(), self.idle_thread.arch_mut());
+            // *current_lock = None;
+            // unsafe { self.current_task.force_unlock() };
+            // unsafe { self.run_queue.force_unlock() };
+            // arch_context_switch(self.preempt_task.arch_mut(), self.idle_thread.arch_mut());
         }
     }
 

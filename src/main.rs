@@ -45,20 +45,6 @@ pub extern "C" fn _start() -> ! {
     hcf();
 }
 
-pub fn main_kernel_thread() {
-    log::info!("We are now in main_kernel_thread().");
-
-    fs::initramfs::init().unwrap();
-
-    // let sched = get_scheduler();
-    loop {
-        interrupts::enable_and_hlt();
-        // interrupts::disable();
-        // sched.preempt();
-        core::hint::spin_loop();
-    }
-}
-
 pub fn hcf() -> ! {
     loop {
         hlt();

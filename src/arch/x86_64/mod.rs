@@ -5,7 +5,7 @@ use xmas_elf::ElfFile;
 use crate::{mem::{
     self,
     allocator::{KERNEL_FRAME_ALLOCATOR, KERNEL_PAGE_ALLOCATOR},
-}, task::{get_scheduler, Task}, main_kernel_thread};
+}, task::{get_scheduler, Task}, fs};
 
 pub mod cpu_local;
 pub mod gdt;
@@ -78,10 +78,19 @@ pub fn arch_main() {
     log::info!("Initializing task scheduler.");
     crate::task::init();
 
-    log::info!("Spawning initial kernel task.");
-    get_scheduler().enqueue(Task::new_kernel(main_kernel_thread, true));
+    // log::info!("Spawning initial kernel task.");
+    // get_scheduler().enqueue(Task::new_kernel(main_kernel_thread, true));
 
-    log::info!("Enabling interrupts.");
+    // log::info!("We are now in main_kernel_thread().");
 
-    interrupts::enable();
+    fs::initramfs::init().unwrap();
+
+    log::info!("Welcome to K4DOS!");
+
+    let sched = get_scheduler();
+    loop {
+        interrupts::enable_and_hlt();
+        interrupts::disable();
+        sched.preempt();
+    }
 }

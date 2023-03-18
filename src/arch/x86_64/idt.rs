@@ -377,20 +377,6 @@ extern "x86-interrupt" fn security_exception_handler(
 }
 
 extern "x86-interrupt" fn timer_handler(_stack_frame: InterruptStackFrame) {
-    // vga_print!(".");
     notify_eoi();
-    get_scheduler().preempt();
+    // get_scheduler().preempt();
 }
-
-// extern "x86-interrupt" fn apic_timer_handler(_stack_frame: InterruptStackFrame) {
-//     // apic::notify_eoi();
-// }
-
-// extern "x86-interrupt" fn apic_spurious_handler(_stack_frame: InterruptStackFrame) {
-//     // apic::notify_eoi();
-// }
-
-// extern "x86-interrupt" fn lapic_error_handler(stack_frame: InterruptStackFrame) {
-//     log::error!("\nEXCEPTION: LOCAL APIC ERROR\n{:#x?}", stack_frame,);
-//     panic!()
-// }

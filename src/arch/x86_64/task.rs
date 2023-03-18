@@ -17,7 +17,7 @@ use core::alloc::Layout;
 
 use alloc::{alloc::alloc_zeroed, boxed::Box};
 use x86::{
-    msr::{wrmsr, IA32_FS_BASE, IA32_GS_BASE},
+    msr::{wrmsr, IA32_FS_BASE, IA32_GS_BASE, rdmsr},
     segmentation::SegmentSelector,
     Ring, controlregs,
 };
@@ -33,6 +33,10 @@ use crate::{
 
 pub fn arch_context_switch(prev: &mut ArchTask, next: &mut ArchTask) {
     unsafe {
+        // kpcr().tss.privilege_stack_table[0] = x86_64::VirtAddr::new((next.kernel_stack.as_ptr() as usize + next.kernel_stack.len()) as u64);
+
+        prev.fsbase = VirtAddr::new(rdmsr(IA32_FS_BASE) as usize);
+        prev.gsbase = VirtAddr::new(rdmsr(IA32_GS_BASE) as usize);
         wrmsr(IA32_FS_BASE, next.fsbase.value() as u64);
         wrmsr(IA32_GS_BASE, next.gsbase.value() as u64);
 
@@ -105,7 +109,7 @@ unsafe extern "C" fn fork_init() -> ! {
 
 use super::{
     gdt::{KERNEL_CS_IDX, KERNEL_DS_IDX},
-    idt::InterruptFrame,
+    idt::InterruptFrame, cpu_local::kpcr,
 };
 #[naked]
 unsafe extern "sysv64" fn context_switch(_prev: &mut Context, _next: &mut Context) {
