@@ -51,4 +51,8 @@ impl File for InitRamFsFile {
         let mut reader = UserBufferReader::from(buf);
         reader.read_bytes(&mut self.data.lock()[offset..])
     }
+
+    fn stat(&self) -> KResult<Stat> {
+        Ok(self.stat.lock().clone())
+    }
 }

@@ -1,5 +1,7 @@
 use core::mem::size_of;
 
+use super::align_down;
+
 pub struct Stack<'a> {
     ptr: &'a mut usize,
 }
@@ -47,5 +49,9 @@ impl<'a> Stack<'a> {
         let x = &mut *(*self.ptr as *mut T);
         self.pop_by(size_of::<T>());
         x
+    }
+
+    pub fn align_down(&mut self, align: usize) {
+        *self.ptr = align_down(*self.ptr, align)
     }
 }

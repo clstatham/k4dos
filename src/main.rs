@@ -7,7 +7,8 @@
     abi_x86_interrupt,
     naked_functions,
     asm_const,
-    ptr_internals
+    ptr_internals,
+    const_refs_to_cell,
 )]
 
 extern crate alloc;

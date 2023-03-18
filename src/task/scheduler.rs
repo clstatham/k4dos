@@ -1,6 +1,6 @@
 use alloc::{collections::VecDeque, sync::Arc};
 
-use crate::{arch::task::arch_context_switch, util::SpinLock};
+use crate::{arch::task::arch_context_switch, util::SpinLock, fs::FileRef};
 
 use super::{get_scheduler, Task, TaskState};
 
@@ -30,6 +30,23 @@ impl Scheduler {
         self.current_task.clone()
     }
 
+    pub fn with_kernel_addr_space_active<R>(&self, f: impl FnOnce() -> R) -> R {
+        let mut current = self.current_task.lock();
+        let current = current.as_mut().unwrap();
+        let current = &current.arch_mut().address_space;
+        self.idle_thread.arch_mut().address_space.switch();
+        let res = f();
+        current.switch();
+        res
+    }
+
+    pub fn exec(&self, file: FileRef, argv: &[&[u8]], envp: &[&[u8]]) {
+        // self.current_task.exec(file, argv, envp).unwrap();
+        let mut current = self.current_task.lock();
+        unsafe { self.current_task.force_unlock() };
+        current.as_mut().unwrap().exec(file, argv, envp).unwrap();
+    }
+
     pub fn switch(&self) {
         let mut queue = self.run_queue.lock();
         let mut current_lock = self.current_task.lock();
@@ -43,12 +60,17 @@ impl Scheduler {
             *current_lock = Some(task.clone());
             unsafe { self.current_task.force_unlock() };
             unsafe { self.run_queue.force_unlock() };
+            log::debug!("Switching from preempt task to PID {:?}", task.pid);
             arch_context_switch(self.preempt_task.arch_mut(), task.arch_mut());
         } else {
             if let Some(current_task) = current_lock.as_ref() {
-                if current_task.state == TaskState::Runnable {
+                let state = {
+                    *current_task.state.lock()
+                };
+                if state == TaskState::Runnable {
                     unsafe { self.current_task.force_unlock() };
                     unsafe { self.run_queue.force_unlock() };
+                    log::debug!("Switching from preempt task to PID {:?}", current_task.pid);
                     arch_context_switch(self.preempt_task.arch_mut(), current_task.arch_mut());
                     // return;
                 }
@@ -66,9 +88,11 @@ impl Scheduler {
         let current_lock = self.current_task.lock();
         if let Some(current_task) = current_lock.as_ref() {
             unsafe { self.current_task.force_unlock() };
+            log::debug!("Switching from PID {:?} to preempt task", current_task.pid);
             arch_context_switch(current_task.arch_mut(), self.preempt_task.arch_mut());
         } else {
             unsafe { self.current_task.force_unlock() };
+            log::debug!("Switching from idle thread to preempt task");
             arch_context_switch(self.idle_thread.arch_mut(), self.preempt_task.arch_mut());
         }
     }

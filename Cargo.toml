@@ -20,10 +20,11 @@ atomic_refcell = "0.1.8"
 buddy_system_allocator = { version = "0.8.0", features = ["const_fn"] }
 pc-keyboard = "0.7.0"
 memoffset = { version = "0.7.1", features = ["unstable_const"] }
-xmas-elf = "0.9.0"
+xmas-elf = "0.8.0"
 rustc-demangle = "0.1.21"
 arrayvec = { version = "0.7.2", default-features = false }
 x2apic = "0.4.2"
+elfloader = "0.16.0"
 
 [dependencies.lazy_static]
 version = "1.4.0"

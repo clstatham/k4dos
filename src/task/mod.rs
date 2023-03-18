@@ -7,7 +7,7 @@ use alloc::{sync::Arc, vec::Vec};
 use spin::Once;
 use x86_64::structures::idt::PageFaultErrorCode;
 
-use crate::{arch::task::ArchTask, mem::addr::VirtAddr, util::SpinLock};
+use crate::{arch::task::ArchTask, mem::addr::VirtAddr, util::{SpinLock, KResult}, fs::{FileRef, opened_file::OpenedFileTable}, userland::elf::ElfLoadError};
 
 use self::{scheduler::Scheduler, vmem::Vmem};
 
@@ -50,12 +50,14 @@ pub enum TaskState {
 
 pub struct Task {
     arch: UnsafeCell<ArchTask>,
-    state: TaskState,
+    state: SpinLock<TaskState>,
 
     pid: TaskId,
 
-    parent: SpinLock<Option<Arc<Task>>>,
-    children: SpinLock<Vec<Arc<Task>>>,
+    opened_files: Arc<SpinLock<OpenedFileTable>>,
+
+    parent: Arc<SpinLock<Option<Arc<Task>>>>,
+    children: Arc<SpinLock<Vec<Arc<Task>>>>,
 
     vmem: Arc<SpinLock<Vmem>>,
 }
@@ -67,11 +69,11 @@ impl Task {
         let pid = TaskId::allocate();
         Arc::new(Self {
             arch: UnsafeCell::new(ArchTask::new_idle()),
-            state: TaskState::Runnable,
+            state: SpinLock::new(TaskState::Runnable),
             pid,
-            parent: SpinLock::new(None),
-            children: SpinLock::new(Vec::new()),
-
+            parent: Arc::new(SpinLock::new(None)),
+            children: Arc::new(SpinLock::new(Vec::new())),
+            opened_files: Arc::new(SpinLock::new(OpenedFileTable::new())),
             vmem: Arc::new(SpinLock::new(Vmem::new())),
         })
     }
@@ -83,11 +85,11 @@ impl Task {
                 VirtAddr::new(entry_point as usize),
                 enable_interrupts,
             )),
-            state: TaskState::Runnable,
+            state: SpinLock::new(TaskState::Runnable),
             pid,
-            parent: SpinLock::new(None),
-            children: SpinLock::new(Vec::new()),
-
+            parent: Arc::new(SpinLock::new(None)),
+            children: Arc::new(SpinLock::new(Vec::new())),
+            opened_files: Arc::new(SpinLock::new(OpenedFileTable::new())),
             vmem: Arc::new(SpinLock::new(Vmem::new())),
         })
     }
@@ -96,11 +98,29 @@ impl Task {
         unsafe { &mut *self.arch.get() }
     }
 
-    pub fn handle_page_fault(&self, faulted_addr: VirtAddr, reason: PageFaultErrorCode) {
+    pub fn pid(&self) -> TaskId {
+        self.pid
+    }
+
+    pub fn handle_page_fault(&self, faulted_addr: VirtAddr, instruction_pointer: VirtAddr, reason: PageFaultErrorCode) {
         let addr_space = &mut self.arch_mut().address_space;
         let mut mapper = addr_space.mapper();
         self.vmem
             .lock()
-            .handle_page_fault(&mut mapper, faulted_addr, reason);
+            .handle_page_fault(&mut mapper, faulted_addr, instruction_pointer, reason);
+    }
+
+    pub fn exec(&self, file: FileRef, argv: &[&[u8]], envp: &[&[u8]]) -> KResult<(), ElfLoadError> {
+        {
+            self.opened_files.lock().close_cloexec_files();    
+        }
+
+        let mut vmem = self.vmem.lock();
+        vmem.clear(&mut self.arch_mut().address_space.mapper());
+
+        unsafe { self.vmem.force_unlock() };
+        self.arch_mut().exec(file, argv, envp).unwrap();
+
+        Ok(())
     }
 }

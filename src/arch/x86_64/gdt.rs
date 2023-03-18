@@ -2,66 +2,106 @@ use core::alloc::Layout;
 
 use alloc::alloc::alloc_zeroed;
 
+use lazy_static::lazy_static;
 use x86::{
     msr::{wrmsr, IA32_GS_BASE},
-    segmentation::{load_cs, load_ds, load_es, load_ss, SegmentSelector},
+    segmentation::{load_cs, load_ds, load_es, load_ss},
     task::load_tr,
     Ring,
 };
-use x86_64::structures::{
-    gdt::{Descriptor, GlobalDescriptorTable},
+use x86_64::{structures::{
+    gdt::{Descriptor, GlobalDescriptorTable, SegmentSelector},
     tss::TaskStateSegment,
-};
+}, registers::segmentation::{CS, Segment, DS, ES, SS, FS, GS}, instructions::tables::load_tss};
 
 use crate::mem::consts::KERNEL_STACK_SIZE;
 
-use super::cpu_local::{kpcr, Kpcr};
+use super::cpu_local::{get_kpcr, Kpcr, get_tss, CpuLocalData};
 
-pub const KERNEL_CS_IDX: u16 = 1;
-pub const KERNEL_DS_IDX: u16 = 2;
-pub const USER_CS_IDX: u16 = 3;
-pub const USER_DS_IDX: u16 = 4;
-const TSS_IDX: u16 = 5;
+pub const KERNEL_CS_IDX: u16 = 1; // 0x8
+pub const KERNEL_DS_IDX: u16 = 2; // 0x10
+pub const USER_CS_IDX: u16 = 4; // 0x23
+pub const USER_DS_IDX: u16 = 5; // 0x43
+const TSS_IDX: u16 = 6; // 0x30
 
 static STACK: [u8; KERNEL_STACK_SIZE] = [0; KERNEL_STACK_SIZE];
+
+lazy_static! {
+    static ref BOOT_GDT: (GlobalDescriptorTable, [SegmentSelector; 3]) = {
+        let mut gdt = GlobalDescriptorTable::new();
+        let kernel_code_sel = gdt.add_entry(Descriptor::kernel_code_segment());
+        let kernel_data_sel = gdt.add_entry(Descriptor::kernel_data_segment());
+        let kernel_tls_sel = gdt.add_entry(Descriptor::kernel_data_segment());
+        (gdt, [kernel_code_sel, kernel_data_sel, kernel_tls_sel])
+    };
+}
+
+pub fn init_boot() {
+    unsafe {
+        BOOT_GDT.0.load();
+        CS::set_reg(BOOT_GDT.1[0]);
+        DS::set_reg(BOOT_GDT.1[1]);
+        ES::set_reg(BOOT_GDT.1[1]);
+        FS::set_reg(BOOT_GDT.1[1]);
+
+        GS::set_reg(BOOT_GDT.1[2]);
+        
+        SS::set_reg(BOOT_GDT.1[1]);
+    }
+}
 
 pub fn init() {
     unsafe {
         let kpcr_layout = Layout::new::<Kpcr>();
         let kpcr_ptr = alloc_zeroed(kpcr_layout) as *mut Kpcr;
         wrmsr(IA32_GS_BASE, kpcr_ptr as u64);
+
+        let tls_layout = Layout::new::<CpuLocalData>();
+        let tls_ptr = alloc_zeroed(tls_layout) as *mut CpuLocalData;
+        get_kpcr().cpu_local = &mut *tls_ptr;
     }
 
-    let mut tss = TaskStateSegment::new();
-    tss.privilege_stack_table[0] = x86_64::VirtAddr::new(STACK.as_ptr() as u64);
+    // let mut tss = TaskStateSegment::new();
+    let mut tss = get_tss();
+    *tss = TaskStateSegment::new();
+    tss.privilege_stack_table[0] = x86_64::VirtAddr::new(STACK.as_ptr() as u64 + KERNEL_STACK_SIZE as u64);
 
-    kpcr().tss = tss;
-
-    let mut gdt = GlobalDescriptorTable::new();
+    // let mut gdt = GlobalDescriptorTable::new();
+    let gdt = &mut get_kpcr().cpu_local.gdt;
+    *gdt = GlobalDescriptorTable::new();
     // kernel code
-    gdt.add_entry(Descriptor::kernel_code_segment());
+    let kernel_cs_sel = gdt.add_entry(Descriptor::kernel_code_segment());
     // kernel data
-    gdt.add_entry(Descriptor::kernel_data_segment());
-    // // kernel tls
-    // gdt.add_entry(Descriptor::kernel_data_segment());
+    let kernel_ds_sel = gdt.add_entry(Descriptor::kernel_data_segment());
+    // kernel tls
+    let kernel_tls_sel = gdt.add_entry(Descriptor::kernel_data_segment());
     // user code
-    gdt.add_entry(Descriptor::user_code_segment());
+    let user_cs_sel = gdt.add_entry(Descriptor::user_code_segment());
     // user data (syscall)
-    gdt.add_entry(Descriptor::user_data_segment());
+    let user_ds_sel = gdt.add_entry(Descriptor::user_data_segment());
     // // user tls
-    // gdt.add_entry(Descriptor::user_data_segment());
+    // let user_tls_sel = gdt.add_entry(Descriptor::user_data_segment());
     // TSS
-    gdt.add_entry(Descriptor::tss_segment(&kpcr().tss));
+    let tss_sel = gdt.add_entry(Descriptor::tss_segment(tss));
 
-    kpcr().gdt = gdt;
-    kpcr().gdt.load();
+    log::debug!("kernel_cs: {:?}", kernel_cs_sel);
+    log::debug!("kernel_ds: {:?}", kernel_ds_sel);
+    log::debug!("user_cs:   {:?}", user_cs_sel);
+    log::debug!("user_ds:   {:?}", user_ds_sel);
+    log::debug!("tss:       {:?}", tss_sel);
+
+    // get_kpcr().cpu_local.gdt = gdt;
+    // get_kpcr().cpu_local.gdt.load();
+    gdt.load();
 
     unsafe {
-        load_cs(SegmentSelector::new(KERNEL_CS_IDX, Ring::Ring0));
-        load_ds(SegmentSelector::new(KERNEL_DS_IDX, Ring::Ring0));
-        load_es(SegmentSelector::new(KERNEL_DS_IDX, Ring::Ring0));
-        load_ss(SegmentSelector::new(KERNEL_DS_IDX, Ring::Ring0));
+        CS::set_reg(kernel_cs_sel);
+        DS::set_reg(kernel_ds_sel);
+        ES::set_reg(kernel_ds_sel);
+        SS::set_reg(kernel_ds_sel);
+        // FS::set_reg(kernel_ds_sel);
+        // GS::set_reg(kernel_ds_sel);
 
-        load_tr(SegmentSelector::new(TSS_IDX, Ring::Ring0));
+        load_tss(tss_sel);
     }
 }

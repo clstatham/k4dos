@@ -3,15 +3,15 @@ use core::sync::atomic::AtomicUsize;
 use alloc::{collections::BTreeMap, vec::Vec};
 use x86_64::structures::{idt::PageFaultErrorCode, paging::PageTableFlags};
 
-use crate::mem::{
+use crate::{mem::{
     addr::VirtAddr,
     allocator::{alloc_kernel_frames, PageAllocator},
     consts::{PAGE_SIZE, USER_VALLOC_BASE},
     paging::{
         mapper::Mapper,
-        units::{MappedPages, Page, PageRange},
+        units::{MappedPages, Page, PageRange}, table::PagingError,
     },
-};
+}, util::KResult, kerr};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct VmemAreaId(usize);
@@ -42,6 +42,14 @@ impl VmemArea {
     pub fn contains_addr(&self, addr: VirtAddr) -> bool {
         (self.start_addr..self.end_addr).contains(&addr)
     }
+
+    pub fn start_address(&self) -> VirtAddr {
+        self.start_addr
+    }
+
+    pub fn end_address(&self) -> VirtAddr {
+        self.end_addr
+    }
 }
 
 pub struct Vmem {
@@ -56,7 +64,7 @@ impl Vmem {
         let mut page_allocator = PageAllocator::new_vec();
         unsafe {
             page_allocator.insert_free_region(PageRange::new(
-                Page::containing_address(VirtAddr::new(0x400000)),
+                Page::containing_address(VirtAddr::new(PAGE_SIZE)),
                 Page::containing_address(VirtAddr::new(usize::MAX).align_down(PAGE_SIZE)) - 1,
             ))
         }
@@ -84,7 +92,11 @@ impl Vmem {
         None
     }
 
-    pub fn add_area(&mut self, start_addr: VirtAddr, end_addr: VirtAddr, flags: PageTableFlags) {
+    pub fn area(&self, id: VmemAreaId) -> Option<&VmemArea> {
+        self.areas.get(&id)
+    }
+
+    pub fn add_area(&mut self, start_addr: VirtAddr, end_addr: VirtAddr, flags: PageTableFlags) -> VmemAreaId {
         assert!(
             self.area_containing(start_addr, end_addr).is_none(),
             "Cannot add vmem area as it already exists for these addresses"
@@ -99,14 +111,42 @@ impl Vmem {
                 flags,
             },
         );
+        self.mp.insert(id, Vec::new());
+        id
+    }
+
+    pub fn map_area(&mut self, start_addr: VirtAddr, end_addr: VirtAddr, flags: PageTableFlags, active_mapper: &mut Mapper) -> KResult<VmemAreaId, PagingError> {
+        let ap = self.page_allocator.allocate_range(PageRange::new(Page::containing_address(start_addr), Page::containing_address(end_addr - 1))).map_err(|e| kerr!(PagingError::PageAllocationFailed(e)))?;
+        let mp = active_mapper.map(ap, flags)?;
+        let id = self.add_area(start_addr.align_down(PAGE_SIZE), end_addr.align_up(PAGE_SIZE), flags);
+        self.mp.get_mut(&id).unwrap().push(mp);
+        Ok(id)
+    }
+
+    pub fn unmap_area(&mut self, id: VmemAreaId, active_mapper: &mut Mapper) {
+        for mp in self.mp.get_mut(&id).unwrap().iter_mut() {
+            active_mapper.unmap(mp);
+        }
+        self.areas.remove(&id);
+        self.mp.remove(&id);
+    }
+
+    pub fn clear(&mut self, active_mapper: &mut Mapper) {
+        for area_id in self.areas.keys().cloned().collect::<Vec<_>>() {
+            self.unmap_area(area_id, active_mapper);
+        }
     }
 
     pub fn handle_page_fault(
         &mut self,
         active_mapper: &mut Mapper,
         faulted_addr: VirtAddr,
+        instruction_pointer: VirtAddr,
         reason: PageFaultErrorCode,
     ) {
+        log::warn!("User page fault at {:?}!", instruction_pointer);
+        log::warn!("Faulted address: {:?}", faulted_addr);
+        log::warn!("Reason: {:?}", reason);
         if faulted_addr.align_down(PAGE_SIZE) == VirtAddr::null() {
             todo!("Kill process that accessed null pointer")
         }
@@ -124,8 +164,8 @@ impl Vmem {
                 // allocate and map pages
                 let page = Page::containing_address(faulted_addr);
                 let ap = self.page_allocator.allocate_at(page, 1).unwrap();
-                let af = alloc_kernel_frames(1).unwrap();
-                let mp = active_mapper.map_to(ap, af, area.flags).unwrap();
+                // let af = alloc_kernel_frames(1).unwrap();
+                let mp = active_mapper.map(ap, area.flags).unwrap();
                 self.mp.get_mut(&area.id).unwrap().push(mp);
             } else {
                 // set new flags, handle COW

@@ -1,20 +1,24 @@
 use lazy_static::lazy_static;
 use pc_keyboard::{layouts::Us104Key, DecodedKey, HandleControl, Keyboard, ScancodeSet1};
 
+use pic8259::ChainedPics;
+use spin::Mutex;
 use x2apic::lapic::{xapic_base, LocalApic, LocalApicBuilder};
+use x86::msr::{rdmsr, IA32_GS_BASE};
 use x86_64::{
     instructions::port::Port,
     registers::control::Cr3,
     structures::idt::{InterruptDescriptorTable, InterruptStackFrame, PageFaultErrorCode},
 };
 
-use crate::{mem::addr::VirtAddr, task::get_scheduler, util::SpinLock};
+use crate::{mem::{addr::VirtAddr, consts::MAX_LOW_VADDR}, task::get_scheduler, util::SpinLock};
 
-use super::cpu_local::kpcr;
+use super::cpu_local::get_kpcr;
 
-// pub const PIC_1_OFFSET: u8 = 32;
-// pub const PIC_2_OFFSET: u8 = PIC_1_OFFSET + 8;
+pub const PIC_1_OFFSET: u8 = 32;
+pub const PIC_2_OFFSET: u8 = PIC_1_OFFSET + 8;
 
+// pub const TIMER_IDT_IDX: u8 = 32;
 // pub const KEYBOARD_IDT_IDX: u8 = 33;
 
 // pub static PICS: Mutex<ChainedPics> =
@@ -34,6 +38,55 @@ lazy_static! {
             .build()
             .unwrap()
     );
+
+    pub static ref IDT: InterruptDescriptorTable = {
+        let mut idt = InterruptDescriptorTable::new();
+        idt.divide_error.set_handler_fn(divide_error_handler);
+        idt.debug.set_handler_fn(debug_handler);
+        idt.non_maskable_interrupt.set_handler_fn(nmi_handler);
+        idt.breakpoint.set_handler_fn(breakpoint_handler);
+        idt.overflow.set_handler_fn(overflow_handler);
+        idt.bound_range_exceeded
+            .set_handler_fn(bound_range_exceeded_handler);
+        idt.invalid_opcode.set_handler_fn(invalid_opcode_handler);
+        idt.device_not_available
+            .set_handler_fn(device_not_available_handler);
+        unsafe {
+            idt.double_fault
+                .set_handler_fn(double_fault_handler)
+                .set_stack_index(0);
+        }
+    
+        // reserved: 0x09 coprocessor segment overrun exception
+        idt.invalid_tss.set_handler_fn(invalid_tss_handler);
+        idt.segment_not_present
+            .set_handler_fn(segment_not_present_handler);
+        idt.stack_segment_fault
+            .set_handler_fn(stack_segment_fault_handler);
+        idt.general_protection_fault
+            .set_handler_fn(general_protection_fault_handler);
+        idt.page_fault.set_handler_fn(page_fault_handler);
+        // reserved: 0x0F
+        idt.x87_floating_point
+            .set_handler_fn(x87_floating_point_handler);
+        idt.alignment_check.set_handler_fn(alignment_check_handler);
+        idt.machine_check.set_handler_fn(machine_check_handler);
+        idt.simd_floating_point
+            .set_handler_fn(simd_floating_point_handler);
+        idt.virtualization.set_handler_fn(virtualization_handler);
+        // reserved: 0x15 - 0x1C
+        idt.vmm_communication_exception
+            .set_handler_fn(vmm_communication_exception_handler);
+        idt.security_exception
+            .set_handler_fn(security_exception_handler);
+    
+        // idt[TIMER_IDT_IDX as usize].set_handler_fn(timer_handler);
+        idt[TIMER_IRQ].set_handler_fn(timer_handler);
+        idt[ERROR_IRQ].set_handler_fn(lapic_error_handler);
+        idt[SPURIOUS_IRQ].set_handler_fn(lapic_spurious_handler);
+
+        idt
+    };
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -62,66 +115,17 @@ pub struct InterruptFrame {
     pub ss: u64,
 }
 
-pub fn notify_eoi() {
+pub fn notify_eoi(index: u8) {
     // unsafe { PICS.lock().notify_end_of_interrupt(index) }
     unsafe { LAPIC.lock().end_of_interrupt() }
 }
 
 pub fn init() {
-    // {
-    // let idt = IDT.get_mut()?;
-    let mut idt = InterruptDescriptorTable::new();
-    idt.divide_error.set_handler_fn(divide_error_handler);
-    idt.debug.set_handler_fn(debug_handler);
-    idt.non_maskable_interrupt.set_handler_fn(nmi_handler);
-    idt.breakpoint.set_handler_fn(breakpoint_handler);
-    idt.overflow.set_handler_fn(overflow_handler);
-    idt.bound_range_exceeded
-        .set_handler_fn(bound_range_exceeded_handler);
-    idt.invalid_opcode.set_handler_fn(invalid_opcode_handler);
-    idt.device_not_available
-        .set_handler_fn(device_not_available_handler);
-    unsafe {
-        idt.double_fault
-            .set_handler_fn(double_fault_handler)
-            .set_stack_index(0);
-    }
-
-    // reserved: 0x09 coprocessor segment overrun exception
-    idt.invalid_tss.set_handler_fn(invalid_tss_handler);
-    idt.segment_not_present
-        .set_handler_fn(segment_not_present_handler);
-    idt.stack_segment_fault
-        .set_handler_fn(stack_segment_fault_handler);
-    idt.general_protection_fault
-        .set_handler_fn(general_protection_fault_handler);
-    idt.page_fault.set_handler_fn(page_fault_handler);
-    // reserved: 0x0F
-    idt.x87_floating_point
-        .set_handler_fn(x87_floating_point_handler);
-    idt.alignment_check.set_handler_fn(alignment_check_handler);
-    idt.machine_check.set_handler_fn(machine_check_handler);
-    idt.simd_floating_point
-        .set_handler_fn(simd_floating_point_handler);
-    idt.virtualization.set_handler_fn(virtualization_handler);
-    // reserved: 0x15 - 0x1C
-    idt.vmm_communication_exception
-        .set_handler_fn(vmm_communication_exception_handler);
-    idt.security_exception
-        .set_handler_fn(security_exception_handler);
-
-    idt[TIMER_IRQ].set_handler_fn(timer_handler);
-    idt[ERROR_IRQ].set_handler_fn(lapic_error_handler);
-    idt[SPURIOUS_IRQ].set_handler_fn(lapic_spurious_handler);
-    // idt[KEYBOARD_IDT_IDX as usize].set_handler_fn(keyboard_handler);
-
-    kpcr().idt = idt;
-    kpcr().idt.load();
-    // };
+    IDT.load();
     unsafe {
         let mut lock = LAPIC.lock();
         lock.enable();
-        // lock.enable_timer();
+        // PICS.lock().initialize();
     }
 }
 
@@ -130,7 +134,7 @@ extern "x86-interrupt" fn lapic_error_handler(stack_frame: InterruptStackFrame) 
 }
 
 extern "x86-interrupt" fn lapic_spurious_handler(_stack_frame: InterruptStackFrame) {
-    notify_eoi();
+    notify_eoi(0);
 }
 
 extern "x86-interrupt" fn keyboard_handler(_stack_frame: InterruptStackFrame) {
@@ -156,7 +160,7 @@ extern "x86-interrupt" fn keyboard_handler(_stack_frame: InterruptStackFrame) {
         }
     }
 
-    notify_eoi();
+    notify_eoi(0);
 }
 
 /// exception 0x00
@@ -293,7 +297,7 @@ extern "x86-interrupt" fn page_fault_handler(
             .lock()
             .as_ref()
             .unwrap()
-            .handle_page_fault(VirtAddr::new(accessed_address as usize), error_code);
+            .handle_page_fault(VirtAddr::new(accessed_address as usize), VirtAddr::new(stack_frame.instruction_pointer.as_u64() as usize), error_code);
         unsafe {
             core::arch::asm!("swapgs");
         }
@@ -377,7 +381,15 @@ extern "x86-interrupt" fn security_exception_handler(
     panic!()
 }
 
-extern "x86-interrupt" fn timer_handler(_stack_frame: InterruptStackFrame) {
-    notify_eoi();
-    // get_scheduler().preempt();
+extern "x86-interrupt" fn timer_handler(stack_frame: InterruptStackFrame) {
+    // log::info!("tick");
+    if stack_frame.code_segment & 0b11 != 0 {
+        log::debug!("User GSBase {:#x}", unsafe { rdmsr(IA32_GS_BASE) } );
+        unsafe { core::arch::asm!("swapgs"); }
+        log::debug!("Kernel GSBase {:#x}", unsafe { rdmsr(IA32_GS_BASE) } );
+        get_scheduler().with_kernel_addr_space_active(|| notify_eoi(0));
+        unsafe { core::arch::asm!("swapgs"); }
+    } else {
+        notify_eoi(0);
+    }
 }

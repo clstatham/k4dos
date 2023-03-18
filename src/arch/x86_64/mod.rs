@@ -3,7 +3,7 @@ use x86_64::instructions::interrupts;
 use xmas_elf::ElfFile;
 
 use crate::{
-    fs,
+    fs::{self, initramfs::get_root, path::Path},
     mem::{
         self,
         allocator::{KERNEL_FRAME_ALLOCATOR, KERNEL_PAGE_ALLOCATOR},
@@ -15,6 +15,7 @@ pub mod cpu_local;
 pub mod gdt;
 pub mod idt;
 pub mod task;
+pub mod syscall;
 
 static HHDM: LimineHhdmRequest = LimineHhdmRequest::new(0);
 static MEMMAP: LimineMemmapRequest = LimineMemmapRequest::new(0);
@@ -37,7 +38,7 @@ pub fn arch_main() {
 
     crate::logging::init();
     log::info!("Logger initialized.");
-
+    
     let kernel_file = KERNEL_FILE.get_response().get().unwrap();
     let kernel_file = kernel_file.kernel_file.get().unwrap();
 
@@ -46,6 +47,9 @@ pub fn arch_main() {
         let elf_slice = unsafe { core::slice::from_raw_parts(start, kernel_file.length as usize) };
         ElfFile::new(elf_slice).unwrap()
     });
+
+    log::info!("Initializing boot GDT.");
+    gdt::init_boot();
 
     log::info!("Initializing kernel frame and page allocators.");
     mem::allocator::init(memmap).expect("Error initializing kernel frame and page allocators");
@@ -70,6 +74,9 @@ pub fn arch_main() {
             .convert_to_heap_allocated();
     }
 
+    log::info!("Setting up syscalls.");
+    unsafe { syscall::init(); }
+
     log::info!("Loading GDT.");
     gdt::init();
 
@@ -79,19 +86,27 @@ pub fn arch_main() {
     log::info!("Initializing task scheduler.");
     crate::task::init();
 
-    // log::info!("Spawning initial kernel task.");
-    // get_scheduler().enqueue(Task::new_kernel(main_kernel_thread, true));
-
-    // log::info!("We are now in main_kernel_thread().");
-
+    log::info!("Initializing filesystems.");
     fs::initramfs::init().unwrap();
 
-    log::info!("Welcome to K4DOS!");
+    
+
+    log::info!("Starting init process.");
 
     let sched = get_scheduler();
+    sched.enqueue(Task::new_kernel(spawn_init_process, true));
+
+    log::info!("Welcome to K4DOS!");
     loop {
         interrupts::enable_and_hlt();
         interrupts::disable();
         sched.preempt();
     }
+}
+
+fn spawn_init_process() {
+    let sched = get_scheduler();
+    let file = get_root().unwrap().lookup(Path::new("/bin/testapp")).unwrap().as_file().unwrap().clone();
+
+    sched.exec(file, &[b"/bin/testapp"], &[&[]])
 }
