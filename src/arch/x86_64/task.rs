@@ -52,9 +52,9 @@ pub fn arch_context_switch(prev: &mut ArchTask, next: &mut ArchTask) {
         prev.fsbase = VirtAddr::new(rdmsr(IA32_FS_BASE) as usize);
         prev.gsbase = VirtAddr::new(rdmsr(IA32_GS_BASE) as usize);
         wrmsr(IA32_FS_BASE, next.fsbase.value() as u64);
-        // swapgs();
+        swapgs();
         wrmsr(IA32_GS_BASE, next.gsbase.value() as u64);
-        // swapgs();
+        swapgs();
 
         context_switch(prev.context.as_mut(), next.context.as_mut())
     }
@@ -181,30 +181,9 @@ unsafe extern "C" fn enter_usermode() -> ! {
         pop rcx
         pop rax
 
-        // mov r15, {user_ds}
-        // mov ds, r15d
-        // mov es, r15d
-        // mov fs, r15d
-        // mov gs, r15d
-        // mov ss, r15d
-
-        // xor rax, rax
-        // xor rbx, rbx
-        // xor rdx, rdx
-        // xor rsi, rsi
-        // // xor rbp, rbp
-        // xor r8, r8
-        // xor r9, r9
-        // xor r10, r10
-        // xor r12, r12
-        // xor r13, r13
-        // xor r14, r14
-        // xor r15, r15
-
         swapgs
         iretq
     ",
-        user_ds = const((USER_DS_IDX as u64) << 3 | 3),
         options(noreturn)
     )
 }
@@ -278,9 +257,9 @@ impl ArchTask {
 
     // #[allow(unreachable_code)]
     pub fn new_init(file: FileRef, argv: &[&[u8]], envp: &[&[u8]]) -> KResult<Self, ElfLoadError> {
-        let mut userland_entry = elf::load_elf(file, argv, envp)?;
+        let mut userland_entry = elf::load_elf(file)?;
 
-        let kernel_stack = alloc::vec![0u8; PAGE_SIZE].into_boxed_slice();
+        let kernel_stack = alloc::vec![0u8; KERNEL_STACK_SIZE].into_boxed_slice();
 
         let current = AddressSpace::current();
         // self.user = true;
@@ -297,33 +276,29 @@ impl ArchTask {
                     | PageTableFlags::NO_EXECUTE,
                 &mut userland_entry.addr_space.mapper(),
             )
-            .map_err(|e| e.into())?;
+            .map_err(Into::into)?;
 
-        let mut stack_ptr = kernel_stack.as_ptr() as usize;
+        // first the kernel stack for the context switch
+        
+        let mut stack_ptr = kernel_stack.as_ptr() as usize + kernel_stack.len() - core::mem::size_of::<usize>();
         let mut stack = Stack::new(&mut stack_ptr);
 
         let kframe = unsafe { stack.offset::<InterruptFrame>() };
         kframe.ss = (USER_DS_IDX as u64) << 3 | 3;
         kframe.cs = (USER_CS_IDX as u64) << 3 | 3;
         kframe.rip = userland_entry.entry_point.value() as u64;
-        kframe.rsp = USER_STACK_TOP as u64;
+        // kframe.rsp = (USER_STACK_TOP - core::mem::size_of::<usize>()) as u64;
         // kframe.rflags = if enable_interrupts { 0x200 } else { 0 };
         kframe.rflags = 0x200;
 
         let context = unsafe { stack.offset::<Context>() };
         *context = Context::default();
         context.rip = enter_usermode as usize;
-        context.cr3 = unsafe { controlregs::cr3() as usize };
+        context.cr3 = userland_entry.addr_space.cr3().value();
+        
+        // now we set up the userland stack
 
-        // let mut context = core::ptr::Unique::dangling();
-        // self.context = core::ptr::Unique::new(&mut Context::default()).unwrap();
-        // self.address_space = userland_entry.addr_space;
-
-        // self.fsbase = userland_entry.fsbase.unwrap_or(VirtAddr::null());
-        // self.gsbase = unsafe { VirtAddr::new(rdmsr(IA32_GS_BASE) as usize) };
-        // self.gsbase = VirtAddr::null();
-
-        let mut stack_addr = USER_STACK_TOP;
+        let mut stack_addr = USER_STACK_TOP - core::mem::size_of::<usize>();
         let mut stack = Stack::new(&mut stack_addr);
 
         fn push_strs(strs: &[&[u8]], stack: &mut Stack) -> Vec<usize> {
@@ -356,18 +331,25 @@ impl ArchTask {
             stack.push(userland_entry.hdr);
 
             stack.push(0u64);
-            stack.push(envp_tops.as_slice());
+            // stack.push(envp_tops.as_slice());
+            for envp_top in envp_tops {
+                stack.push(envp_top);
+            }
             stack.push(0u64);
-            stack.push(argv_tops.as_slice());
+            // stack.push(argv_tops.as_slice());
+            for argv_top in argv_tops.iter() {
+                stack.push(*argv_top);
+            }
             stack.push(argv_tops.len());
         }
 
-        core::mem::drop(argv_tops);
-        core::mem::drop(envp_tops);
+        // core::mem::drop(argv_tops);
+        // core::mem::drop(envp_tops);
         assert_eq!(stack.top() % 16, 0);
 
+        kframe.rsp = stack.top() as u64;
         current.switch();
-
+        
         Ok(Self {
             context: unsafe { core::ptr::Unique::new_unchecked(context) },
             kernel_stack,
@@ -376,7 +358,5 @@ impl ArchTask {
             fsbase: userland_entry.fsbase.unwrap_or(VirtAddr::null()),
             gsbase: VirtAddr::null(),
         })
-
-        // Ok(())
     }
 }

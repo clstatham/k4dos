@@ -5,8 +5,8 @@ use x86_64::structures::{idt::PageFaultErrorCode, paging::PageTableFlags};
 
 use crate::{mem::{
     addr::VirtAddr,
-    allocator::{alloc_kernel_frames, PageAllocator},
-    consts::{PAGE_SIZE, USER_VALLOC_BASE},
+    allocator::PageAllocator,
+    consts::PAGE_SIZE,
     paging::{
         mapper::Mapper,
         units::{MappedPages, Page, PageRange}, table::PagingError,

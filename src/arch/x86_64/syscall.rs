@@ -103,10 +103,8 @@ pub unsafe extern "C" fn syscall_entry() {
         iretq
         "
         ),
-        // off = const(0x1070), // todo: don't hardcode this
         off = const(0),
-        // sp = const(offset_of!(TaskStateSegment, reserved_2)),
-        sp = const(0x1c),
+        sp = const(offset_of!(crate::arch::cpu_local::Kpcr, user_rsp0_tmp)),
         ksp = const(offset_of!(TaskStateSegment, privilege_stack_table)),
         ss_sel = const(SegmentSelector::new(crate::arch::gdt::USER_DS_IDX, Ring::Ring3).bits()),
         cs_sel = const(SegmentSelector::new(crate::arch::gdt::USER_CS_IDX, Ring::Ring3).bits()),

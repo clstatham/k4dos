@@ -15,7 +15,7 @@ impl<'a> Stack<'a> {
         *self.ptr -= by;
     }
 
-    pub unsafe fn offset<T: Sized>(&mut self) -> &mut T {
+    pub unsafe fn offset<'b, T: Sized>(&mut self) -> &'b mut T {
         self.skip_by(size_of::<T>());
         &mut *(*self.ptr as *mut T)
     }

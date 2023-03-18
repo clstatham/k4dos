@@ -1,3 +1,3 @@
-void _start(void) {
+void main(void) {
     for (;;) {}
 }

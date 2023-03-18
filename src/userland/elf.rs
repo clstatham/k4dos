@@ -55,7 +55,7 @@ pub struct UserlandEntry {
     pub hdr: [(AuxvType, usize); 4],
 }
 
-pub fn load_elf<'a>(file: FileRef, argv: &[&[u8]], envp: &[&[u8]]) -> KResult<UserlandEntry, ElfLoadError> {
+pub fn load_elf<'a>(file: FileRef) -> KResult<UserlandEntry, ElfLoadError> {
     let len = file.stat().map_err(|e| e.into())?.size.0 as usize;
     let mut buf = alloc::vec![0u8; len];
     let ubuf = UserBufferMut::from_slice(&mut buf);
@@ -93,14 +93,17 @@ pub fn load_elf<'a>(file: FileRef, argv: &[&[u8]], envp: &[&[u8]]) -> KResult<Us
     let mut loader = KadosElfLoader {
         vmem: &mut vmem,
         addr_space: &mut addr_space,
+        base_addr: usize::MAX,
     };
     
     elf.load(&mut loader).unwrap();
 
     current.switch();
     let p2 = elf.file.header.pt2.clone();
+    // log::debug!("{:?}", p2);
+    log::debug!("Base address at {:?}", VirtAddr::new(loader.base_addr));
     let hdr = [
-        (AuxvType::AtPhdr, p2.ph_offset() as usize + start_of_image),
+        (AuxvType::AtPhdr, p2.ph_offset() as usize + loader.base_addr),
         (AuxvType::AtPhEnt, p2.ph_entry_size() as usize),
         (AuxvType::AtPhNum, p2.ph_count() as usize),
         (AuxvType::AtEntry, p2.entry_point() as usize),
@@ -113,6 +116,7 @@ pub fn load_elf<'a>(file: FileRef, argv: &[&[u8]], envp: &[&[u8]]) -> KResult<Us
 struct KadosElfLoader<'a> {
     vmem: &'a mut Vmem,
     addr_space: &'a mut AddressSpace,
+    base_addr: usize,
 }
 
 impl<'a> ElfLoader for KadosElfLoader<'a> {
@@ -120,6 +124,9 @@ impl<'a> ElfLoader for KadosElfLoader<'a> {
         for header in load_headers.filter(|header| header.get_type().unwrap() == Type::Load) {
             let start = VirtAddr::new(header.virtual_addr() as usize).align_down(PAGE_SIZE);
             let mem_end = VirtAddr::new(header.virtual_addr() as usize + header.mem_size() as usize).align_up(PAGE_SIZE);
+            if (header.virtual_addr() as usize) < self.base_addr {
+                self.base_addr = header.virtual_addr() as usize;
+            }
             // let file_end = VirtAddr::new(header.virtual_addr() as usize + header.file_size() as usize).align_up(PAGE_SIZE);
             // let data_size = file_end - start;
             // let aligned_data_size = align_up(data_size, PAGE_SIZE);
@@ -159,11 +166,13 @@ impl<'a> ElfLoader for KadosElfLoader<'a> {
 
     fn tls(
             &mut self,
-            _tdata_start: elfloader::VAddr,
+            tdata_start: elfloader::VAddr,
             _tdata_length: u64,
             _total_size: u64,
             _align: u64,
         ) -> Result<(), elfloader::ElfLoaderErr> {
+        
+        log::warn!("TLS section found at {:?}", VirtAddr::new(tdata_start as usize));
         Ok(())
     }
 

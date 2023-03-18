@@ -97,7 +97,7 @@ pub fn arch_main() {
     // sched.enqueue(Task::new_kernel(spawn_init_process, true));
     let exe = "/bin/testapp";
     let file = get_root().unwrap().lookup(Path::new(exe)).unwrap().as_file().unwrap().clone();
-    sched.enqueue(Task::new_init(file, &[exe.as_bytes()], &[&[]]).unwrap());
+    sched.enqueue(Task::new_init(file, &[&[]], &[&[]]).unwrap());
 
     log::info!("Welcome to K4DOS!");
     loop {

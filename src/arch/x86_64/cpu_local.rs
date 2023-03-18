@@ -12,6 +12,7 @@ pub struct CpuLocalData {
 pub struct Kpcr {
     pub tss: TaskStateSegment,
     pub cpu_local: &'static mut CpuLocalData,
+    pub user_rsp0_tmp: usize,
 }
 
 pub fn get_kpcr() -> &'static mut Kpcr {

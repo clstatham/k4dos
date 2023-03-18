@@ -81,11 +81,11 @@ pub fn init() {
     // TSS
     let tss_sel = gdt.add_entry(Descriptor::tss_segment(tss));
 
-    log::debug!("kernel_cs: ({:#x}) {:?}", kernel_cs_sel.0, kernel_cs_sel);
-    log::debug!("kernel_ds: ({:#x}) {:?}", kernel_ds_sel.0, kernel_ds_sel);
-    log::debug!("user_cs:   ({:#x}) {:?}", user_cs_sel.0, user_cs_sel);
-    log::debug!("user_ds:   ({:#x}) {:?}", user_ds_sel.0, user_ds_sel);
-    log::debug!("tss:       ({:#x}) {:?}", tss_sel.0, tss_sel);
+    // log::debug!("kernel_cs: ({:#x}) {:?}", kernel_cs_sel.0, kernel_cs_sel);
+    // log::debug!("kernel_ds: ({:#x}) {:?}", kernel_ds_sel.0, kernel_ds_sel);
+    // log::debug!("user_cs:   ({:#x}) {:?}", user_cs_sel.0, user_cs_sel);
+    // log::debug!("user_ds:   ({:#x}) {:?}", user_ds_sel.0, user_ds_sel);
+    // log::debug!("tss:       ({:#x}) {:?}", tss_sel.0, tss_sel);
 
     // get_kpcr().cpu_local.gdt = gdt;
     // get_kpcr().cpu_local.gdt.load();

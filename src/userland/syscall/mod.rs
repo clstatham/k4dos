@@ -18,21 +18,23 @@ impl<'a> SyscallHandler<'a> {
         a6: usize,
         n: usize,
     ) -> KResult<isize> {
-        let current = get_scheduler().current_task();
-        let mut current = current.lock();
-        let current = current.as_mut().unwrap();
-        log::trace!(
-            "[{}] SYSCALL #{} {}({:#x}, {:#x}, {:#x}, {:#x}, {:#x}, {:#x})",
-            current.pid().as_usize(),
-            n,
-            syscall_name_by_number(n),
-            a1,
-            a2,
-            a3,
-            a4,
-            a5,
-            a6
-        );
+        {
+            let current = get_scheduler().current_task();
+            let mut current = current.lock();
+            let current = current.as_mut().unwrap();
+            log::trace!(
+                "[{}] SYSCALL #{} {}({:#x}, {:#x}, {:#x}, {:#x}, {:#x}, {:#x})",
+                current.pid().as_usize(),
+                n,
+                syscall_name_by_number(n),
+                a1,
+                a2,
+                a3,
+                a4,
+                a5,
+                a6
+            );
+        }
         Err(errno!(Errno::ENOSYS))
     }
 }
