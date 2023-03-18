@@ -290,6 +290,8 @@ extern "x86-interrupt" fn page_fault_handler(
         }
         get_scheduler()
             .current_task()
+            .lock()
+            .as_ref()
             .unwrap()
             .handle_page_fault(VirtAddr::new(accessed_address as usize), error_code);
         unsafe {

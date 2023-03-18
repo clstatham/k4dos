@@ -97,7 +97,7 @@ impl Task {
     }
 
     pub fn handle_page_fault(&self, faulted_addr: VirtAddr, reason: PageFaultErrorCode) {
-        let mut addr_space = self.arch_mut().address_space;
+        let addr_space = &mut self.arch_mut().address_space;
         let mut mapper = addr_space.mapper();
         self.vmem
             .lock()

@@ -8,7 +8,7 @@ pub struct Scheduler {
     run_queue: SpinLock<VecDeque<Arc<Task>>>,
     idle_thread: Arc<Task>,
     preempt_task: Arc<Task>,
-    current_task: SpinLock<Option<Arc<Task>>>,
+    current_task: Arc<SpinLock<Option<Arc<Task>>>>,
 }
 
 impl Scheduler {
@@ -17,7 +17,7 @@ impl Scheduler {
             run_queue: SpinLock::new(VecDeque::new()),
             idle_thread: Task::new_idle(),
             preempt_task: Task::new_kernel(preempt, true),
-            current_task: SpinLock::new(None),
+            current_task: Arc::new(SpinLock::new(None)),
         }
     }
 
@@ -26,8 +26,8 @@ impl Scheduler {
         self.run_queue.lock().push_back(task)
     }
 
-    pub fn current_task(&self) -> Option<&Arc<Task>> {
-        self.current_task.lock().as_ref()
+    pub fn current_task(&self) -> Arc<SpinLock<Option<Arc<Task>>>> {
+        self.current_task.clone()
     }
 
     pub fn switch(&self) {
