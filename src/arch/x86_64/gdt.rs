@@ -5,9 +5,6 @@ use alloc::alloc::alloc_zeroed;
 use lazy_static::lazy_static;
 use x86::{
     msr::{wrmsr, IA32_GS_BASE},
-    segmentation::{load_cs, load_ds, load_es, load_ss},
-    task::load_tr,
-    Ring,
 };
 use x86_64::{structures::{
     gdt::{Descriptor, GlobalDescriptorTable, SegmentSelector},
@@ -21,7 +18,7 @@ use super::cpu_local::{get_kpcr, Kpcr, get_tss, CpuLocalData};
 pub const KERNEL_CS_IDX: u16 = 1; // 0x8
 pub const KERNEL_DS_IDX: u16 = 2; // 0x10
 pub const USER_CS_IDX: u16 = 4; // 0x23
-pub const USER_DS_IDX: u16 = 5; // 0x43
+pub const USER_DS_IDX: u16 = 5; // 0x2b
 const TSS_IDX: u16 = 6; // 0x30
 
 static STACK: [u8; KERNEL_STACK_SIZE] = [0; KERNEL_STACK_SIZE];
@@ -45,7 +42,7 @@ pub fn init_boot() {
         FS::set_reg(BOOT_GDT.1[1]);
 
         GS::set_reg(BOOT_GDT.1[2]);
-        
+
         SS::set_reg(BOOT_GDT.1[1]);
     }
 }
@@ -84,11 +81,11 @@ pub fn init() {
     // TSS
     let tss_sel = gdt.add_entry(Descriptor::tss_segment(tss));
 
-    log::debug!("kernel_cs: {:?}", kernel_cs_sel);
-    log::debug!("kernel_ds: {:?}", kernel_ds_sel);
-    log::debug!("user_cs:   {:?}", user_cs_sel);
-    log::debug!("user_ds:   {:?}", user_ds_sel);
-    log::debug!("tss:       {:?}", tss_sel);
+    log::debug!("kernel_cs: ({:#x}) {:?}", kernel_cs_sel.0, kernel_cs_sel);
+    log::debug!("kernel_ds: ({:#x}) {:?}", kernel_ds_sel.0, kernel_ds_sel);
+    log::debug!("user_cs:   ({:#x}) {:?}", user_cs_sel.0, user_cs_sel);
+    log::debug!("user_ds:   ({:#x}) {:?}", user_ds_sel.0, user_ds_sel);
+    log::debug!("tss:       ({:#x}) {:?}", tss_sel.0, tss_sel);
 
     // get_kpcr().cpu_local.gdt = gdt;
     // get_kpcr().cpu_local.gdt.load();

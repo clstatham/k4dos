@@ -384,9 +384,9 @@ extern "x86-interrupt" fn security_exception_handler(
 extern "x86-interrupt" fn timer_handler(stack_frame: InterruptStackFrame) {
     // log::info!("tick");
     if stack_frame.code_segment & 0b11 != 0 {
-        log::debug!("User GSBase {:#x}", unsafe { rdmsr(IA32_GS_BASE) } );
+        // log::debug!("User GSBase {:#x}", unsafe { rdmsr(IA32_GS_BASE) } );
         unsafe { core::arch::asm!("swapgs"); }
-        log::debug!("Kernel GSBase {:#x}", unsafe { rdmsr(IA32_GS_BASE) } );
+        // log::debug!("Kernel GSBase {:#x}", unsafe { rdmsr(IA32_GS_BASE) } );
         get_scheduler().with_kernel_addr_space_active(|| notify_eoi(0));
         unsafe { core::arch::asm!("swapgs"); }
     } else {

@@ -110,17 +110,26 @@ impl Task {
             .handle_page_fault(&mut mapper, faulted_addr, instruction_pointer, reason);
     }
 
-    pub fn exec(&self, file: FileRef, argv: &[&[u8]], envp: &[&[u8]]) -> KResult<(), ElfLoadError> {
-        {
-            self.opened_files.lock().close_cloexec_files();    
-        }
+    pub fn new_init(file: FileRef, argv: &[&[u8]], envp: &[&[u8]]) -> KResult<Arc<Task>, ElfLoadError> {
+        // {
+        //     self.opened_files.lock().close_cloexec_files();    
+        // }
 
-        let mut vmem = self.vmem.lock();
-        vmem.clear(&mut self.arch_mut().address_space.mapper());
+        // let mut vmem = self.vmem.lock();
+        // vmem.clear(&mut self.arch_mut().address_space.mapper());
 
-        unsafe { self.vmem.force_unlock() };
-        self.arch_mut().exec(file, argv, envp).unwrap();
+        // unsafe { self.vmem.force_unlock() };
+        // self.arch_mut().exec(file, argv, envp).unwrap();
 
-        Ok(())
+        let pid = TaskId::allocate();
+        Ok(Arc::new(Self {
+            arch: UnsafeCell::new(ArchTask::new_init(file, argv, envp)?),
+            state: SpinLock::new(TaskState::Runnable),
+            pid,
+            parent: Arc::new(SpinLock::new(None)),
+            children: Arc::new(SpinLock::new(Vec::new())),
+            opened_files: Arc::new(SpinLock::new(OpenedFileTable::new())),
+            vmem: Arc::new(SpinLock::new(Vmem::new())),
+        }))
     }
 }

@@ -94,7 +94,10 @@ pub fn arch_main() {
     log::info!("Starting init process.");
 
     let sched = get_scheduler();
-    sched.enqueue(Task::new_kernel(spawn_init_process, true));
+    // sched.enqueue(Task::new_kernel(spawn_init_process, true));
+    let exe = "/bin/testapp";
+    let file = get_root().unwrap().lookup(Path::new(exe)).unwrap().as_file().unwrap().clone();
+    sched.enqueue(Task::new_init(file, &[exe.as_bytes()], &[&[]]).unwrap());
 
     log::info!("Welcome to K4DOS!");
     loop {
@@ -102,11 +105,4 @@ pub fn arch_main() {
         interrupts::disable();
         sched.preempt();
     }
-}
-
-fn spawn_init_process() {
-    let sched = get_scheduler();
-    let file = get_root().unwrap().lookup(Path::new("/bin/testapp")).unwrap().as_file().unwrap().clone();
-
-    sched.exec(file, &[b"/bin/testapp"], &[&[]])
 }

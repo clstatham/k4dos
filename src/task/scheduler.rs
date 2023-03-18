@@ -42,9 +42,10 @@ impl Scheduler {
 
     pub fn exec(&self, file: FileRef, argv: &[&[u8]], envp: &[&[u8]]) {
         // self.current_task.exec(file, argv, envp).unwrap();
-        let mut current = self.current_task.lock();
-        unsafe { self.current_task.force_unlock() };
-        current.as_mut().unwrap().exec(file, argv, envp).unwrap();
+        // let mut current = self.current_task.lock();
+        todo!()
+        // unsafe { self.current_task.force_unlock() };
+        // current.as_mut().unwrap().exec(file, argv, envp).unwrap();
     }
 
     pub fn switch(&self) {

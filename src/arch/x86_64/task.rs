@@ -18,29 +18,36 @@ use core::alloc::Layout;
 use alloc::{alloc::alloc_zeroed, boxed::Box, vec::Vec};
 use x86::{
     controlregs,
+    current::segmentation::swapgs,
     msr::{rdmsr, wrmsr, IA32_FS_BASE, IA32_GS_BASE},
     segmentation::SegmentSelector,
-    Ring, current::segmentation::swapgs,
+    Ring,
 };
 use x86_64::structures::paging::PageTableFlags;
 
 use crate::{
+    fs::FileRef,
     mem::{
         addr::VirtAddr,
         addr_space::AddressSpace,
         consts::{KERNEL_STACK_SIZE, PAGE_SIZE, USER_STACK_BOTTOM, USER_STACK_TOP},
     },
-    util::{stack::Stack, KResult}, task::vmem::Vmem, fs::FileRef, userland::elf::{ElfLoadError, self, AuxvType},
+    task::vmem::Vmem,
+    userland::elf::{self, AuxvType, ElfLoadError},
+    util::{stack::Stack, KResult},
 };
 
 use super::{
+    cpu_local::get_tss,
     gdt::{KERNEL_CS_IDX, KERNEL_DS_IDX, USER_CS_IDX, USER_DS_IDX},
-    idt::InterruptFrame, cpu_local::get_tss,
+    idt::InterruptFrame,
 };
 
 pub fn arch_context_switch(prev: &mut ArchTask, next: &mut ArchTask) {
     unsafe {
-        get_tss().privilege_stack_table[0] = x86_64::VirtAddr::new((next.kernel_stack.as_ptr() as usize + next.kernel_stack.len()) as u64);
+        get_tss().privilege_stack_table[0] = x86_64::VirtAddr::new(
+            (next.kernel_stack.as_ptr() as usize + next.kernel_stack.len()) as u64,
+        );
 
         prev.fsbase = VirtAddr::new(rdmsr(IA32_FS_BASE) as usize);
         prev.gsbase = VirtAddr::new(rdmsr(IA32_GS_BASE) as usize);
@@ -48,7 +55,7 @@ pub fn arch_context_switch(prev: &mut ArchTask, next: &mut ArchTask) {
         // swapgs();
         wrmsr(IA32_GS_BASE, next.gsbase.value() as u64);
         // swapgs();
-        
+
         context_switch(prev.context.as_mut(), next.context.as_mut())
     }
 }
@@ -150,40 +157,52 @@ unsafe extern "sysv64" fn context_switch(_prev: &mut Context, _next: &mut Contex
 }
 
 #[naked]
-unsafe extern "C" fn usermode_entry(stack: VirtAddr, rip: VirtAddr, rflags: u64) -> ! {
+unsafe extern "C" fn enter_usermode() -> ! {
     core::arch::asm!(
         "
-        push rdi
-        push rsi
-        push rdx
-
         cli
-        swapgs
 
-        pop r11
-        pop rcx
-        pop rsp
+        add rsp, 8
 
-        mov r15, {user_ds}
-        mov ds, r15d
-        mov es, r15d
-        mov fs, r15d
-        mov gs, r15d
-
-        xor rax, rax
-        xor rbx, rbx
-        xor rdx, rdx
-        xor rsi, rsi
-        // xor rbp, rbp
-        xor r8, r8
-        xor r9, r9
-        xor r10, r10
-        xor r12, r12
-        xor r13, r13
-        xor r14, r14
-        xor r15, r15
+        pop r15
+        pop r14
+        pop r13
+        pop r12
+        pop rbp
+        pop rbx
         
-        sysretq
+        pop r11
+        pop r10
+        pop r9
+        pop r8
+        pop rsi
+        pop rdi
+        pop rdx
+        pop rcx
+        pop rax
+
+        // mov r15, {user_ds}
+        // mov ds, r15d
+        // mov es, r15d
+        // mov fs, r15d
+        // mov gs, r15d
+        // mov ss, r15d
+
+        // xor rax, rax
+        // xor rbx, rbx
+        // xor rdx, rdx
+        // xor rsi, rsi
+        // // xor rbp, rbp
+        // xor r8, r8
+        // xor r9, r9
+        // xor r10, r10
+        // xor r12, r12
+        // xor r13, r13
+        // xor r14, r14
+        // xor r15, r15
+
+        swapgs
+        iretq
     ",
         user_ds = const((USER_DS_IDX as u64) << 3 | 3),
         options(noreturn)
@@ -237,8 +256,8 @@ impl ArchTask {
         let mut stack = Stack::new(&mut stack_ptr);
 
         let kframe = unsafe { stack.offset::<InterruptFrame>() };
-        kframe.ss = SegmentSelector::new(KERNEL_DS_IDX, Ring::Ring0).bits() as u64;
-        kframe.cs = SegmentSelector::new(KERNEL_CS_IDX, Ring::Ring0).bits() as u64;
+        kframe.ss = (KERNEL_DS_IDX as u64) << 3;
+        kframe.cs = (KERNEL_CS_IDX as u64) << 3;
         kframe.rip = entry_point.value() as u64;
         kframe.rsp = task_stack as u64;
         kframe.rflags = if enable_interrupts { 0x200 } else { 0 };
@@ -258,21 +277,51 @@ impl ArchTask {
     }
 
     // #[allow(unreachable_code)]
-    pub fn exec(&mut self, file: FileRef, argv: &[&[u8]], envp: &[&[u8]]) -> KResult<(), ElfLoadError> {
+    pub fn new_init(file: FileRef, argv: &[&[u8]], envp: &[&[u8]]) -> KResult<Self, ElfLoadError> {
         let mut userland_entry = elf::load_elf(file, argv, envp)?;
-        self.user = true;
 
-        userland_entry.vmem.map_area(VirtAddr::new(USER_STACK_BOTTOM), VirtAddr::new(USER_STACK_TOP), PageTableFlags::PRESENT | PageTableFlags::WRITABLE | PageTableFlags::USER_ACCESSIBLE | PageTableFlags::NO_EXECUTE, &mut userland_entry.addr_space.mapper()).map_err(|e| e.into())?;
-        
+        let kernel_stack = alloc::vec![0u8; PAGE_SIZE].into_boxed_slice();
+
+        let current = AddressSpace::current();
+        // self.user = true;
+
         userland_entry.addr_space.switch();
-        
-        self.context = core::ptr::Unique::dangling();
-        // self.context = core::ptr::Unique::new(&mut Context::default()).unwrap();
-        self.address_space = userland_entry.addr_space;
+        userland_entry
+            .vmem
+            .map_area(
+                VirtAddr::new(USER_STACK_BOTTOM),
+                VirtAddr::new(USER_STACK_TOP),
+                PageTableFlags::PRESENT
+                    | PageTableFlags::WRITABLE
+                    | PageTableFlags::USER_ACCESSIBLE
+                    | PageTableFlags::NO_EXECUTE,
+                &mut userland_entry.addr_space.mapper(),
+            )
+            .map_err(|e| e.into())?;
 
-        self.fsbase = userland_entry.fsbase.unwrap_or(VirtAddr::null());
+        let mut stack_ptr = kernel_stack.as_ptr() as usize;
+        let mut stack = Stack::new(&mut stack_ptr);
+
+        let kframe = unsafe { stack.offset::<InterruptFrame>() };
+        kframe.ss = (USER_DS_IDX as u64) << 3 | 3;
+        kframe.cs = (USER_CS_IDX as u64) << 3 | 3;
+        kframe.rip = userland_entry.entry_point.value() as u64;
+        kframe.rsp = USER_STACK_TOP as u64;
+        // kframe.rflags = if enable_interrupts { 0x200 } else { 0 };
+        kframe.rflags = 0x200;
+
+        let context = unsafe { stack.offset::<Context>() };
+        *context = Context::default();
+        context.rip = enter_usermode as usize;
+        context.cr3 = unsafe { controlregs::cr3() as usize };
+
+        // let mut context = core::ptr::Unique::dangling();
+        // self.context = core::ptr::Unique::new(&mut Context::default()).unwrap();
+        // self.address_space = userland_entry.addr_space;
+
+        // self.fsbase = userland_entry.fsbase.unwrap_or(VirtAddr::null());
         // self.gsbase = unsafe { VirtAddr::new(rdmsr(IA32_GS_BASE) as usize) };
-        self.gsbase = VirtAddr::null();
+        // self.gsbase = VirtAddr::null();
 
         let mut stack_addr = USER_STACK_TOP;
         let mut stack = Stack::new(&mut stack_addr);
@@ -317,9 +366,16 @@ impl ArchTask {
         core::mem::drop(envp_tops);
         assert_eq!(stack.top() % 16, 0);
 
-        unsafe {
-            usermode_entry(VirtAddr::new(stack.top()), userland_entry.entry_point, 0x002);
-        }
+        current.switch();
+
+        Ok(Self {
+            context: unsafe { core::ptr::Unique::new_unchecked(context) },
+            kernel_stack,
+            user: true,
+            address_space: userland_entry.addr_space,
+            fsbase: userland_entry.fsbase.unwrap_or(VirtAddr::null()),
+            gsbase: VirtAddr::null(),
+        })
 
         // Ok(())
     }
