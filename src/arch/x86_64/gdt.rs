@@ -5,41 +5,31 @@ use lazy_static::lazy_static;
 use x86::{
     controlregs::{cr4_write, Cr4},
     current::segmentation::{rdgsbase, wrgsbase},
+    msr::{rdmsr, wrmsr, IA32_GS_BASE},
     segmentation::{load_cs, load_ds, load_es, load_ss, SegmentSelector},
     task::load_tr,
-    Ring, msr::{wrmsr, IA32_GS_BASE, rdmsr},
+    Ring,
 };
 use x86_64::structures::{
     gdt::{Descriptor, GlobalDescriptorTable},
-    tss::TaskStateSegment, idt::InterruptDescriptorTable,
+    idt::InterruptDescriptorTable,
+    tss::TaskStateSegment,
 };
 
 use crate::mem::consts::KERNEL_STACK_SIZE;
 
-const KERNEL_CS_IDX: u16 = 1;
-const KERNEL_DS_IDX: u16 = 2;
-const USER_CS_IDX: u16 = 3;
-const USER_DS_IDX: u16 = 4;
+use super::cpu_local::{kpcr, Kpcr};
+
+pub const KERNEL_CS_IDX: u16 = 1;
+pub const KERNEL_DS_IDX: u16 = 2;
+pub const USER_CS_IDX: u16 = 3;
+pub const USER_DS_IDX: u16 = 4;
 const TSS_IDX: u16 = 5;
-
-#[repr(C)]
-pub struct Kpcr {
-    pub user_rsp_tmp: usize,
-    pub kernel_sp: usize,
-    pub tss: TaskStateSegment,
-    pub gdt: GlobalDescriptorTable,
-    pub idt: InterruptDescriptorTable,
-}
-
-pub fn kpcr() -> &'static mut Kpcr {
-    unsafe { &mut *(rdmsr(IA32_GS_BASE) as *mut _) }
-}
 
 static STACK: [u8; KERNEL_STACK_SIZE] = [0; KERNEL_STACK_SIZE];
 
 pub fn init() {
     unsafe {
-
         let kpcr_layout = Layout::new::<Kpcr>();
         let kpcr_ptr = alloc_zeroed(kpcr_layout) as *mut Kpcr;
         wrmsr(IA32_GS_BASE, kpcr_ptr as u64);

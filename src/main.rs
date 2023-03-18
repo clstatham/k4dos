@@ -1,6 +1,14 @@
 #![no_std]
 #![no_main]
-#![feature(pointer_is_aligned, panic_info_message, lang_items, abi_x86_interrupt)]
+#![feature(
+    pointer_is_aligned,
+    panic_info_message,
+    lang_items,
+    abi_x86_interrupt,
+    naked_functions,
+    asm_const,
+    ptr_internals
+)]
 
 extern crate alloc;
 
@@ -11,12 +19,16 @@ pub mod arch;
 pub mod backtrace;
 pub mod logging;
 pub mod mem;
+pub mod task;
 pub mod util;
 
 use core::sync::atomic::AtomicUsize;
 
+use arch::cpu_local::kpcr;
 use mem::addr::VirtAddr;
 use x86_64::instructions::hlt;
+
+use crate::task::get_scheduler;
 
 pub static PHYSICAL_OFFSET: AtomicUsize = AtomicUsize::new(0);
 
@@ -30,6 +42,15 @@ pub extern "C" fn _start() -> ! {
     arch::arch_main();
 
     hcf();
+}
+
+pub fn main_kernel_thread() {
+    log::info!("We are now in main_kernel_thread().");
+    let sched = get_scheduler();
+    loop {
+        sched.preempt();
+        // core::hint::spin_loop();
+    }
 }
 
 pub fn hcf() -> ! {

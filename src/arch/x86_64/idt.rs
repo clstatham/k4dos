@@ -1,13 +1,16 @@
 use lazy_static::lazy_static;
-use pc_keyboard::{Keyboard, layouts::Us104Key, ScancodeSet1, HandleControl, DecodedKey};
+use pc_keyboard::{layouts::Us104Key, DecodedKey, HandleControl, Keyboard, ScancodeSet1};
 use pic8259::ChainedPics;
 use spin::Mutex;
-use x86_64::{structures::idt::{InterruptDescriptorTable, InterruptStackFrame, PageFaultErrorCode}, instructions::port::Port, registers::control::Cr3};
+use x86_64::{
+    instructions::port::Port,
+    registers::control::Cr3,
+    structures::idt::{InterruptDescriptorTable, InterruptStackFrame, PageFaultErrorCode},
+};
 
-use crate::util::SpinLock;
+use crate::{util::SpinLock, task::get_scheduler};
 
-use super::gdt::kpcr;
-
+use super::cpu_local::kpcr;
 
 pub const PIC_1_OFFSET: u8 = 32;
 pub const PIC_2_OFFSET: u8 = PIC_1_OFFSET + 8;
@@ -16,7 +19,6 @@ pub const KEYBOARD_IDT_IDX: u8 = 33;
 
 pub static PICS: Mutex<ChainedPics> =
     Mutex::new(unsafe { ChainedPics::new(PIC_1_OFFSET, PIC_2_OFFSET) });
-
 
 #[derive(Copy, Clone, Debug)]
 #[repr(C, packed)]
@@ -43,7 +45,6 @@ pub struct InterruptFrame {
     pub rsp: u64,
     pub ss: u64,
 }
-
 
 pub fn notify_eoi(index: u8) {
     unsafe { PICS.lock().notify_end_of_interrupt(index) }
@@ -102,7 +103,6 @@ pub fn init() {
         PICS.lock().initialize();
     }
 }
-
 
 extern "x86-interrupt" fn keyboard_handler(_stack_frame: InterruptStackFrame) {
     lazy_static! {
@@ -350,7 +350,7 @@ extern "x86-interrupt" fn security_exception_handler(
 
 extern "x86-interrupt" fn pic_timer_handler(_stack_frame: InterruptStackFrame) {
     // vga_print!(".");
-
+    get_scheduler().preempt();
     notify_eoi(PIC_1_OFFSET);
 }
 

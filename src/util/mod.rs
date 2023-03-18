@@ -1,6 +1,7 @@
 #[macro_use]
 pub mod error;
 pub mod lock;
+pub mod stack;
 
 pub use self::error::*;
 pub use self::lock::*;

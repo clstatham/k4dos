@@ -2,13 +2,15 @@ use limine::*;
 use x86_64::instructions::interrupts;
 use xmas_elf::ElfFile;
 
-use crate::mem::{
+use crate::{mem::{
     self,
     allocator::{KERNEL_FRAME_ALLOCATOR, KERNEL_PAGE_ALLOCATOR},
-};
+}, task::{scheduler, get_scheduler, Task}, main_kernel_thread};
 
+pub mod cpu_local;
 pub mod gdt;
 pub mod idt;
+pub mod task;
 
 static HHDM: LimineHhdmRequest = LimineHhdmRequest::new(0);
 static MEMMAP: LimineMemmapRequest = LimineMemmapRequest::new(0);
@@ -71,5 +73,14 @@ pub fn arch_main() {
     log::info!("Loading IDT.");
     idt::init();
 
+    log::info!("Initializing task scheduler.");
+    crate::task::init();
+
+    log::info!("Spawning initial kernel task.");
+    get_scheduler().enqueue(Task::new_kernel(main_kernel_thread, true));
+
     log::info!("It did not crash!");
+
+    interrupts::enable();
+    get_scheduler().preempt();
 }

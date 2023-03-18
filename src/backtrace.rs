@@ -10,13 +10,16 @@ use xmas_elf::{
 
 use crate::{
     kerrmsg,
-    util::{KResult, SavedInterruptStatus},
+    util::{KResult, SavedInterruptStatus}, mem::{addr_space::AddressSpace, addr::VirtAddr},
 };
 
 pub static KERNEL_ELF: Once<ElfFile<'static>> = Once::new();
 
 pub fn unwind_stack() -> KResult<()> {
     let _guard = SavedInterruptStatus::save();
+
+    let mut addr_space = AddressSpace::current();
+    let pt = addr_space.mapper();
 
     let kernel_elf = KERNEL_ELF
         .get()
@@ -49,7 +52,11 @@ pub fn unwind_stack() -> KResult<()> {
     log::trace!("---BEGIN BACKTRACE---");
     for depth in 0..16 {
         if let Some(rip_rbp) = rbp.checked_add(size_of::<usize>()) {
-            // todo: check guard page
+            
+            if pt.translate(VirtAddr::new(rip_rbp)).is_none() {
+                log::trace!("{:>2}: <guard page>", depth);
+                break;
+            }
 
             let rip = unsafe { *(rip_rbp as *const usize) };
             if rip == 0 {
