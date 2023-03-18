@@ -107,4 +107,17 @@ impl<'a> Mapper<'a> {
             .map_err(|e| kerr!(PagingError::FrameAllocationFailed(e)))?;
         self.map_to(pages, frames, flags)
     }
+
+    pub fn set_flags(&mut self, mp: &mut MappedPages, flags: PageTableFlags) {
+        for page in mp.pages().iter() {
+            let addr = page.start_address();
+            // these unwraps should be safe since we know the pages are alreaday mapped
+            let p3 = self.p4.next_table_mut(addr.p4_index()).unwrap();
+            let p2 = p3.next_table_mut(addr.p3_index()).unwrap();
+            let p1 = p2.next_table_mut(addr.p2_index()).unwrap();
+            p1[addr.p1_index()].set_flags(flags);
+            unsafe { tlb::flush(addr.value()) };
+        }
+        mp.flags = flags;
+    }
 }

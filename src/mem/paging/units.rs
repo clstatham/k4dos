@@ -359,7 +359,7 @@ macro_rules! mapped_impl {
         pub struct $name {
             pages: $ap,
             frames: AllocatedFrames,
-            flags: PageTableFlags,
+            pub(super) flags: PageTableFlags,
         }
 
         impl $name {
