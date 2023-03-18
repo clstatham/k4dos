@@ -5,6 +5,7 @@ use core::{
 
 use alloc::{sync::Arc, vec::Vec};
 use spin::Once;
+use x86_64::structures::idt::PageFaultErrorCode;
 
 use crate::{arch::{task::ArchTask}, mem::addr::VirtAddr, util::SpinLock};
 
@@ -93,5 +94,11 @@ impl Task {
 
     pub fn arch_mut(&self) -> &mut ArchTask {
         unsafe { &mut *self.arch.get() }
+    }
+
+    pub fn handle_page_fault(&self, faulted_addr: VirtAddr, reason: PageFaultErrorCode) {
+        let mut addr_space = self.arch_mut().address_space;
+        let mut mapper = addr_space.mapper();
+        self.vmem.lock().handle_page_fault(&mut mapper, faulted_addr, reason);
     }
 }

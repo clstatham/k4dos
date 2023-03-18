@@ -9,7 +9,7 @@ use x86_64::{
     structures::idt::{InterruptDescriptorTable, InterruptStackFrame, PageFaultErrorCode},
 };
 
-use crate::{util::SpinLock, task::get_scheduler};
+use crate::{util::SpinLock, task::get_scheduler, mem::addr::VirtAddr};
 
 use super::cpu_local::kpcr;
 
@@ -283,21 +283,16 @@ extern "x86-interrupt" fn page_fault_handler(
 ) {
     let accessed_address = x86_64::registers::control::Cr2::read_raw();
     let cr3 = x86_64::registers::control::Cr3::read_raw().0;
-    // if error_code.contains(PageFaultErrorCode::USER_MODE) {
-    //     unsafe {
-    //         core::arch::asm!("swapgs");
-    //     }
-    //     handle_user_page_fault(
-    //         accessed_address,
-    //         error_code,
-    //         stack_frame,
-    //         cr3.start_address().as_u64(),
-    //     );
-    //     unsafe {
-    //         core::arch::asm!("swapgs");
-    //     }
-    //     return;
-    // }
+    if error_code.contains(PageFaultErrorCode::USER_MODE) {
+        unsafe {
+            core::arch::asm!("swapgs");
+        }
+        get_scheduler().current_task().unwrap().handle_page_fault(VirtAddr::new(accessed_address as usize), error_code);
+        unsafe {
+            core::arch::asm!("swapgs");
+        }
+        return;
+    }
 
     log::error!(
         "\nEXCEPTION: PAGE FAULT while accessing {:#x}\n\

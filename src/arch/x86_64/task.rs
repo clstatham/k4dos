@@ -172,7 +172,7 @@ pub struct ArchTask {
     // pub(super) fsbase: AtomicCell<u64>,
     kernel_stack: Box<[u8]>,
     user: bool,
-    address_space: AddressSpace,
+    pub(crate) address_space: AddressSpace,
     fsbase: VirtAddr,
     gsbase: VirtAddr,
 }

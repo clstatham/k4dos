@@ -26,6 +26,10 @@ impl Scheduler {
         self.run_queue.lock().push_back(task)
     }
 
+    pub fn current_task(&self) -> Option<&Arc<Task>> {
+        self.current_task.lock().as_ref()
+    }
+
     pub fn switch(&self) {
         let mut queue = self.run_queue.lock();
         let mut current_lock = self.current_task.lock();
