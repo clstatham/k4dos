@@ -21,14 +21,15 @@ pub mod logging;
 pub mod mem;
 pub mod task;
 pub mod util;
+pub mod fs;
+pub mod userland;
 
 use core::sync::atomic::AtomicUsize;
 
-use arch::cpu_local::kpcr;
 use mem::addr::VirtAddr;
 use x86_64::instructions::hlt;
 
-use crate::task::get_scheduler;
+use crate::{task::get_scheduler, fs::initramfs};
 
 pub static PHYSICAL_OFFSET: AtomicUsize = AtomicUsize::new(0);
 
@@ -46,6 +47,9 @@ pub extern "C" fn _start() -> ! {
 
 pub fn main_kernel_thread() {
     log::info!("We are now in main_kernel_thread().");
+
+    fs::initramfs::init().unwrap();
+
     let sched = get_scheduler();
     loop {
         sched.preempt();

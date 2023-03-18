@@ -5,7 +5,7 @@ use xmas_elf::ElfFile;
 use crate::{mem::{
     self,
     allocator::{KERNEL_FRAME_ALLOCATOR, KERNEL_PAGE_ALLOCATOR},
-}, task::{scheduler, get_scheduler, Task}, main_kernel_thread};
+}, task::{scheduler, get_scheduler, Task}, main_kernel_thread, fs};
 
 pub mod cpu_local;
 pub mod gdt;
@@ -75,6 +75,7 @@ pub fn arch_main() {
 
     log::info!("Initializing task scheduler.");
     crate::task::init();
+
 
     log::info!("Spawning initial kernel task.");
     get_scheduler().enqueue(Task::new_kernel(main_kernel_thread, true));
