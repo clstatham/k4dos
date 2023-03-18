@@ -215,11 +215,11 @@ pub trait File: FsNode {
         Err(errno!(Errno::EBADF))
     }
 
-    fn read_bytes(&self, offset: usize, buf: &mut [u8]) -> KResult<usize> {
+    fn read_bytes(&self, _offset: usize, _buf: &mut [u8]) -> KResult<usize> {
         Err(errno!(Errno::EBADF))
     }
 
-    fn write_bytes(&self, offset: usize, buf: &[u8]) -> KResult<usize> {
+    fn write_bytes(&self, _offset: usize, _buf: &[u8]) -> KResult<usize> {
         Err(errno!(Errno::EBADF))
     }
 

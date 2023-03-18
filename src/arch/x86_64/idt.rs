@@ -1,7 +1,8 @@
 use lazy_static::lazy_static;
 use pc_keyboard::{layouts::Us104Key, DecodedKey, HandleControl, Keyboard, ScancodeSet1};
-use pic8259::ChainedPics;
-use spin::Mutex;
+
+
+use x2apic::lapic::{LocalApicBuilder, LocalApic, xapic_base};
 use x86_64::{
     instructions::port::Port,
     registers::control::Cr3,
@@ -12,13 +13,27 @@ use crate::{util::SpinLock, task::get_scheduler};
 
 use super::cpu_local::kpcr;
 
-pub const PIC_1_OFFSET: u8 = 32;
-pub const PIC_2_OFFSET: u8 = PIC_1_OFFSET + 8;
+// pub const PIC_1_OFFSET: u8 = 32;
+// pub const PIC_2_OFFSET: u8 = PIC_1_OFFSET + 8;
 
-pub const KEYBOARD_IDT_IDX: u8 = 33;
+// pub const KEYBOARD_IDT_IDX: u8 = 33;
 
-pub static PICS: Mutex<ChainedPics> =
-    Mutex::new(unsafe { ChainedPics::new(PIC_1_OFFSET, PIC_2_OFFSET) });
+// pub static PICS: Mutex<ChainedPics> =
+//     Mutex::new(unsafe { ChainedPics::new(PIC_1_OFFSET, PIC_2_OFFSET) });
+
+pub const TIMER_IRQ: usize = 32;
+pub const ERROR_IRQ: usize = 33;
+pub const SPURIOUS_IRQ: usize = 34;
+
+lazy_static! {
+    pub static ref LAPIC: SpinLock<LocalApic> = SpinLock::new(LocalApicBuilder::new()
+        .timer_vector(TIMER_IRQ)
+        .error_vector(ERROR_IRQ)
+        .spurious_vector(SPURIOUS_IRQ)
+        .set_xapic_base(unsafe { xapic_base()} )
+        .build()
+        .unwrap());
+}
 
 #[derive(Copy, Clone, Debug)]
 #[repr(C, packed)]
@@ -46,8 +61,9 @@ pub struct InterruptFrame {
     pub ss: u64,
 }
 
-pub fn notify_eoi(index: u8) {
-    unsafe { PICS.lock().notify_end_of_interrupt(index) }
+pub fn notify_eoi() {
+    // unsafe { PICS.lock().notify_end_of_interrupt(index) }
+    unsafe { LAPIC.lock().end_of_interrupt() }
 }
 
 pub fn init() {
@@ -93,15 +109,27 @@ pub fn init() {
     idt.security_exception
         .set_handler_fn(security_exception_handler);
 
-    idt[PIC_1_OFFSET as usize].set_handler_fn(pic_timer_handler);
-    idt[KEYBOARD_IDT_IDX as usize].set_handler_fn(keyboard_handler);
+    idt[TIMER_IRQ].set_handler_fn(timer_handler);
+    idt[ERROR_IRQ].set_handler_fn(lapic_error_handler);
+    idt[SPURIOUS_IRQ].set_handler_fn(lapic_spurious_handler);
+    // idt[KEYBOARD_IDT_IDX as usize].set_handler_fn(keyboard_handler);
 
     kpcr().idt = idt;
     kpcr().idt.load();
     // };
     unsafe {
-        PICS.lock().initialize();
+        let mut lock = LAPIC.lock();
+        lock.enable();
+        // lock.enable_timer();
     }
+}
+
+extern "x86-interrupt" fn lapic_error_handler(stack_frame: InterruptStackFrame) {
+    panic!("LOCAL APIC ERROR: {:#x?}", stack_frame)
+}
+
+extern "x86-interrupt" fn lapic_spurious_handler(_stack_frame: InterruptStackFrame) {
+    notify_eoi();
 }
 
 extern "x86-interrupt" fn keyboard_handler(_stack_frame: InterruptStackFrame) {
@@ -127,7 +155,7 @@ extern "x86-interrupt" fn keyboard_handler(_stack_frame: InterruptStackFrame) {
         }
     }
 
-    notify_eoi(KEYBOARD_IDT_IDX);
+    notify_eoi();
 }
 
 /// exception 0x00
@@ -348,10 +376,10 @@ extern "x86-interrupt" fn security_exception_handler(
     panic!()
 }
 
-extern "x86-interrupt" fn pic_timer_handler(_stack_frame: InterruptStackFrame) {
+extern "x86-interrupt" fn timer_handler(_stack_frame: InterruptStackFrame) {
     // vga_print!(".");
+    notify_eoi();
     get_scheduler().preempt();
-    notify_eoi(PIC_1_OFFSET);
 }
 
 // extern "x86-interrupt" fn apic_timer_handler(_stack_frame: InterruptStackFrame) {

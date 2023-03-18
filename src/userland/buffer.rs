@@ -54,7 +54,7 @@ impl<'a> UserBuffer<'a> {
         &mut self,
         buffer: &mut [u8],
         offset: usize,
-        options: &OpenOptions,
+        _options: &OpenOptions,
     ) -> KResult<usize> {
         let len = usize::min(self.len() - offset, buffer.len());
         if len == 0 {
@@ -65,7 +65,7 @@ impl<'a> UserBuffer<'a> {
             Inner::Slice(src) => buffer[..len].copy_from_slice(&src[offset..(offset + len)]),
             Inner::User { base, .. } => {
                 // buffer[..len].copy_from_slice(core::slice::from_raw_parts(base.as_ptr(), len));
-                buffer[..len].copy_from_slice(base.as_bytes(len).map_err(|e| errno!(Errno::EINVAL))?);
+                buffer[..len].copy_from_slice(base.as_bytes(len).map_err(|_e| errno!(Errno::EINVAL))?);
             }
         }
         Ok(len)
@@ -118,7 +118,7 @@ impl<'a> UserBufferMut<'a> {
         &self,
         buffer: &mut [u8],
         offset: usize,
-        options: &OpenOptions,
+        _options: &OpenOptions,
     ) -> KResult<usize> {
         let len = usize::min(self.len() - offset, buffer.len());
         if len == 0 {
@@ -138,7 +138,7 @@ impl<'a> UserBufferMut<'a> {
         &mut self,
         buffer: &[u8],
         offset: usize,
-        options: &OpenOptions,
+        _options: &OpenOptions,
     ) -> KResult<usize> {
         let len = usize::min(self.len() - offset, buffer.len());
         if len == 0 {
@@ -224,7 +224,7 @@ impl<'a> UserBufferReader<'a> {
             }
             Inner::User { base, .. } => {
                 // base.add(self.pos).read_bytes(&mut dst[..read_len])?;
-                dst[..read_len].copy_from_slice(base.add(self.pos).as_bytes(read_len).map_err(|e| errno!(Errno::EINVAL))?)
+                dst[..read_len].copy_from_slice(base.add(self.pos).as_bytes(read_len).map_err(|_e| errno!(Errno::EINVAL))?)
             }
         }
 
@@ -245,7 +245,7 @@ impl<'a> UserBufferReader<'a> {
                 // this could cause a page fault if the inner slice of the buffer isn't mapped to the current page table!
                 unsafe { *(src.as_ptr().add(self.pos) as *const T) }
             }
-            Inner::User { base, .. } => *base.add(self.pos).read().map_err(|e| errno!(Errno::EINVAL))?,
+            Inner::User { base, .. } => *base.add(self.pos).read().map_err(|_e| errno!(Errno::EINVAL))?,
         };
 
         self.pos += size_of::<T>();
@@ -305,7 +305,7 @@ impl<'a> UserBufferWriter<'a> {
             }
             InnerMut::User { base, .. } => {
                 // base.add(self.pos).write_bytes(&src[..copy_len])?;
-                base.add(self.pos).as_bytes_mut(copy_len).map_err(|e| errno!(Errno::EINVAL))?.copy_from_slice(&src[..copy_len])
+                base.add(self.pos).as_bytes_mut(copy_len).map_err(|_e| errno!(Errno::EINVAL))?.copy_from_slice(&src[..copy_len])
             }
         }
 
@@ -329,7 +329,7 @@ impl<'a> UserBufferWriter<'a> {
             }
             InnerMut::User { base, .. } => {
                 // base.add(self.pos).fill(value, len)?;
-                base.add(self.pos).as_bytes_mut(len).map_err(|e| errno!(Errno::EINVAL))?.fill(value)
+                base.add(self.pos).as_bytes_mut(len).map_err(|_e| errno!(Errno::EINVAL))?.fill(value)
             }
         }
 

@@ -27,9 +27,9 @@ pub mod userland;
 use core::sync::atomic::AtomicUsize;
 
 use mem::addr::VirtAddr;
-use x86_64::instructions::hlt;
+use x86_64::instructions::{hlt, interrupts};
 
-use crate::{task::get_scheduler, fs::initramfs};
+use crate::task::get_scheduler;
 
 pub static PHYSICAL_OFFSET: AtomicUsize = AtomicUsize::new(0);
 
@@ -50,10 +50,12 @@ pub fn main_kernel_thread() {
 
     fs::initramfs::init().unwrap();
 
-    let sched = get_scheduler();
+    // let sched = get_scheduler();
     loop {
-        sched.preempt();
-        // core::hint::spin_loop();
+        interrupts::enable_and_hlt();
+        // interrupts::disable();
+        // sched.preempt();
+        core::hint::spin_loop();
     }
 }
 

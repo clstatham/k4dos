@@ -17,7 +17,7 @@ impl<T: Debug> KError<T> {
             KError::Error { .. } => None,
             KError::ErrorWithMessage { msg, .. } => Some(msg),
             KError::Message { msg } => Some(msg),
-            KError::Errno { errno } => None,
+            KError::Errno { errno: _ } => None,
         }
     }
 
@@ -26,7 +26,7 @@ impl<T: Debug> KError<T> {
             KError::Error { err } => Some(err),
             KError::Message { .. } => None,
             KError::ErrorWithMessage { err, .. } => Some(err),
-            KError::Errno { errno } => None,
+            KError::Errno { errno: _ } => None,
         }
     }
 

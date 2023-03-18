@@ -1,18 +1,15 @@
 use core::alloc::Layout;
 
 use alloc::alloc::alloc_zeroed;
-use lazy_static::lazy_static;
+
 use x86::{
-    controlregs::{cr4_write, Cr4},
-    current::segmentation::{rdgsbase, wrgsbase},
-    msr::{rdmsr, wrmsr, IA32_GS_BASE},
+    msr::{wrmsr, IA32_GS_BASE},
     segmentation::{load_cs, load_ds, load_es, load_ss, SegmentSelector},
     task::load_tr,
     Ring,
 };
 use x86_64::structures::{
     gdt::{Descriptor, GlobalDescriptorTable},
-    idt::InterruptDescriptorTable,
     tss::TaskStateSegment,
 };
 

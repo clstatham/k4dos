@@ -1,6 +1,6 @@
 use core::borrow::BorrowMut;
 
-use alloc::{borrow::ToOwned, string::String, sync::Arc, vec::Vec};
+use alloc::{sync::Arc, vec::Vec};
 use atomic_refcell::AtomicRefCell;
 use bitflags::bitflags;
 use crossbeam_utils::atomic::AtomicCell;
@@ -11,7 +11,7 @@ use crate::{
 };
 
 use super::{
-    path::{PathBuf, PathComponent}, DirEntry, DirRef, FileRef, INode, PollStatus
+    path::{PathComponent}, DirRef, FileRef, INode, PollStatus
 };
 
 const FD_MAX: c_int = 1024;

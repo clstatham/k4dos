@@ -1,6 +1,6 @@
 use alloc::{string::String, vec::Vec};
 
-use crate::{util::{lock::SpinLock, KResult}, fs::{File, FsNode, Stat, opened_file::OpenOptions, FileMode, S_IFREG}, errno, userland::buffer::{UserBufferMut, UserBufferWriter, UserBuffer, UserBufferReader}};
+use crate::{util::{lock::SpinLock, KResult}, fs::{File, FsNode, Stat, opened_file::OpenOptions, FileMode, S_IFREG}, userland::buffer::{UserBufferMut, UserBufferWriter, UserBuffer, UserBufferReader}};
 
 pub struct InitRamFsFile {
     pub name: SpinLock<String>,
@@ -22,7 +22,7 @@ impl FsNode for InitRamFsFile {
 
 impl File for InitRamFsFile {
     fn read(&self, offset: usize, buf: UserBufferMut<'_>, _options: &OpenOptions) -> KResult<usize> {
-        let mut lock = self.data.lock();
+        let lock = self.data.lock();
         if offset > lock.len() {
             return Ok(0);
         }

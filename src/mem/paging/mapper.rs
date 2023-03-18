@@ -41,6 +41,10 @@ impl<'a> Mapper<'a> {
         Self { p4 }
     }
 
+    pub fn p4(&'a mut self) -> &'a mut PageTable {
+        self.p4
+    }
+
     pub fn translate(&self, addr: VirtAddr) -> Option<(PhysAddr, PageTableFlags)> {
         let p3 = self.p4.next_table(addr.p4_index())?;
         let p2 = p3.next_table(addr.p3_index())?;

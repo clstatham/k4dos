@@ -6,7 +6,7 @@ use core::{
 use alloc::{sync::Arc, vec::Vec};
 use spin::Once;
 
-use crate::{arch::{task::ArchTask, cpu_local::kpcr}, mem::addr::VirtAddr, util::SpinLock};
+use crate::{arch::{task::ArchTask}, mem::addr::VirtAddr, util::SpinLock};
 
 use self::{vmem::Vmem, scheduler::Scheduler};
 

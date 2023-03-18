@@ -5,7 +5,7 @@ use xmas_elf::ElfFile;
 use crate::{mem::{
     self,
     allocator::{KERNEL_FRAME_ALLOCATOR, KERNEL_PAGE_ALLOCATOR},
-}, task::{scheduler, get_scheduler, Task}, main_kernel_thread, fs};
+}, task::{get_scheduler, Task}, main_kernel_thread};
 
 pub mod cpu_local;
 pub mod gdt;
@@ -43,12 +43,14 @@ pub fn arch_main() {
         ElfFile::new(elf_slice).unwrap()
     });
 
+    
+
     log::info!("Initializing kernel frame and page allocators.");
     mem::allocator::init(memmap).expect("Error initializing kernel frame and page allocators");
 
     log::info!("Remapping kernel to new page table.");
     let mut kernel_addr_space = mem::remap_kernel().expect("Error remapping kernel");
-    // let mut kernel_mapper = unsafe { Mapper::new(kernel_pt) };
+    
 
     log::info!("Setting up kernel heap.");
     let _heap_mp = mem::init_heap(&mut kernel_addr_space.mapper()).expect("Error setting up heap");
@@ -76,12 +78,10 @@ pub fn arch_main() {
     log::info!("Initializing task scheduler.");
     crate::task::init();
 
-
     log::info!("Spawning initial kernel task.");
     get_scheduler().enqueue(Task::new_kernel(main_kernel_thread, true));
 
-    log::info!("It did not crash!");
+    log::info!("Enabling interrupts.");
 
     interrupts::enable();
-    get_scheduler().preempt();
 }

@@ -1,6 +1,6 @@
 use alloc::{collections::VecDeque, sync::Arc};
 
-use crate::{util::{SavedInterruptStatus, SpinLock}, arch::{cpu_local::kpcr, task::arch_context_switch}};
+use crate::{util::SpinLock, arch::task::arch_context_switch};
 
 use super::{Task, TaskState, get_scheduler};
 
@@ -16,7 +16,7 @@ impl Scheduler {
         Self {
             run_queue: SpinLock::new(VecDeque::new()),
             idle_thread: Task::new_idle(),
-            preempt_task: Task::new_kernel(preempt, false),
+            preempt_task: Task::new_kernel(preempt, true),
             current_task: SpinLock::new(None),
         }
     }
@@ -32,7 +32,7 @@ impl Scheduler {
         if let Some(task) = queue.pop_front() {
             if let Some(current_task) = current_lock.as_ref() {
                 if current_task.pid != task.pid {
-                    queue.push_front(current_task.clone());
+                    queue.push_back(current_task.clone());
                 }
             }
 

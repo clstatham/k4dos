@@ -28,7 +28,7 @@ use crate::{
         addr_space::AddressSpace,
         consts::{KERNEL_STACK_SIZE, PAGE_SIZE},
     },
-    util::{stack::Stack, KResult},
+    util::{stack::Stack},
 };
 
 pub fn arch_context_switch(prev: &mut ArchTask, next: &mut ArchTask) {
@@ -178,7 +178,10 @@ unsafe impl Sync for ArchTask {}
 impl ArchTask {
     pub fn new_idle() -> ArchTask {
         ArchTask {
-            context: unsafe { core::ptr::Unique::new_unchecked(&mut Context::default()) },
+            context: unsafe { core::ptr::Unique::new_unchecked(&mut Context {
+                cr3: controlregs::cr3() as usize,
+                ..Default::default()
+            }) },
             address_space: AddressSpace::current(),
             kernel_stack: alloc::vec![0u8; PAGE_SIZE].into_boxed_slice(),
             user: false,
