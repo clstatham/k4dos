@@ -3,13 +3,17 @@ use core::sync::atomic::{AtomicUsize, Ordering};
 use alloc::{string::String, sync::Arc};
 use bitflags::bitflags;
 
-use crate::{errno, util::{errno::Errno, KResult, ctypes::c_short}, userland::buffer::{UserBuffer, UserBufferMut}};
+use crate::{
+    errno,
+    userland::buffer::{UserBuffer, UserBufferMut},
+    util::{ctypes::c_short, errno::Errno, KResult},
+};
 
-use self::{path::PathBuf, opened_file::OpenOptions};
+use self::{opened_file::OpenOptions, path::PathBuf};
 
-pub mod path;
-pub mod opened_file;
 pub mod initramfs;
+pub mod opened_file;
+pub mod path;
 
 pub type FileRef = Arc<dyn File + Send + Sync>;
 pub type DirRef = Arc<dyn Directory + Send + Sync>;
@@ -171,7 +175,6 @@ impl FileMode {
         (self.0 & S_IFMT) == S_IFLNK
     }
 }
-
 
 pub trait FsNode {
     fn get_name(&self) -> String;

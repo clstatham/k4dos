@@ -1,6 +1,13 @@
-use alloc::{sync::Arc, string::String, borrow::ToOwned};
+use alloc::{borrow::ToOwned, string::String, sync::Arc};
 
-use crate::{fs::{path::{PathComponent, Path}, DirRef, INode}, util::{KResult, errno::Errno}, errno};
+use crate::{
+    errno,
+    fs::{
+        path::{Path, PathComponent},
+        DirRef, INode,
+    },
+    util::{errno::Errno, KResult},
+};
 
 use super::dir::InitRamFsDir;
 
@@ -18,7 +25,10 @@ impl RootFs {
             name: String::new(),
             inode: INode::Dir(root),
         });
-        RootFs { root_path: root_path.clone(), cwd_path: root_path }
+        RootFs {
+            root_path: root_path.clone(),
+            cwd_path: root_path,
+        }
     }
 
     pub fn cwd_path(&self) -> Arc<PathComponent> {
@@ -47,19 +57,38 @@ impl RootFs {
             self.cwd_path.clone()
         };
 
-        self.do_lookup_path(&lookup_from, path, follow_symlinks, MAX_SYMLINK_FOLLOW_DEPTH)
+        self.do_lookup_path(
+            &lookup_from,
+            path,
+            follow_symlinks,
+            MAX_SYMLINK_FOLLOW_DEPTH,
+        )
     }
 
-    fn do_lookup_path(&self, lookup_from: &Arc<PathComponent>, path: &Path, follow_symlinks: bool, symlink_follow_limit: usize) -> KResult<Arc<PathComponent>> {
+    fn do_lookup_path(
+        &self,
+        lookup_from: &Arc<PathComponent>,
+        path: &Path,
+        follow_symlinks: bool,
+        symlink_follow_limit: usize,
+    ) -> KResult<Arc<PathComponent>> {
         let mut parent = lookup_from.clone();
         let mut components = path.components().peekable();
         while let Some(name) = components.next() {
             let path_comp = match name {
                 "." => continue,
-                ".." => parent.parent_dir.as_ref().unwrap_or(&self.root_path).clone(),
+                ".." => parent
+                    .parent_dir
+                    .as_ref()
+                    .unwrap_or(&self.root_path)
+                    .clone(),
                 _ => {
                     let inode = parent.inode.as_dir()?.lookup(name)?;
-                    Arc::new(PathComponent { parent_dir: Some(parent.clone()), name: name.to_owned(), inode })
+                    Arc::new(PathComponent {
+                        parent_dir: Some(parent.clone()),
+                        name: name.to_owned(),
+                        inode,
+                    })
                 }
             };
 
@@ -77,11 +106,16 @@ impl RootFs {
                             &parent
                         };
 
-                        let dst_path = self.do_lookup_path(follow_from, &dst, follow_symlinks, symlink_follow_limit - 1)?;
+                        let dst_path = self.do_lookup_path(
+                            follow_from,
+                            &dst,
+                            follow_symlinks,
+                            symlink_follow_limit - 1,
+                        )?;
 
                         match dst_path.inode {
                             INode::Dir(_) => dst_path,
-                            _ => return Err(errno!(Errno::ENOTDIR))
+                            _ => return Err(errno!(Errno::ENOTDIR)),
                         }
                     }
                     INode::Symlink(_) => return Err(errno!(Errno::ENOTDIR)),
@@ -100,9 +134,14 @@ impl RootFs {
                             &parent
                         };
 
-                        return self.do_lookup_path(follow_from, &dst, follow_symlinks, symlink_follow_limit - 1);
+                        return self.do_lookup_path(
+                            follow_from,
+                            &dst,
+                            follow_symlinks,
+                            symlink_follow_limit - 1,
+                        );
                     }
-                    _ => return Ok(path_comp)
+                    _ => return Ok(path_comp),
                 }
             }
         }

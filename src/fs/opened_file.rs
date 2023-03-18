@@ -7,12 +7,11 @@ use crossbeam_utils::atomic::AtomicCell;
 
 use crate::{
     errno,
-    util::{ctypes::c_int, errno::Errno, error::KResult}, userland::buffer::{UserBufferMut, UserBuffer},
+    userland::buffer::{UserBuffer, UserBufferMut},
+    util::{ctypes::c_int, errno::Errno, error::KResult},
 };
 
-use super::{
-    path::{PathComponent}, DirRef, FileRef, INode, PollStatus
-};
+use super::{path::PathComponent, DirRef, FileRef, INode, PollStatus};
 
 const FD_MAX: c_int = 1024;
 
@@ -71,7 +70,6 @@ impl From<OpenFlags> for OpenOptions {
 }
 
 pub type FileDesc = c_int;
-
 
 pub struct OpenedFile {
     path: Arc<PathComponent>,
@@ -139,7 +137,6 @@ impl OpenedFile {
 
         Ok(())
     }
-
 
     pub fn poll(&self) -> KResult<PollStatus> {
         self.as_file()?.poll()

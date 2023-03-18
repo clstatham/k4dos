@@ -32,7 +32,7 @@ pub fn remap_kernel() -> KResult<AddressSpace, PagingError> {
     new_p4[0] = active_p4[0];
     new_p4[1] = active_p4[1];
     // and that's all we gotta do, because Limine and Offset Page Tables RULE!
-    
+
     new_space.switch();
     log::info!("Switched to new page table at {:?}", new_space.cr3());
     log::debug!("{:?}", new_space.mapper().p4());

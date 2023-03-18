@@ -7,9 +7,9 @@ use alloc::{sync::Arc, vec::Vec};
 use spin::Once;
 use x86_64::structures::idt::PageFaultErrorCode;
 
-use crate::{arch::{task::ArchTask}, mem::addr::VirtAddr, util::SpinLock};
+use crate::{arch::task::ArchTask, mem::addr::VirtAddr, util::SpinLock};
 
-use self::{vmem::Vmem, scheduler::Scheduler};
+use self::{scheduler::Scheduler, vmem::Vmem};
 
 pub mod scheduler;
 pub mod vmem;
@@ -99,6 +99,8 @@ impl Task {
     pub fn handle_page_fault(&self, faulted_addr: VirtAddr, reason: PageFaultErrorCode) {
         let mut addr_space = self.arch_mut().address_space;
         let mut mapper = addr_space.mapper();
-        self.vmem.lock().handle_page_fault(&mut mapper, faulted_addr, reason);
+        self.vmem
+            .lock()
+            .handle_page_fault(&mut mapper, faulted_addr, reason);
     }
 }

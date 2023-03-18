@@ -1,17 +1,32 @@
 use core::iter::Peekable;
 
-use alloc::{sync::{Arc, Weak}, string::{String, ToString}, collections::BTreeMap};
+use alloc::{
+    collections::BTreeMap,
+    string::{String, ToString},
+    sync::{Arc, Weak},
+};
 use spin::Once;
 
-use crate::{util::{KResult, errno::Errno, align_up, SpinLock}, errno, fs::{FileMode, path::{Components, Path, PathBuf}, DirRef, INode, Stat, initramfs::{dir::{DirInner, InitRamFsDir}, symlink::InitRamFsSymlink, file::InitRamFsFile}, FsNode, FileSize}};
+use crate::{
+    errno,
+    fs::{
+        initramfs::{
+            dir::{DirInner, InitRamFsDir},
+            file::InitRamFsFile,
+            symlink::InitRamFsSymlink,
+        },
+        path::{Components, Path, PathBuf},
+        DirRef, FileMode, FileSize, FsNode, INode, Stat,
+    },
+    util::{align_up, errno::Errno, KResult, SpinLock},
+};
 
 use self::root::RootFs;
 
 pub mod dir;
 pub mod file;
-pub mod symlink;
 pub mod root;
-
+pub mod symlink;
 
 pub struct ByteParser<'a> {
     buffer: &'a [u8],
@@ -58,7 +73,6 @@ impl<'a> ByteParser<'a> {
         Ok(&self.buffer[self.current - len..self.current])
     }
 }
-
 
 fn parse_str_field(bytes: &[u8]) -> KResult<&str> {
     core::str::from_utf8(bytes).map_err(|_e| errno!(Errno::EINVAL))
@@ -237,7 +251,8 @@ impl InitRamFs {
 
         log::info!(
             "initramfs: found {} files taking up {} bytes",
-            n_files, loaded_size
+            n_files,
+            loaded_size
         );
 
         Ok(InitRamFs {

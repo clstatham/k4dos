@@ -1,8 +1,8 @@
 use alloc::{collections::VecDeque, sync::Arc};
 
-use crate::{util::SpinLock, arch::task::arch_context_switch};
+use crate::{arch::task::arch_context_switch, util::SpinLock};
 
-use super::{Task, TaskState, get_scheduler};
+use super::{get_scheduler, Task, TaskState};
 
 pub struct Scheduler {
     run_queue: SpinLock<VecDeque<Arc<Task>>>,

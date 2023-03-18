@@ -2,10 +2,14 @@ use limine::*;
 use x86_64::instructions::interrupts;
 use xmas_elf::ElfFile;
 
-use crate::{mem::{
-    self,
-    allocator::{KERNEL_FRAME_ALLOCATOR, KERNEL_PAGE_ALLOCATOR},
-}, task::{get_scheduler, Task}, fs};
+use crate::{
+    fs,
+    mem::{
+        self,
+        allocator::{KERNEL_FRAME_ALLOCATOR, KERNEL_PAGE_ALLOCATOR},
+    },
+    task::{get_scheduler, Task},
+};
 
 pub mod cpu_local;
 pub mod gdt;
@@ -43,14 +47,11 @@ pub fn arch_main() {
         ElfFile::new(elf_slice).unwrap()
     });
 
-    
-
     log::info!("Initializing kernel frame and page allocators.");
     mem::allocator::init(memmap).expect("Error initializing kernel frame and page allocators");
 
     log::info!("Remapping kernel to new page table.");
     let mut kernel_addr_space = mem::remap_kernel().expect("Error remapping kernel");
-    
 
     log::info!("Setting up kernel heap.");
     let _heap_mp = mem::init_heap(&mut kernel_addr_space.mapper()).expect("Error setting up heap");

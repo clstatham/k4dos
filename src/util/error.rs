@@ -33,7 +33,7 @@ impl<T: Debug> KError<T> {
     pub fn errno(&self) -> Option<Errno> {
         match self {
             KError::Errno { errno } => Some(*errno),
-            _ => None
+            _ => None,
         }
     }
 }

@@ -1,15 +1,14 @@
 use lazy_static::lazy_static;
 use pc_keyboard::{layouts::Us104Key, DecodedKey, HandleControl, Keyboard, ScancodeSet1};
 
-
-use x2apic::lapic::{LocalApicBuilder, LocalApic, xapic_base};
+use x2apic::lapic::{xapic_base, LocalApic, LocalApicBuilder};
 use x86_64::{
     instructions::port::Port,
     registers::control::Cr3,
     structures::idt::{InterruptDescriptorTable, InterruptStackFrame, PageFaultErrorCode},
 };
 
-use crate::{util::SpinLock, task::get_scheduler, mem::addr::VirtAddr};
+use crate::{mem::addr::VirtAddr, task::get_scheduler, util::SpinLock};
 
 use super::cpu_local::kpcr;
 
@@ -26,13 +25,15 @@ pub const ERROR_IRQ: usize = 33;
 pub const SPURIOUS_IRQ: usize = 34;
 
 lazy_static! {
-    pub static ref LAPIC: SpinLock<LocalApic> = SpinLock::new(LocalApicBuilder::new()
-        .timer_vector(TIMER_IRQ)
-        .error_vector(ERROR_IRQ)
-        .spurious_vector(SPURIOUS_IRQ)
-        .set_xapic_base(unsafe { xapic_base()} )
-        .build()
-        .unwrap());
+    pub static ref LAPIC: SpinLock<LocalApic> = SpinLock::new(
+        LocalApicBuilder::new()
+            .timer_vector(TIMER_IRQ)
+            .error_vector(ERROR_IRQ)
+            .spurious_vector(SPURIOUS_IRQ)
+            .set_xapic_base(unsafe { xapic_base() })
+            .build()
+            .unwrap()
+    );
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -287,7 +288,10 @@ extern "x86-interrupt" fn page_fault_handler(
         unsafe {
             core::arch::asm!("swapgs");
         }
-        get_scheduler().current_task().unwrap().handle_page_fault(VirtAddr::new(accessed_address as usize), error_code);
+        get_scheduler()
+            .current_task()
+            .unwrap()
+            .handle_page_fault(VirtAddr::new(accessed_address as usize), error_code);
         unsafe {
             core::arch::asm!("swapgs");
         }

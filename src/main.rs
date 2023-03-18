@@ -17,12 +17,12 @@ mod io;
 pub mod serial;
 pub mod arch;
 pub mod backtrace;
+pub mod fs;
 pub mod logging;
 pub mod mem;
 pub mod task;
-pub mod util;
-pub mod fs;
 pub mod userland;
+pub mod util;
 
 use core::sync::atomic::AtomicUsize;
 

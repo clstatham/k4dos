@@ -10,7 +10,8 @@ use xmas_elf::{
 
 use crate::{
     kerrmsg,
-    util::{KResult, SavedInterruptStatus}, mem::{addr_space::AddressSpace, addr::VirtAddr},
+    mem::{addr::VirtAddr, addr_space::AddressSpace},
+    util::{KResult, SavedInterruptStatus},
 };
 
 pub static KERNEL_ELF: Once<ElfFile<'static>> = Once::new();
@@ -52,7 +53,6 @@ pub fn unwind_stack() -> KResult<()> {
     log::trace!("---BEGIN BACKTRACE---");
     for depth in 0..16 {
         if let Some(rip_rbp) = rbp.checked_add(size_of::<usize>()) {
-            
             if pt.translate(VirtAddr::new(rip_rbp)).is_none() {
                 log::trace!("{:>2}: <guard page>", depth);
                 break;

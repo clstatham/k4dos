@@ -185,7 +185,6 @@ impl From<&str> for PathBuf {
     }
 }
 
-
 #[derive(Clone)]
 pub struct PathComponent {
     pub parent_dir: Option<Arc<PathComponent>>,

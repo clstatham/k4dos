@@ -17,9 +17,10 @@ use core::alloc::Layout;
 
 use alloc::{alloc::alloc_zeroed, boxed::Box};
 use x86::{
-    msr::{wrmsr, IA32_FS_BASE, IA32_GS_BASE, rdmsr},
+    controlregs,
+    msr::{rdmsr, wrmsr, IA32_FS_BASE, IA32_GS_BASE},
     segmentation::SegmentSelector,
-    Ring, controlregs,
+    Ring,
 };
 
 use crate::{
@@ -28,7 +29,7 @@ use crate::{
         addr_space::AddressSpace,
         consts::{KERNEL_STACK_SIZE, PAGE_SIZE},
     },
-    util::{stack::Stack},
+    util::stack::Stack,
 };
 
 pub fn arch_context_switch(prev: &mut ArchTask, next: &mut ArchTask) {
@@ -108,8 +109,9 @@ unsafe extern "C" fn fork_init() -> ! {
 }
 
 use super::{
+    cpu_local::kpcr,
     gdt::{KERNEL_CS_IDX, KERNEL_DS_IDX},
-    idt::InterruptFrame, cpu_local::kpcr,
+    idt::InterruptFrame,
 };
 #[naked]
 unsafe extern "sysv64" fn context_switch(_prev: &mut Context, _next: &mut Context) {
@@ -182,10 +184,12 @@ unsafe impl Sync for ArchTask {}
 impl ArchTask {
     pub fn new_idle() -> ArchTask {
         ArchTask {
-            context: unsafe { core::ptr::Unique::new_unchecked(&mut Context {
-                cr3: controlregs::cr3() as usize,
-                ..Default::default()
-            }) },
+            context: unsafe {
+                core::ptr::Unique::new_unchecked(&mut Context {
+                    cr3: controlregs::cr3() as usize,
+                    ..Default::default()
+                })
+            },
             address_space: AddressSpace::current(),
             kernel_stack: alloc::vec![0u8; PAGE_SIZE].into_boxed_slice(),
             user: false,

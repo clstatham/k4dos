@@ -1,6 +1,9 @@
 use alloc::string::String;
 
-use crate::{fs::{path::PathBuf, Symlink, FsNode, Stat}, util::KResult};
+use crate::{
+    fs::{path::PathBuf, FsNode, Stat, Symlink},
+    util::KResult,
+};
 
 pub struct InitRamFsSymlink {
     pub(super) name: String,
@@ -22,5 +25,4 @@ impl FsNode for InitRamFsSymlink {
     fn get_name(&self) -> String {
         self.name.clone()
     }
-    
 }

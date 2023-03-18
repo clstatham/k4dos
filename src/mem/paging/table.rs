@@ -185,7 +185,11 @@ impl IndexMut<usize> for PageTable {
 impl Debug for PageTable {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         // self.entries[..].fmt(f)
-        writeln!(f, "PageTable[{:?}]", VirtAddr::new(self as *const _ as usize).as_hhdm_phys())?;
+        writeln!(
+            f,
+            "PageTable[{:?}]",
+            VirtAddr::new(self as *const _ as usize).as_hhdm_phys()
+        )?;
         for (i, entry) in self.entries.iter().enumerate() {
             if !entry.is_unused() {
                 writeln!(f, "{:>3}: {:>16?} | {:?}", i, entry.addr(), entry.flags())?;
