@@ -36,9 +36,10 @@ target/limine/limine-deploy $KERNEL.iso
 
 # Run the created image with QEMU.
 qemu-system-x86_64 \
-    -machine q35 -cpu qemu64 -M smm=off \
+    -machine q35 -cpu EPYC -M smm=off \
     -D target/log.txt -d int,guest_errors -no-reboot -no-shutdown \
     -s -S \
-    -serial stdio \
+    -serial mon:stdio \
+    -serial pty \
     -m 1G \
     -cdrom $KERNEL.iso

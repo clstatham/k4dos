@@ -13,7 +13,7 @@ pub struct Context {
 
     rip: usize,
 }
-use core::alloc::Layout;
+use core::{alloc::Layout, arch::x86_64::{_xsave, _xrstor}};
 
 use alloc::{alloc::alloc_zeroed, boxed::Box, vec::Vec};
 use x86::{
@@ -21,7 +21,7 @@ use x86::{
     current::segmentation::swapgs,
     msr::{rdmsr, wrmsr, IA32_FS_BASE, IA32_GS_BASE},
     segmentation::SegmentSelector,
-    Ring,
+    Ring, cpuid::CpuId,
 };
 use x86_64::structures::paging::PageTableFlags;
 
@@ -43,6 +43,18 @@ use super::{
     idt::InterruptFrame,
 };
 
+fn xsave(fpu: &mut Box<[u8]>) {
+    unsafe {
+        core::arch::asm!("xsave [{}]", in(reg) fpu.as_ptr(), in("eax") 0xffffffffu32, in("edx") 0xffffffffu32)
+    }
+}
+
+fn xrstor(fpu: &Box<[u8]>) {
+    unsafe {
+        core::arch::asm!("xrstor [{}]", in(reg) fpu.as_ptr(), in("eax") 0xffffffffu32, in("edx") 0xffffffffu32);
+    }
+}
+
 pub fn arch_context_switch(prev: &mut ArchTask, next: &mut ArchTask) {
     unsafe {
         get_tss().privilege_stack_table[0] = x86_64::VirtAddr::new(
@@ -55,6 +67,19 @@ pub fn arch_context_switch(prev: &mut ArchTask, next: &mut ArchTask) {
         swapgs();
         wrmsr(IA32_GS_BASE, next.gsbase.value() as u64);
         swapgs();
+
+        if let Some(fpu) = prev.fpu_storage.as_mut() {
+            // xsave(fpu);
+            // let fpu = fpu.as_mut_ptr();
+            // core::arch::asm!("xsave [{}]", in(reg) fpu);
+            xsave(fpu);
+        }
+
+        if let Some(fpu) = next.fpu_storage.as_mut() {
+            // let fpu = fpu.as_ptr();
+            // core::arch::asm!("xrstor [{}]", in(reg) fpu);
+            xrstor(fpu)
+        }
 
         context_switch(prev.context.as_mut(), next.context.as_mut())
     }
@@ -199,6 +224,8 @@ pub struct ArchTask {
     pub(crate) address_space: AddressSpace,
     fsbase: VirtAddr,
     pub(crate) gsbase: VirtAddr,
+
+    fpu_storage: Option<Box<[u8]>>,
 }
 
 unsafe impl Sync for ArchTask {}
@@ -217,6 +244,7 @@ impl ArchTask {
             user: false,
             fsbase: VirtAddr::null(),
             gsbase: VirtAddr::null(),
+            fpu_storage: None,
         }
     }
 
@@ -225,7 +253,7 @@ impl ArchTask {
         let task_stack = unsafe {
             alloc_zeroed(Layout::from_size_align_unchecked(
                 KERNEL_STACK_SIZE,
-                KERNEL_STACK_SIZE,
+                PAGE_SIZE,
             ))
             .add(KERNEL_STACK_SIZE)
         };
@@ -253,6 +281,7 @@ impl ArchTask {
             user: false,
             fsbase: unsafe { VirtAddr::new(rdmsr(IA32_FS_BASE) as usize) },
             gsbase: unsafe { VirtAddr::new(rdmsr(IA32_GS_BASE) as usize) },
+            fpu_storage: None,
         }
     }
 
@@ -354,6 +383,12 @@ impl ArchTask {
         assert_eq!(stack.top() % 16, 0);
 
         kframe.rsp = stack.top();
+        let fpu_storage = unsafe {
+            let xsave_size = CpuId::new().get_extended_state_info().unwrap().xsave_size();
+            let layout = Layout::from_size_align(xsave_size as usize, 8).unwrap();
+            let ptr = alloc_zeroed(layout);
+            Box::from_raw(core::ptr::slice_from_raw_parts_mut(ptr, 512))
+        };
         current.switch();
 
         Ok(Self {
@@ -363,6 +398,7 @@ impl ArchTask {
             address_space: userland_entry.addr_space,
             fsbase: userland_entry.fsbase.unwrap_or(VirtAddr::null()),
             gsbase: unsafe { VirtAddr::new(rdmsr(IA32_GS_BASE) as usize) },
+            fpu_storage: Some(fpu_storage)
         })
     }
 

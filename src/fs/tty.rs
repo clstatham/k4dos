@@ -275,7 +275,7 @@ impl Tty {
                         .ok();
                 }
                 LineControl::Backspace => {
-                    serial_print!("\x08 \x08");
+                    serial1_print!("\x08 \x08");
                     // serial_print!("\x08 \x08");
                 }
             })
@@ -378,7 +378,7 @@ impl File for Tty {
             
             // get_scheduler().with_kernel_addr_space_active(|| {
                 let copied_len = reader.read_bytes(&mut tmp)?;
-                serial_print!("{}", String::from_utf8_lossy(&tmp.as_slice()[..copied_len]));
+                serial1_print!("{}", String::from_utf8_lossy(&tmp.as_slice()[..copied_len]));
                 total_len += copied_len;
                 // Ok(())
             // })?;

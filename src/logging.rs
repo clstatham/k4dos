@@ -1,8 +1,8 @@
 use log::Level;
 use log::Log;
 
-use crate::serial_print;
-use crate::serial_println;
+use crate::serial0_print;
+use crate::serial0_println;
 
 struct KaDOSLogger;
 
@@ -14,13 +14,13 @@ impl Log for KaDOSLogger {
 
     fn log(&self, record: &log::Record) {
         match record.level() {
-            Level::Debug => serial_print!("\x1b[1;32m"),
-            Level::Error => serial_print!("\x1b[1;31m"),
-            Level::Info => serial_print!("\x1b[1;36m"),
-            Level::Warn => serial_print!("\x1b[1;33m"),
-            Level::Trace => serial_print!("\x1b[1;37m"),
+            Level::Debug => serial0_print!("\x1b[1;32m"),
+            Level::Error => serial0_print!("\x1b[1;31m"),
+            Level::Info => serial0_print!("\x1b[1;36m"),
+            Level::Warn => serial0_print!("\x1b[1;33m"),
+            Level::Trace => serial0_print!("\x1b[1;37m"),
         }
-        serial_print!(
+        serial0_print!(
             "{}:{} [{}] {}",
             record.file().unwrap_or("(no file)"),
             record.line().unwrap_or(0),
@@ -34,7 +34,7 @@ impl Log for KaDOSLogger {
         //     record.level(),
         //     record.args()
         // );
-        serial_println!("\x1b[0m");
+        serial0_println!("\x1b[0m");
     }
 
     fn flush(&self) {}

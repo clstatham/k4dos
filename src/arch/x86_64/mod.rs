@@ -1,4 +1,5 @@
 use limine::*;
+use x86::{controlregs::{self, Cr4, Xcr0, Cr0}, cpuid::CpuId};
 use x86_64::instructions::interrupts;
 use xmas_elf::ElfFile;
 
@@ -50,6 +51,20 @@ pub fn arch_main() {
         ElfFile::new(elf_slice).unwrap()
     });
 
+    log::info!("Initializing FPU mechanisms.");
+    let features = CpuId::new().get_feature_info().unwrap();
+    assert!(features.has_xsave(), "XSAVE not available");
+    assert!(features.has_mmx(), "MMX not available");
+    assert!(features.has_fpu(), "FPU not available");
+    assert!(features.has_sse(), "SSE not available");
+    unsafe {
+        controlregs::cr4_write(controlregs::cr4() | Cr4::CR4_ENABLE_OS_XSAVE);
+        x86_64::registers::control::Cr4::write_raw(x86_64::registers::control::Cr4::read_raw() | (3 << 9));
+        controlregs::xcr0_write(controlregs::xcr0() | Xcr0::XCR0_SSE_STATE | Xcr0::XCR0_FPU_MMX_STATE | Xcr0::XCR0_AVX_STATE);
+        controlregs::cr0_write(controlregs::cr0() & !Cr0::CR0_EMULATE_COPROCESSOR);
+        controlregs::cr0_write(controlregs::cr0() | Cr0::CR0_MONITOR_COPROCESSOR);
+    }
+
     log::info!("Initializing boot GDT.");
     gdt::init_boot();
 
@@ -97,7 +112,7 @@ pub fn arch_main() {
 
     let sched = get_scheduler();
     // sched.enqueue(Task::new_kernel(spawn_init_process, true));
-    let exe = "/bin/testapp";
+    let exe = "/bin/kash";
     let file = get_root()
         .unwrap()
         .lookup(Path::new(exe))
