@@ -3,15 +3,20 @@ use core::sync::atomic::AtomicUsize;
 use alloc::{collections::BTreeMap, vec::Vec};
 use x86_64::structures::{idt::PageFaultErrorCode, paging::PageTableFlags};
 
-use crate::{mem::{
-    addr::VirtAddr,
-    allocator::PageAllocator,
-    consts::PAGE_SIZE,
-    paging::{
-        mapper::Mapper,
-        units::{MappedPages, Page, PageRange}, table::PagingError,
+use crate::{
+    kerr,
+    mem::{
+        addr::VirtAddr,
+        allocator::PageAllocator,
+        consts::PAGE_SIZE,
+        paging::{
+            mapper::Mapper,
+            table::PagingError,
+            units::{MappedPages, Page, PageRange},
+        },
     },
-}, util::KResult, kerr};
+    util::KResult,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct VmemAreaId(usize);
@@ -96,7 +101,12 @@ impl Vmem {
         self.areas.get(&id)
     }
 
-    pub fn add_area(&mut self, start_addr: VirtAddr, end_addr: VirtAddr, flags: PageTableFlags) -> VmemAreaId {
+    pub fn add_area(
+        &mut self,
+        start_addr: VirtAddr,
+        end_addr: VirtAddr,
+        flags: PageTableFlags,
+    ) -> VmemAreaId {
         assert!(
             self.area_containing(start_addr, end_addr).is_none(),
             "Cannot add vmem area as it already exists for these addresses"
@@ -115,10 +125,26 @@ impl Vmem {
         id
     }
 
-    pub fn map_area(&mut self, start_addr: VirtAddr, end_addr: VirtAddr, flags: PageTableFlags, active_mapper: &mut Mapper) -> KResult<VmemAreaId, PagingError> {
-        let ap = self.page_allocator.allocate_range(PageRange::new(Page::containing_address(start_addr), Page::containing_address(end_addr - 1))).map_err(|e| kerr!(PagingError::PageAllocationFailed(e)))?;
+    pub fn map_area(
+        &mut self,
+        start_addr: VirtAddr,
+        end_addr: VirtAddr,
+        flags: PageTableFlags,
+        active_mapper: &mut Mapper,
+    ) -> KResult<VmemAreaId, PagingError> {
+        let ap = self
+            .page_allocator
+            .allocate_range(PageRange::new(
+                Page::containing_address(start_addr),
+                Page::containing_address(end_addr - 1),
+            ))
+            .map_err(|e| kerr!(PagingError::PageAllocationFailed(e)))?;
         let mp = active_mapper.map(ap, flags)?;
-        let id = self.add_area(start_addr.align_down(PAGE_SIZE), end_addr.align_up(PAGE_SIZE), flags);
+        let id = self.add_area(
+            start_addr.align_down(PAGE_SIZE),
+            end_addr.align_up(PAGE_SIZE),
+            flags,
+        );
         self.mp.get_mut(&id).unwrap().push(mp);
         Ok(id)
     }

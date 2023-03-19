@@ -1,5 +1,13 @@
-use crate::{util::{KResult, errno::Errno}, errno, task::get_scheduler};
+use alloc::sync::Arc;
 
+use crate::{
+    errno,
+    mem::addr::VirtAddr,
+    task::{get_scheduler, Task},
+    util::{errno::Errno, KResult},
+};
+
+pub mod arch_prctl;
 
 #[repr(packed)]
 #[derive(Default, Clone)]
@@ -22,18 +30,18 @@ pub struct SyscallFrame {
     pub rdx: usize,
     pub rcx: usize,
     pub rax: usize,
-
-    // iret regs
-    pub rip: usize,
-    pub cs: usize,
-    pub rflags: usize,
-    pub rsp: usize,
-    pub ss: usize,
+    // // iret regs
+    // pub rip: usize,
+    // pub cs: usize,
+    // pub rflags: usize,
+    // pub rsp: usize,
+    // pub ss: usize,
 }
 
 pub struct SyscallHandler<'a> {
     pub frame: &'a mut SyscallFrame,
     // pub frame: &'a u8,
+    pub task: Option<Arc<Task>>,
 }
 
 impl<'a> SyscallHandler<'a> {
@@ -48,27 +56,32 @@ impl<'a> SyscallHandler<'a> {
         a6: usize,
         n: usize,
     ) -> KResult<isize> {
-        {
-            let current = get_scheduler().current_task();
-            let mut current = current.lock();
-            let current = current.as_mut().unwrap();
-            log::trace!(
-                "[{}] SYSCALL #{} {}({:#x}, {:#x}, {:#x}, {:#x}, {:#x}, {:#x})",
-                current.pid().as_usize(),
-                n,
-                syscall_name_by_number(n),
-                a1,
-                a2,
-                a3,
-                a4,
-                a5,
-                a6
-            );
-        }
-        Err(errno!(Errno::ENOSYS))
+        // {
+        let current = get_scheduler().current_task();
+        let mut current = current.lock();
+        let current = current.as_mut().unwrap();
+        self.task = Some(current.clone());
+        log::trace!(
+            "[{}] SYSCALL #{} {}({:#x}, {:#x}, {:#x}, {:#x}, {:#x}, {:#x})",
+            current.pid().as_usize(),
+            n,
+            syscall_name_by_number(n),
+            a1,
+            a2,
+            a3,
+            a4,
+            a5,
+            a6
+        );
+
+        let res = match n {
+            SYS_ARCH_PRCTL => self.sys_arch_prctl(a1 as i32, VirtAddr::new(a2)),
+            _ => Err(errno!(Errno::ENOSYS)),
+        };
+        // }
+        res
     }
 }
-
 
 fn syscall_name_by_number(n: usize) -> &'static str {
     match n {
@@ -412,3 +425,70 @@ fn syscall_name_by_number(n: usize) -> &'static str {
         _ => "(unknown)",
     }
 }
+
+const SYS_READ: usize = 0;
+const SYS_WRITE: usize = 1;
+const SYS_OPEN: usize = 2;
+const SYS_CLOSE: usize = 3;
+const SYS_STAT: usize = 4;
+const SYS_FSTAT: usize = 5;
+const SYS_LSTAT: usize = 6;
+const SYS_POLL: usize = 7;
+const SYS_MMAP: usize = 9;
+const SYS_BRK: usize = 12;
+const SYS_RT_SIGACTION: usize = 13;
+const SYS_RT_SIGPROCMASK: usize = 14;
+const SYS_RT_SIGRETURN: usize = 15;
+const SYS_IOCTL: usize = 16;
+const SYS_WRITEV: usize = 20;
+const SYS_PIPE: usize = 22;
+const SYS_SELECT: usize = 23;
+const SYS_DUP2: usize = 33;
+const SYS_GETPID: usize = 39;
+const SYS_SOCKET: usize = 41;
+const SYS_CONNECT: usize = 42;
+const SYS_ACCEPT: usize = 43;
+const SYS_SENDTO: usize = 44;
+const SYS_RECVFROM: usize = 45;
+const SYS_SHUTDOWN: usize = 48;
+const SYS_BIND: usize = 49;
+const SYS_LISTEN: usize = 50;
+const SYS_GETSOCKNAME: usize = 51;
+const SYS_GETPEERNAME: usize = 52;
+const SYS_GETSOCKOPT: usize = 55;
+const SYS_CLONE: usize = 56;
+const SYS_FORK: usize = 57;
+const SYS_EXECVE: usize = 59;
+const SYS_EXIT: usize = 60;
+const SYS_WAIT4: usize = 61;
+const SYS_KILL: usize = 62;
+const SYS_UNAME: usize = 63;
+const SYS_FCNTL: usize = 72;
+const SYS_FSYNC: usize = 74;
+const SYS_GETCWD: usize = 79;
+const SYS_CHDIR: usize = 80;
+const SYS_MKDIR: usize = 83;
+const SYS_LINK: usize = 86;
+const SYS_READLINK: usize = 89;
+const SYS_CHMOD: usize = 90;
+const SYS_CHOWN: usize = 92;
+const SYS_GETUID: usize = 102;
+const SYS_SYSLOG: usize = 103;
+const SYS_SETUID: usize = 105;
+const SYS_SETGID: usize = 106;
+const SYS_GETEUID: usize = 107;
+const SYS_SETPGID: usize = 109;
+const SYS_GETPPID: usize = 110;
+const SYS_GETPGRP: usize = 111;
+const SYS_GETPGID: usize = 121;
+const SYS_SETGROUPS: usize = 116;
+const SYS_ARCH_PRCTL: usize = 158;
+const SYS_REBOOT: usize = 169;
+const SYS_GETTID: usize = 186;
+const SYS_GETDENTS64: usize = 217;
+const SYS_SET_TID_ADDRESS: usize = 218;
+const SYS_CLOCK_GETTIME: usize = 228;
+const SYS_EXIT_GROUP: usize = 231;
+const SYS_UTIMES: usize = 235;
+const SYS_LINKAT: usize = 265;
+const SYS_GETRANDOM: usize = 318;

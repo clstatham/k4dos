@@ -7,7 +7,13 @@ use alloc::{sync::Arc, vec::Vec};
 use spin::Once;
 use x86_64::structures::idt::PageFaultErrorCode;
 
-use crate::{arch::task::ArchTask, mem::addr::VirtAddr, util::{SpinLock, KResult}, fs::{FileRef, opened_file::OpenedFileTable}, userland::elf::ElfLoadError};
+use crate::{
+    arch::task::ArchTask,
+    fs::{opened_file::OpenedFileTable, FileRef},
+    mem::addr::VirtAddr,
+    userland::elf::ElfLoadError,
+    util::{KResult, SpinLock},
+};
 
 use self::{scheduler::Scheduler, vmem::Vmem};
 
@@ -22,6 +28,10 @@ pub fn init() {
 
 pub fn get_scheduler() -> &'static Scheduler {
     SCHEDULER.get().unwrap()
+}
+
+pub fn current_task() -> Arc<SpinLock<Option<Arc<Task>>>> {
+    get_scheduler().current_task()
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -102,7 +112,12 @@ impl Task {
         self.pid
     }
 
-    pub fn handle_page_fault(&self, faulted_addr: VirtAddr, instruction_pointer: VirtAddr, reason: PageFaultErrorCode) {
+    pub fn handle_page_fault(
+        &self,
+        faulted_addr: VirtAddr,
+        instruction_pointer: VirtAddr,
+        reason: PageFaultErrorCode,
+    ) {
         let addr_space = &mut self.arch_mut().address_space;
         let mut mapper = addr_space.mapper();
         self.vmem
@@ -110,9 +125,13 @@ impl Task {
             .handle_page_fault(&mut mapper, faulted_addr, instruction_pointer, reason);
     }
 
-    pub fn new_init(file: FileRef, argv: &[&[u8]], envp: &[&[u8]]) -> KResult<Arc<Task>, ElfLoadError> {
+    pub fn new_init(
+        file: FileRef,
+        argv: &[&[u8]],
+        envp: &[&[u8]],
+    ) -> KResult<Arc<Task>, ElfLoadError> {
         // {
-        //     self.opened_files.lock().close_cloexec_files();    
+        //     self.opened_files.lock().close_cloexec_files();
         // }
 
         // let mut vmem = self.vmem.lock();

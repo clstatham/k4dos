@@ -3,9 +3,20 @@ use core::ops::Add;
 use elfloader::{ElfBinary, ElfLoader};
 use x86::random::rdrand_slice;
 use x86_64::structures::paging::PageTableFlags;
-use xmas_elf::{program::Type, header::HeaderPt2};
+use xmas_elf::{header::HeaderPt2, program::Type};
 
-use crate::{mem::{addr::VirtAddr, allocator::AllocationError, addr_space::AddressSpace, paging::table::PagingError, consts::PAGE_SIZE}, task::vmem::Vmem, fs::{FileRef, opened_file::OpenOptions}, util::{KResult, KError, errno::Errno, align_up, align_down}, kerr, errno, userland::buffer::UserBufferMut};
+use crate::{
+    errno,
+    fs::{opened_file::OpenOptions, FileRef},
+    kerr,
+    mem::{
+        addr::VirtAddr, addr_space::AddressSpace, allocator::AllocationError, consts::PAGE_SIZE,
+        paging::table::PagingError,
+    },
+    task::vmem::Vmem,
+    userland::buffer::UserBufferMut,
+    util::{align_down, align_up, errno::Errno, KError, KResult},
+};
 
 #[derive(Debug)]
 pub enum ElfLoadError {
@@ -59,7 +70,8 @@ pub fn load_elf<'a>(file: FileRef) -> KResult<UserlandEntry, ElfLoadError> {
     let len = file.stat().map_err(|e| e.into())?.size.0 as usize;
     let mut buf = alloc::vec![0u8; len];
     let ubuf = UserBufferMut::from_slice(&mut buf);
-    file.read(0, ubuf, &OpenOptions::empty()).map_err(|e| e.into())?;
+    file.read(0, ubuf, &OpenOptions::empty())
+        .map_err(|e| e.into())?;
 
     let elf = ElfBinary::new(&buf).map_err(|e| errno!(Errno::EBADF))?;
 
@@ -73,7 +85,8 @@ pub fn load_elf<'a>(file: FileRef) -> KResult<UserlandEntry, ElfLoadError> {
     }
     log::debug!(
         "ELF loaded into memory at {:#x} .. {:#x}",
-        start_of_image, end_of_image
+        start_of_image,
+        end_of_image
     );
     if elf.is_pie() {
         log::warn!("It's a PIE");
@@ -95,7 +108,7 @@ pub fn load_elf<'a>(file: FileRef) -> KResult<UserlandEntry, ElfLoadError> {
         addr_space: &mut addr_space,
         base_addr: usize::MAX,
     };
-    
+
     elf.load(&mut loader).unwrap();
 
     current.switch();
@@ -110,7 +123,13 @@ pub fn load_elf<'a>(file: FileRef) -> KResult<UserlandEntry, ElfLoadError> {
     ];
 
     log::debug!("ELF load complete.");
-    Ok(UserlandEntry { entry_point, vmem, fsbase: None, addr_space, hdr })
+    Ok(UserlandEntry {
+        entry_point,
+        vmem,
+        fsbase: None,
+        addr_space,
+        hdr,
+    })
 }
 
 struct KadosElfLoader<'a> {
@@ -120,10 +139,15 @@ struct KadosElfLoader<'a> {
 }
 
 impl<'a> ElfLoader for KadosElfLoader<'a> {
-    fn allocate(&mut self, load_headers: elfloader::LoadableHeaders) -> Result<(), elfloader::ElfLoaderErr> {
+    fn allocate(
+        &mut self,
+        load_headers: elfloader::LoadableHeaders,
+    ) -> Result<(), elfloader::ElfLoaderErr> {
         for header in load_headers.filter(|header| header.get_type().unwrap() == Type::Load) {
             let start = VirtAddr::new(header.virtual_addr() as usize).align_down(PAGE_SIZE);
-            let mem_end = VirtAddr::new(header.virtual_addr() as usize + header.mem_size() as usize).align_up(PAGE_SIZE);
+            let mem_end =
+                VirtAddr::new(header.virtual_addr() as usize + header.mem_size() as usize)
+                    .align_up(PAGE_SIZE);
             if (header.virtual_addr() as usize) < self.base_addr {
                 self.base_addr = header.virtual_addr() as usize;
             }
@@ -131,7 +155,9 @@ impl<'a> ElfLoader for KadosElfLoader<'a> {
             // let data_size = file_end - start;
             // let aligned_data_size = align_up(data_size, PAGE_SIZE);
             // let file_offset = align_down(header.offset() as usize, PAGE_SIZE);
-            let mut flags = PageTableFlags::PRESENT | PageTableFlags::USER_ACCESSIBLE | PageTableFlags::WRITABLE;
+            let mut flags = PageTableFlags::PRESENT
+                | PageTableFlags::USER_ACCESSIBLE
+                | PageTableFlags::WRITABLE;
             // if header.flags().is_write() {
             //     flags.insert(PageTableFlags::WRITABLE);
             // }
@@ -139,13 +165,20 @@ impl<'a> ElfLoader for KadosElfLoader<'a> {
                 flags.insert(PageTableFlags::NO_EXECUTE);
             }
             log::debug!("Mapping region {:?} .. {:?}", start, mem_end);
-            self.vmem.map_area(start, mem_end, flags, &mut self.addr_space.mapper()).unwrap();
+            self.vmem
+                .map_area(start, mem_end, flags, &mut self.addr_space.mapper())
+                .unwrap();
         }
 
         Ok(())
     }
 
-    fn load(&mut self, flags: elfloader::Flags, base: elfloader::VAddr, region: &[u8]) -> Result<(), elfloader::ElfLoaderErr> {
+    fn load(
+        &mut self,
+        flags: elfloader::Flags,
+        base: elfloader::VAddr,
+        region: &[u8],
+    ) -> Result<(), elfloader::ElfLoaderErr> {
         let region_start = VirtAddr::new(base as usize);
         // let region_end = region_start + region.len();
         // let area_id = self.vmem.area_containing(region_start, region_end).unwrap();
@@ -153,7 +186,10 @@ impl<'a> ElfLoader for KadosElfLoader<'a> {
         // let area_start = area.start_address();
         // let offset = region_start - area_start;
         // this should be safe since the pages should already be mapped in allocate()
-        region_start.as_bytes_mut(region.len()).unwrap().copy_from_slice(region);
+        region_start
+            .as_bytes_mut(region.len())
+            .unwrap()
+            .copy_from_slice(region);
         Ok(())
     }
 
@@ -165,18 +201,23 @@ impl<'a> ElfLoader for KadosElfLoader<'a> {
     // }
 
     fn tls(
-            &mut self,
-            tdata_start: elfloader::VAddr,
-            _tdata_length: u64,
-            _total_size: u64,
-            _align: u64,
-        ) -> Result<(), elfloader::ElfLoaderErr> {
-        
-        log::warn!("TLS section found at {:?}", VirtAddr::new(tdata_start as usize));
+        &mut self,
+        tdata_start: elfloader::VAddr,
+        _tdata_length: u64,
+        _total_size: u64,
+        _align: u64,
+    ) -> Result<(), elfloader::ElfLoaderErr> {
+        log::warn!(
+            "TLS section found at {:?}",
+            VirtAddr::new(tdata_start as usize)
+        );
         Ok(())
     }
 
-    fn relocate(&mut self, entry: elfloader::RelocationEntry) -> Result<(), elfloader::ElfLoaderErr> {
+    fn relocate(
+        &mut self,
+        entry: elfloader::RelocationEntry,
+    ) -> Result<(), elfloader::ElfLoaderErr> {
         Ok(())
     }
 }

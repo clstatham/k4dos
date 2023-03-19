@@ -14,8 +14,8 @@ use crate::{
 pub mod cpu_local;
 pub mod gdt;
 pub mod idt;
-pub mod task;
 pub mod syscall;
+pub mod task;
 
 static HHDM: LimineHhdmRequest = LimineHhdmRequest::new(0);
 static MEMMAP: LimineMemmapRequest = LimineMemmapRequest::new(0);
@@ -38,7 +38,7 @@ pub fn arch_main() {
 
     crate::logging::init();
     log::info!("Logger initialized.");
-    
+
     let kernel_file = KERNEL_FILE.get_response().get().unwrap();
     let kernel_file = kernel_file.kernel_file.get().unwrap();
 
@@ -75,7 +75,9 @@ pub fn arch_main() {
     }
 
     log::info!("Setting up syscalls.");
-    unsafe { syscall::init(); }
+    unsafe {
+        syscall::init();
+    }
 
     log::info!("Loading GDT.");
     gdt::init();
@@ -89,14 +91,18 @@ pub fn arch_main() {
     log::info!("Initializing filesystems.");
     fs::initramfs::init().unwrap();
 
-    
-
     log::info!("Starting init process.");
 
     let sched = get_scheduler();
     // sched.enqueue(Task::new_kernel(spawn_init_process, true));
     let exe = "/bin/sh";
-    let file = get_root().unwrap().lookup(Path::new(exe)).unwrap().as_file().unwrap().clone();
+    let file = get_root()
+        .unwrap()
+        .lookup(Path::new(exe))
+        .unwrap()
+        .as_file()
+        .unwrap()
+        .clone();
     sched.enqueue(Task::new_init(file, &[&[]], &[&[]]).unwrap());
 
     log::info!("Welcome to K4DOS!");

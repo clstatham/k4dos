@@ -1,6 +1,6 @@
 use alloc::{collections::VecDeque, sync::Arc};
 
-use crate::{arch::task::arch_context_switch, util::SpinLock, fs::FileRef};
+use crate::{arch::task::arch_context_switch, fs::FileRef, util::SpinLock};
 
 use super::{get_scheduler, Task, TaskState};
 
@@ -34,7 +34,7 @@ impl Scheduler {
         let mut current = self.current_task.lock();
         let current = current.as_mut().unwrap();
         let current = &current.arch_mut().address_space;
-        self.idle_thread.arch_mut().address_space.switch();
+        self.preempt_task.arch_mut().address_space.switch();
         let res = f();
         current.switch();
         res
@@ -65,9 +65,7 @@ impl Scheduler {
             arch_context_switch(self.preempt_task.arch_mut(), task.arch_mut());
         } else {
             if let Some(current_task) = current_lock.as_ref() {
-                let state = {
-                    *current_task.state.lock()
-                };
+                let state = { *current_task.state.lock() };
                 if state == TaskState::Runnable {
                     unsafe { self.current_task.force_unlock() };
                     unsafe { self.run_queue.force_unlock() };
