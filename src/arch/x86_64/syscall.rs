@@ -2,7 +2,7 @@ use x86::msr::{wrmsr, rdmsr};
 use x86::segmentation::SegmentSelector;
 use x86::Ring;
 
-use crate::userland::syscall::SyscallHandler;
+use crate::userland::syscall::{SyscallHandler, SyscallFrame};
 
 use super::gdt::{KERNEL_CS_IDX, USER_CS_IDX};
 use super::idt::InterruptFrame;
@@ -114,7 +114,7 @@ pub unsafe extern "C" fn syscall_entry() {
 
 
 #[no_mangle]
-unsafe extern "C" fn x64_handle_syscall(ctx: *mut InterruptFrame) -> isize {
+unsafe extern "C" fn x64_handle_syscall(ctx: *mut SyscallFrame) -> isize {
     let context = &*ctx;
     handle_syscall(
         context.rdi as usize,
@@ -138,7 +138,7 @@ fn handle_syscall(
     a5: usize,
     a6: usize,
     n: usize,
-    frame: *mut InterruptFrame,
+    frame: *mut SyscallFrame,
 ) -> isize {
     let mut handler = SyscallHandler {
         frame: unsafe { &mut *frame },
@@ -161,7 +161,7 @@ fn handle_syscall(
             -errno as isize
         }
     };
-    handler.frame.rax = retval as u64;
+    handler.frame.rax = retval as usize;
     retval
 }
 

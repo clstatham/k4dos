@@ -1,8 +1,38 @@
-use crate::{arch::idt::InterruptFrame, util::{KResult, errno::Errno}, errno, task::get_scheduler};
+use crate::{util::{KResult, errno::Errno}, errno, task::get_scheduler};
 
+
+#[repr(packed)]
+#[derive(Default, Clone)]
+pub struct SyscallFrame {
+    // preserved registers
+    pub r15: usize,
+    pub r14: usize,
+    pub r13: usize,
+    pub r12: usize,
+    pub rbp: usize,
+    pub rbx: usize,
+
+    // scratch registers
+    pub r11: usize,
+    pub r10: usize,
+    pub r9: usize,
+    pub r8: usize,
+    pub rsi: usize,
+    pub rdi: usize,
+    pub rdx: usize,
+    pub rcx: usize,
+    pub rax: usize,
+
+    // iret regs
+    pub rip: usize,
+    pub cs: usize,
+    pub rflags: usize,
+    pub rsp: usize,
+    pub ss: usize,
+}
 
 pub struct SyscallHandler<'a> {
-    pub frame: &'a mut InterruptFrame,
+    pub frame: &'a mut SyscallFrame,
     // pub frame: &'a u8,
 }
 
