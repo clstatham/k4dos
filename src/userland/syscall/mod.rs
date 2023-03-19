@@ -8,6 +8,7 @@ use crate::{
 };
 
 pub mod arch_prctl;
+pub mod set_tid_address;
 
 #[repr(packed)]
 #[derive(Default, Clone)]
@@ -76,6 +77,7 @@ impl<'a> SyscallHandler<'a> {
 
         let res = match n {
             SYS_ARCH_PRCTL => self.sys_arch_prctl(a1 as i32, VirtAddr::new(a2)),
+            SYS_SET_TID_ADDRESS => self.sys_set_tid_address(VirtAddr::new(a1)),
             _ => Err(errno!(Errno::ENOSYS)),
         };
         // }

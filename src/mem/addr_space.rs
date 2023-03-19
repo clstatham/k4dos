@@ -3,14 +3,14 @@ use x86_64::{
     structures::paging::PhysFrame,
 };
 
-use crate::{kerr, util::KResult};
+use crate::util::KResult;
 
 use super::{
     addr::PhysAddr,
     allocator::alloc_kernel_frames,
     paging::{
         mapper::Mapper,
-        table::{active_table, PageTable, PagingError},
+        table::{active_table, PageTable},
         units::{AllocatedFrames, Frame, FrameRange},
     },
 };
@@ -20,10 +20,9 @@ pub struct AddressSpace {
 }
 
 impl AddressSpace {
-    pub fn new() -> KResult<Self, PagingError> {
+    pub fn new() -> KResult<Self> {
         let cr3 = unsafe {
-            let frame =
-                alloc_kernel_frames(1).map_err(|e| kerr!(PagingError::FrameAllocationFailed(e)))?;
+            let frame =alloc_kernel_frames(1)?;
             let phys_addr = frame.start_address();
             let virt_addr = phys_addr.as_hhdm_virt();
 

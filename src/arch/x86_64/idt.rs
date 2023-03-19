@@ -133,28 +133,7 @@ pub struct InterruptFrame {
 pub struct InterruptErrorFrame {
     pub code: u64,
 
-    pub r15: u64,
-    pub r14: u64,
-    pub r13: u64,
-    pub r12: u64,
-    pub rbp: u64,
-    pub rbx: u64,
-
-    pub r11: u64,
-    pub r10: u64,
-    pub r9: u64,
-    pub r8: u64,
-    pub rsi: u64,
-    pub rdi: u64,
-    pub rdx: u64,
-    pub rcx: u64,
-    pub rax: u64,
-
-    pub rip: u64,
-    pub cs: u64,
-    pub rflags: u64,
-    pub rsp: u64,
-    pub ss: u64,
+    pub frame: InterruptFrame,
 }
 
 pub fn notify_eoi(index: u8) {
@@ -246,8 +225,8 @@ extern "C" fn x64_handle_interrupt(vector: u8, stack_frame: *mut InterruptErrorF
 
     match vector {
         TIMER_IRQ => {
-            log::info!("tick");
-            if stack_frame.cs & 0b11 != 0 {
+            // log::info!("tick");
+            if stack_frame.frame.cs & 0b11 != 0 {
                 get_scheduler().with_kernel_addr_space_active(|| notify_eoi(TIMER_IRQ));
             } else {
                 notify_eoi(TIMER_IRQ);
@@ -342,7 +321,7 @@ extern "C" fn x64_handle_interrupt(vector: u8, stack_frame: *mut InterruptErrorF
                     .unwrap()
                     .handle_page_fault(
                         VirtAddr::new(accessed_address as usize),
-                        VirtAddr::new(stack_frame.rip as usize),
+                        VirtAddr::new(stack_frame.frame.rip as usize),
                         error_code,
                     );
                 unsafe {
@@ -360,7 +339,7 @@ extern "C" fn x64_handle_interrupt(vector: u8, stack_frame: *mut InterruptErrorF
                 stack_frame,
             );
 
-            log::error!("Exception IP {:#x}", stack_frame.rip as usize);
+            log::error!("Exception IP {:#x}", stack_frame.frame.rip as usize);
             log::error!("Faulted access address {:#x}", accessed_address,);
             panic!()
         }

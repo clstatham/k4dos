@@ -6,13 +6,12 @@ use core::{
 use x86_64::{registers::control::Cr3, structures::paging::PageTableFlags};
 
 use crate::{
-    kerr,
     mem::{
         addr::{PhysAddr, VirtAddr},
-        allocator::{alloc_kernel_frames, AllocationError},
+        allocator::{alloc_kernel_frames},
         consts::{PAGE_SIZE, PAGE_TABLE_ENTRIES},
     },
-    util::{KError, KResult},
+    util::{KError, KResult}, kerrmsg,
 };
 
 use super::units::Frame;
@@ -87,14 +86,6 @@ impl Debug for PageTableEntry {
     }
 }
 
-#[derive(Debug)]
-pub enum PagingError {
-    FrameAllocationFailed(KError<AllocationError>),
-    PageAllocationFailed(KError<AllocationError>),
-    PageTableCreation,
-    PageAlreadyMapped(Frame),
-}
-
 #[repr(C, align(4096))]
 #[derive(Clone)]
 pub struct PageTable {
@@ -130,7 +121,7 @@ impl PageTable {
         &mut self,
         index: usize,
         insert_flags: PageTableFlags,
-    ) -> KResult<&'b mut PageTable, PagingError> {
+    ) -> KResult<&'b mut PageTable> {
         let entry = &mut self[index];
         let created;
         if entry.is_unused() {
@@ -140,8 +131,7 @@ impl PageTable {
                     created = true;
                 }
                 Err(e) => {
-                    return Err(kerr!(
-                        PagingError::FrameAllocationFailed(e),
+                    return Err(kerrmsg!(
                         "Failed to allocate frame for new page table"
                     ));
                 }
@@ -154,8 +144,7 @@ impl PageTable {
         let page_table = match self.next_table_mut(index) {
             Some(pt) => pt,
             None => {
-                return Err(kerr!(
-                    PagingError::PageTableCreation,
+                return Err(kerrmsg!(
                     "Could not create next page table, likely due to a huge page"
                 ))
             }

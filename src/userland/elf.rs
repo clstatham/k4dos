@@ -8,39 +8,13 @@ use xmas_elf::{header::HeaderPt2, program::Type};
 use crate::{
     errno,
     fs::{opened_file::OpenOptions, FileRef},
-    kerr,
     mem::{
-        addr::VirtAddr, addr_space::AddressSpace, allocator::AllocationError, consts::PAGE_SIZE,
-        paging::table::PagingError,
+        addr::VirtAddr, addr_space::AddressSpace, consts::PAGE_SIZE,
     },
     task::vmem::Vmem,
     userland::buffer::UserBufferMut,
     util::{align_down, align_up, errno::Errno, KError, KResult},
 };
-
-#[derive(Debug)]
-pub enum ElfLoadError {
-    FrameAllocationFailed(KError<AllocationError>),
-    PagingError(KError<PagingError>),
-}
-
-impl Into<KError<ElfLoadError>> for KError<AllocationError> {
-    fn into(self) -> KError<ElfLoadError> {
-        kerr!(ElfLoadError::FrameAllocationFailed(self))
-    }
-}
-
-impl Into<KError<ElfLoadError>> for KError<()> {
-    fn into(self) -> KError<ElfLoadError> {
-        errno!(self.errno().unwrap())
-    }
-}
-
-impl Into<KError<ElfLoadError>> for KError<PagingError> {
-    fn into(self) -> KError<ElfLoadError> {
-        kerr!(ElfLoadError::PagingError(self))
-    }
-}
 
 pub fn gen_stack_canary() -> [u8; 16] {
     let mut random_bytes = [0u8; 16];
@@ -66,12 +40,11 @@ pub struct UserlandEntry {
     pub hdr: [(AuxvType, usize); 4],
 }
 
-pub fn load_elf<'a>(file: FileRef) -> KResult<UserlandEntry, ElfLoadError> {
-    let len = file.stat().map_err(|e| e.into())?.size.0 as usize;
+pub fn load_elf<'a>(file: FileRef) -> KResult<UserlandEntry> {
+    let len = file.stat()?.size.0 as usize;
     let mut buf = alloc::vec![0u8; len];
     let ubuf = UserBufferMut::from_slice(&mut buf);
-    file.read(0, ubuf, &OpenOptions::empty())
-        .map_err(|e| e.into())?;
+    file.read(0, ubuf, &OpenOptions::empty())?;
 
     let elf = ElfBinary::new(&buf).map_err(|e| errno!(Errno::EBADF))?;
 
@@ -93,7 +66,7 @@ pub fn load_elf<'a>(file: FileRef) -> KResult<UserlandEntry, ElfLoadError> {
     }
 
     let mut vmem = Vmem::new();
-    let mut addr_space = AddressSpace::new().map_err(|e| e.into())?;
+    let mut addr_space = AddressSpace::new()?;
 
     // let user_heap_bottom = align_up(end_of_image, PAGE_SIZE);
     // let random_bytes = gen_stack_canary();

@@ -1,6 +1,6 @@
 use x86_64::structures::paging::PageTableFlags;
 
-use crate::{kerr, util::KResult};
+use crate::util::KResult;
 
 use self::{
     addr::VirtAddr,
@@ -9,7 +9,6 @@ use self::{
     consts::{KERNEL_HEAP_SIZE, KERNEL_HEAP_START, PAGE_SIZE},
     paging::{
         mapper::Mapper,
-        table::PagingError,
         units::{MappedPages, Page},
     },
 };
@@ -20,7 +19,7 @@ pub mod allocator;
 pub mod consts;
 pub mod paging;
 
-pub fn remap_kernel() -> KResult<AddressSpace, PagingError> {
+pub fn remap_kernel() -> KResult<AddressSpace> {
     let mut active = AddressSpace::current();
     log::info!("Active page table at {:?}", active.cr3());
     let mut active_p4 = active.mapper();
@@ -39,13 +38,12 @@ pub fn remap_kernel() -> KResult<AddressSpace, PagingError> {
     Ok(new_space)
 }
 
-pub fn init_heap(kernel_mapper: &mut Mapper) -> KResult<MappedPages, PagingError> {
+pub fn init_heap(kernel_mapper: &mut Mapper) -> KResult<MappedPages> {
     let heap_start = VirtAddr::new(KERNEL_HEAP_START);
     let heap_ap = alloc_kernel_pages_at(
         Page::containing_address(heap_start),
         KERNEL_HEAP_SIZE / PAGE_SIZE,
-    )
-    .map_err(|e| kerr!(PagingError::PageAllocationFailed(e)))?;
+    )?;
     let heap_mp = kernel_mapper.map(
         heap_ap,
         PageTableFlags::PRESENT | PageTableFlags::WRITABLE | PageTableFlags::NO_EXECUTE,

@@ -2,30 +2,19 @@ use core::fmt::{Debug, Display};
 
 use super::errno::Errno;
 
-pub type KResult<T, E = ()> = Result<T, KError<E>>;
+pub type KResult<T> = Result<T, KError>;
 
-pub enum KError<T: Debug> {
-    Error { err: T },
-    ErrorWithMessage { err: T, msg: &'static str },
+pub enum KError {
     Message { msg: &'static str },
     Errno { errno: Errno },
 }
 
-impl<T: Debug> KError<T> {
+impl KError {
     pub fn msg(&self) -> Option<&'static str> {
         match self {
-            KError::Error { .. } => None,
-            KError::ErrorWithMessage { msg, .. } => Some(msg),
+            // KError::Error { .. } => None,
+            // KError::ErrorWithMessage { msg, .. } => Some(msg),
             KError::Message { msg } => Some(msg),
-            KError::Errno { errno: _ } => None,
-        }
-    }
-
-    pub fn err(&self) -> Option<&T> {
-        match self {
-            KError::Error { err } => Some(err),
-            KError::Message { .. } => None,
-            KError::ErrorWithMessage { err, .. } => Some(err),
             KError::Errno { errno: _ } => None,
         }
     }
@@ -38,18 +27,18 @@ impl<T: Debug> KError<T> {
     }
 }
 
-impl<T: Debug> Debug for KError<T> {
+impl Debug for KError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
-            KError::Error { err } => write!(f, "{:?}", err),
-            KError::ErrorWithMessage { err, msg } => write!(f, "{:?}: {}", err, msg),
+            // KError::Error { err } => write!(f, "{:?}", err),
+            // KError::ErrorWithMessage { err, msg } => write!(f, "{:?}: {}", err, msg),
             KError::Message { msg } => write!(f, "{}", msg),
             KError::Errno { errno } => write!(f, "{:?}", errno),
         }
     }
 }
 
-impl<T: Debug> Display for KError<T> {
+impl Display for KError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         write!(f, "{:?}", self)
     }
@@ -59,17 +48,6 @@ impl<T: Debug> Display for KError<T> {
 macro_rules! kerrmsg {
     ($s:expr) => {
         $crate::util::error::KError::Message { msg: $s }
-    };
-}
-
-#[macro_export]
-macro_rules! kerr {
-    ($e:expr) => {
-        $crate::util::error::KError::Error { err: $e }
-    };
-
-    ($e:expr, $s:expr) => {
-        $crate::util::error::KError::ErrorWithMessage { err: $e, msg: $s }
     };
 }
 

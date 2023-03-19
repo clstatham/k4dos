@@ -208,12 +208,12 @@ macro_rules! range_impl {
             pub fn merge_with(
                 &mut self,
                 other: Self,
-            ) -> $crate::util::error::KResult<(), PageMergeError> {
+            ) -> $crate::util::error::KResult<()> {
                 if other.is_empty() {
                     return Ok(());
                 }
                 if other.start != self.end + 1 && other.end + 1 != self.start {
-                    return Err($crate::kerr!(PageMergeError));
+                    return Err($crate::kerrmsg!("Error merging pages"));
                 }
                 if other.start < self.start {
                     self.start = other.start;

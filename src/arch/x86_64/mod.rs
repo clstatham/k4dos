@@ -103,7 +103,8 @@ pub fn arch_main() {
         .as_file()
         .unwrap()
         .clone();
-    sched.enqueue(Task::new_init(file, &[&[]], &[&[]]).unwrap());
+    let console = get_root().unwrap().lookup_path(Path::new("/dev/tty"), true).unwrap();
+    sched.enqueue(Task::new_init(file, console, &[&[]], &[&[]]).unwrap());
 
     log::info!("Welcome to K4DOS!");
     loop {

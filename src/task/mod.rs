@@ -9,9 +9,8 @@ use x86_64::structures::idt::PageFaultErrorCode;
 
 use crate::{
     arch::task::ArchTask,
-    fs::{opened_file::OpenedFileTable, FileRef},
+    fs::{opened_file::{OpenedFileTable, OpenedFile, OpenFlags, OpenOptions}, FileRef, path::PathComponent},
     mem::addr::VirtAddr,
-    userland::elf::ElfLoadError,
     util::{KResult, SpinLock},
 };
 
@@ -104,6 +103,28 @@ impl Task {
         })
     }
 
+    pub fn new_init(
+        file: FileRef,
+        console: Arc<PathComponent>,
+        argv: &[&[u8]],
+        envp: &[&[u8]],
+    ) -> KResult<Arc<Task>> {
+        let pid = TaskId::allocate();
+
+        let mut files = OpenedFileTable::new();
+        files.open_with_fd(0, Arc::new(OpenedFile::new(console.clone(), OpenFlags::O_RDONLY.into(), 0)), OpenOptions::empty())?;
+
+        Ok(Arc::new(Self {
+            arch: UnsafeCell::new(ArchTask::new_init(file, argv, envp)?),
+            state: SpinLock::new(TaskState::Runnable),
+            pid,
+            parent: Arc::new(SpinLock::new(None)),
+            children: Arc::new(SpinLock::new(Vec::new())),
+            opened_files: Arc::new(SpinLock::new(OpenedFileTable::new())),
+            vmem: Arc::new(SpinLock::new(Vmem::new())),
+        }))
+    }
+
     pub fn arch_mut(&self) -> &mut ArchTask {
         unsafe { &mut *self.arch.get() }
     }
@@ -123,32 +144,5 @@ impl Task {
         self.vmem
             .lock()
             .handle_page_fault(&mut mapper, faulted_addr, instruction_pointer, reason);
-    }
-
-    pub fn new_init(
-        file: FileRef,
-        argv: &[&[u8]],
-        envp: &[&[u8]],
-    ) -> KResult<Arc<Task>, ElfLoadError> {
-        // {
-        //     self.opened_files.lock().close_cloexec_files();
-        // }
-
-        // let mut vmem = self.vmem.lock();
-        // vmem.clear(&mut self.arch_mut().address_space.mapper());
-
-        // unsafe { self.vmem.force_unlock() };
-        // self.arch_mut().exec(file, argv, envp).unwrap();
-
-        let pid = TaskId::allocate();
-        Ok(Arc::new(Self {
-            arch: UnsafeCell::new(ArchTask::new_init(file, argv, envp)?),
-            state: SpinLock::new(TaskState::Runnable),
-            pid,
-            parent: Arc::new(SpinLock::new(None)),
-            children: Arc::new(SpinLock::new(Vec::new())),
-            opened_files: Arc::new(SpinLock::new(OpenedFileTable::new())),
-            vmem: Arc::new(SpinLock::new(Vmem::new())),
-        }))
     }
 }

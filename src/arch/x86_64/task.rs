@@ -33,7 +33,7 @@ use crate::{
         consts::{KERNEL_STACK_SIZE, PAGE_SIZE, USER_STACK_BOTTOM, USER_STACK_TOP},
     },
     task::vmem::Vmem,
-    userland::elf::{self, AuxvType, ElfLoadError},
+    userland::elf::{self, AuxvType},
     util::{stack::Stack, KResult},
 };
 
@@ -257,7 +257,7 @@ impl ArchTask {
     }
 
     // #[allow(unreachable_code)]
-    pub fn new_init(file: FileRef, argv: &[&[u8]], envp: &[&[u8]]) -> KResult<Self, ElfLoadError> {
+    pub fn new_init(file: FileRef, argv: &[&[u8]], envp: &[&[u8]]) -> KResult<Self> {
         let mut userland_entry = elf::load_elf(file)?;
 
         let switch_stack = alloc::vec![0u8; KERNEL_STACK_SIZE].into_boxed_slice();

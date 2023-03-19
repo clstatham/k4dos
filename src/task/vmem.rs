@@ -4,14 +4,12 @@ use alloc::{collections::BTreeMap, vec::Vec};
 use x86_64::structures::{idt::PageFaultErrorCode, paging::PageTableFlags};
 
 use crate::{
-    kerr,
     mem::{
         addr::VirtAddr,
         allocator::PageAllocator,
         consts::PAGE_SIZE,
         paging::{
             mapper::Mapper,
-            table::PagingError,
             units::{MappedPages, Page, PageRange},
         },
     },
@@ -131,14 +129,13 @@ impl Vmem {
         end_addr: VirtAddr,
         flags: PageTableFlags,
         active_mapper: &mut Mapper,
-    ) -> KResult<VmemAreaId, PagingError> {
+    ) -> KResult<VmemAreaId> {
         let ap = self
             .page_allocator
             .allocate_range(PageRange::new(
                 Page::containing_address(start_addr),
                 Page::containing_address(end_addr - 1),
-            ))
-            .map_err(|e| kerr!(PagingError::PageAllocationFailed(e)))?;
+            ))?;
         let mp = active_mapper.map(ap, flags)?;
         let id = self.add_area(
             start_addr.align_down(PAGE_SIZE),

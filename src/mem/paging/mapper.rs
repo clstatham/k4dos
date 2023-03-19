@@ -2,16 +2,15 @@ use x86::tlb;
 use x86_64::structures::paging::PageTableFlags;
 
 use crate::{
-    kerr,
     mem::{
         addr::{PhysAddr, VirtAddr},
         allocator::alloc_kernel_frames,
     },
-    util::KResult,
+    util::KResult, kerrmsg,
 };
 
 use super::{
-    table::{PageTable, PagingError},
+    table::PageTable,
     units::{AllocatedFrames, AllocatedPages, Frame, MappedPages, Page},
 };
 
@@ -59,7 +58,7 @@ impl<'a> Mapper<'a> {
         page: Page,
         frame: Frame,
         flags: PageTableFlags,
-    ) -> KResult<(), PagingError> {
+    ) -> KResult<()> {
         let mut insert_flags = PageTableFlags::PRESENT | PageTableFlags::WRITABLE;
         if flags.contains(PageTableFlags::USER_ACCESSIBLE) {
             insert_flags |= PageTableFlags::USER_ACCESSIBLE;
@@ -71,9 +70,7 @@ impl<'a> Mapper<'a> {
         let p1 = p2.next_table_create(addr.p2_index(), insert_flags)?;
         let entry = &mut p1[addr.p1_index()];
         if !entry.is_unused() {
-            return Err(kerr!(PagingError::PageAlreadyMapped(
-                entry.frame().unwrap()
-            )));
+            return Err(kerrmsg!("Page already mapped"));
         }
         entry.set_frame(frame, flags);
         unsafe { tlb::flush(addr.value()) }
@@ -85,7 +82,7 @@ impl<'a> Mapper<'a> {
         pages: AllocatedPages,
         frames: AllocatedFrames,
         flags: PageTableFlags,
-    ) -> KResult<MappedPages, PagingError> {
+    ) -> KResult<MappedPages> {
         assert_eq!(
             pages.size_in_pages(),
             frames.size_in_pages(),
@@ -102,9 +99,8 @@ impl<'a> Mapper<'a> {
         &mut self,
         pages: AllocatedPages,
         flags: PageTableFlags,
-    ) -> KResult<MappedPages, PagingError> {
-        let frames = alloc_kernel_frames(pages.size_in_pages())
-            .map_err(|e| kerr!(PagingError::FrameAllocationFailed(e)))?;
+    ) -> KResult<MappedPages> {
+        let frames = alloc_kernel_frames(pages.size_in_pages())?;
         self.map_to(pages, frames, flags)
     }
 

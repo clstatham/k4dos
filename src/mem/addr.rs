@@ -3,8 +3,8 @@ use bit_field::BitField;
 use core::fmt::{self, *};
 use core::ops::*;
 
+use crate::kerrmsg;
 use crate::{
-    kerr,
     util::{align_down, align_up, KResult},
 };
 
@@ -30,12 +30,6 @@ pub const fn canonicalisze_virtaddr(addr: usize) -> usize {
 #[repr(transparent)]
 pub struct VirtAddr {
     addr: usize,
-}
-
-#[derive(Debug)]
-pub enum AddrReadError {
-    Unaligned,
-    Null,
 }
 
 impl PhysAddr {
@@ -177,34 +171,34 @@ impl VirtAddr {
         PhysAddr::new(self.value() - crate::phys_offset().value())
     }
 
-    pub fn read_ok<T: Sized>(&self) -> KResult<(), AddrReadError> {
+    pub fn read_ok<T: Sized>(&self) -> KResult<()> {
         let ptr = self.as_ptr::<T>();
         if ptr.is_null() {
-            return Err(kerr!(AddrReadError::Null));
+            return Err(kerrmsg!("Attempt to read null VirtAddr"));
         }
         if !ptr.is_aligned() {
-            return Err(kerr!(AddrReadError::Unaligned));
+            return Err(kerrmsg!("Attempt to read unaligned VirtAddr"));
         }
 
         Ok(())
     }
 
-    pub fn read<T: Sized>(&self) -> KResult<&T, AddrReadError> {
+    pub fn read<T: Sized>(&self) -> KResult<&T> {
         self.read_ok::<T>()?;
         Ok(unsafe { &*(self.as_ptr()) })
     }
 
-    pub fn read_mut<T: Sized>(&self) -> KResult<&mut T, AddrReadError> {
+    pub fn read_mut<T: Sized>(&self) -> KResult<&mut T> {
         self.read_ok::<T>()?;
         Ok(unsafe { &mut *(self.as_mut_ptr()) })
     }
 
-    pub fn as_bytes(&self, read_len: usize) -> KResult<&[u8], AddrReadError> {
+    pub fn as_bytes(&self, read_len: usize) -> KResult<&[u8]> {
         self.read_ok::<&[u8]>()?;
         Ok(unsafe { core::slice::from_raw_parts(self.as_ptr(), read_len) })
     }
 
-    pub fn as_bytes_mut(&self, read_len: usize) -> KResult<&mut [u8], AddrReadError> {
+    pub fn as_bytes_mut(&self, read_len: usize) -> KResult<&mut [u8]> {
         self.read_ok::<&[u8]>()?;
         Ok(unsafe { core::slice::from_raw_parts_mut(self.as_mut_ptr(), read_len) })
     }

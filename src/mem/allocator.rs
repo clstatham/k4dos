@@ -12,7 +12,7 @@ use super::paging::units::{
     AllocatedFrames, AllocatedPages, Frame, FrameRange, Page, PageIndex, PageRange,
 };
 use crate::util::{align_down, KResult, SpinLock};
-use crate::{kerr, kerrmsg};
+use crate::kerrmsg;
 
 pub static KERNEL_FRAME_ALLOCATOR: Once<SpinLock<FrameAllocator>> = Once::new();
 pub static KERNEL_PAGE_ALLOCATOR: Once<SpinLock<PageAllocator>> = Once::new();
@@ -20,12 +20,11 @@ pub static KERNEL_PAGE_ALLOCATOR: Once<SpinLock<PageAllocator>> = Once::new();
 #[global_allocator]
 pub static GLOBAL_ALLOC: LockedHeap<32> = LockedHeap::new();
 
-pub fn alloc_kernel_frames(count: usize) -> KResult<AllocatedFrames, AllocationError> {
+pub fn alloc_kernel_frames(count: usize) -> KResult<AllocatedFrames> {
     KERNEL_FRAME_ALLOCATOR
         .get()
         .ok_or(kerrmsg!("KERNEL_FRAME_ALLOCATOR not initialized"))?
-        .try_lock()
-        .map_err(|_| kerr!(AllocationError))?
+        .try_lock()?
         // .ok_or(kerror!("Failed to lock KERNEL_FRAME_ALLOCATOR"))?
         .allocate(count)
 }
@@ -33,22 +32,20 @@ pub fn alloc_kernel_frames(count: usize) -> KResult<AllocatedFrames, AllocationE
 pub fn alloc_kernel_frames_at(
     start: Frame,
     count: usize,
-) -> KResult<AllocatedFrames, AllocationError> {
+) -> KResult<AllocatedFrames> {
     KERNEL_FRAME_ALLOCATOR
         .get()
         .ok_or(kerrmsg!("KERNEL_FRAME_ALLOCATOR not initialized"))?
-        .try_lock()
-        .map_err(|_| kerr!(AllocationError))?
+        .try_lock()?
         // .ok_or(kerror!("Failed to lock KERNEL_FRAME_ALLOCATOR"))?
         .allocate_at(start, count)
 }
 
-pub fn alloc_kernel_pages(count: usize) -> KResult<AllocatedPages, AllocationError> {
+pub fn alloc_kernel_pages(count: usize) -> KResult<AllocatedPages> {
     KERNEL_PAGE_ALLOCATOR
         .get()
         .ok_or(kerrmsg!("KERNEL_PAGE_ALLOCATOR not initialized"))?
-        .try_lock()
-        .map_err(|_| kerr!(AllocationError))?
+        .try_lock()?
         // .ok_or(kerror!("Failed to lock KERNEL_FRAME_ALLOCATOR"))?
         .allocate(count)
 }
@@ -56,32 +53,29 @@ pub fn alloc_kernel_pages(count: usize) -> KResult<AllocatedPages, AllocationErr
 pub fn alloc_kernel_pages_at(
     start: Page,
     count: usize,
-) -> KResult<AllocatedPages, AllocationError> {
+) -> KResult<AllocatedPages> {
     KERNEL_PAGE_ALLOCATOR
         .get()
         .ok_or(kerrmsg!("KERNEL_PAGE_ALLOCATOR not initialized"))?
-        .try_lock()
-        .map_err(|_| kerr!(AllocationError))?
+        .try_lock()?
         // .ok_or(kerror!("Failed to lock KERNEL_FRAME_ALLOCATOR"))?
         .allocate_at(start, count)
 }
 
-pub fn free_kernel_frames(frames: &mut AllocatedFrames) -> KResult<(), AllocationError> {
+pub fn free_kernel_frames(frames: &mut AllocatedFrames) -> KResult<()> {
     KERNEL_FRAME_ALLOCATOR
         .get()
         .ok_or(kerrmsg!("KERNEL_FRAME_ALLOCATOR not initialized"))?
-        .try_lock()
-        .map_err(|_| kerr!(AllocationError))?
+        .try_lock()?
         .free(frames);
     Ok(())
 }
 
-pub fn free_kernel_pages(pages: &mut AllocatedPages) -> KResult<(), AllocationError> {
+pub fn free_kernel_pages(pages: &mut AllocatedPages) -> KResult<()> {
     KERNEL_PAGE_ALLOCATOR
         .get()
         .ok_or(kerrmsg!("KERNEL_PAGE_ALLOCATOR not initialized"))?
-        .try_lock()
-        .map_err(|_| kerr!(AllocationError))?
+        .try_lock()?
         .free(pages);
     Ok(())
 }
@@ -209,9 +203,6 @@ impl<T: Clone, const CAP: usize> IndexMut<usize> for StaticListOrVec<T, CAP> {
     }
 }
 
-#[derive(Debug)]
-pub struct AllocationError;
-
 macro_rules! allocator_impl {
     ($name:ident, $unit:ident, $range:ident, $allocated:ident) => {
         pub struct $name {
@@ -260,7 +251,7 @@ macro_rules! allocator_impl {
                 &mut self,
                 start: Option<$unit>,
                 count: usize,
-            ) -> KResult<$allocated, AllocationError> {
+            ) -> KResult<$allocated> {
                 let mut allocation: Option<$allocated> = None;
                 let mut index_to_remove: Option<usize> = None;
                 let mut before: Option<$range> = None;
@@ -301,7 +292,7 @@ macro_rules! allocator_impl {
                 let allocation = match allocation {
                     Some(a) => a,
                     None => {
-                        return Err(kerr!(AllocationError, "couldn't find chunk for allocation"))
+                        return Err(kerrmsg!("couldn't find chunk for allocation"))
                     }
                 };
                 let index_to_remove = index_to_remove.unwrap();
@@ -360,7 +351,7 @@ macro_rules! allocator_impl {
                 }
             }
 
-            pub fn allocate(&mut self, count: usize) -> KResult<$allocated, AllocationError> {
+            pub fn allocate(&mut self, count: usize) -> KResult<$allocated> {
                 self.allocate_internal(None, count)
             }
 
@@ -368,14 +359,14 @@ macro_rules! allocator_impl {
                 &mut self,
                 start: $unit,
                 count: usize,
-            ) -> KResult<$allocated, AllocationError> {
+            ) -> KResult<$allocated> {
                 self.allocate_internal(Some(start), count)
             }
 
             pub fn allocate_range(
                 &mut self,
                 range: $range,
-            ) -> KResult<$allocated, AllocationError> {
+            ) -> KResult<$allocated> {
                 let count = range.size_in_pages();
                 self.allocate_internal(Some(range.start()), count)
             }
