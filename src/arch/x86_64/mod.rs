@@ -3,12 +3,12 @@ use x86_64::instructions::interrupts;
 use xmas_elf::ElfFile;
 
 use crate::{
-    fs::{self, initramfs::get_root, path::Path},
+    fs::{self, initramfs::get_root, path::Path, tty},
     mem::{
         self,
         allocator::{KERNEL_FRAME_ALLOCATOR, KERNEL_PAGE_ALLOCATOR},
     },
-    task::{get_scheduler, Task},
+    task::{get_scheduler, Task}, terminal_println,
 };
 
 pub mod cpu_local;
@@ -38,6 +38,8 @@ pub fn arch_main() {
 
     crate::logging::init();
     log::info!("Logger initialized.");
+
+    // terminal_println!("");
 
     let kernel_file = KERNEL_FILE.get_response().get().unwrap();
     let kernel_file = kernel_file.kernel_file.get().unwrap();
@@ -95,7 +97,7 @@ pub fn arch_main() {
 
     let sched = get_scheduler();
     // sched.enqueue(Task::new_kernel(spawn_init_process, true));
-    let exe = "/bin/sh";
+    let exe = "/bin/testapp";
     let file = get_root()
         .unwrap()
         .lookup(Path::new(exe))
@@ -103,10 +105,12 @@ pub fn arch_main() {
         .as_file()
         .unwrap()
         .clone();
-    let console = get_root().unwrap().lookup_path(Path::new("/dev/tty"), true).unwrap();
-    sched.enqueue(Task::new_init(file, console, &[&[]], &[&[]]).unwrap());
+
+    tty::init();
+    sched.enqueue(Task::new_init(file, &[exe.as_bytes()], &[&[]]).unwrap());
 
     log::info!("Welcome to K4DOS!");
+    
     loop {
         interrupts::enable_and_hlt();
         interrupts::disable();

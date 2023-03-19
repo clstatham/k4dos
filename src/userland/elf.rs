@@ -159,10 +159,7 @@ impl<'a> ElfLoader for KadosElfLoader<'a> {
         // let area_start = area.start_address();
         // let offset = region_start - area_start;
         // this should be safe since the pages should already be mapped in allocate()
-        region_start
-            .as_bytes_mut(region.len())
-            .unwrap()
-            .copy_from_slice(region);
+        region_start.write_bytes(region).unwrap();
         Ok(())
     }
 

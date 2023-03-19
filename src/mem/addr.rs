@@ -1,6 +1,7 @@
 use bit_field::BitField;
 
 use core::fmt::{self, *};
+use core::mem::align_of;
 use core::ops::*;
 
 use crate::kerrmsg;
@@ -172,11 +173,11 @@ impl VirtAddr {
     }
 
     pub fn read_ok<T: Sized>(&self) -> KResult<()> {
-        let ptr = self.as_ptr::<T>();
-        if ptr.is_null() {
+        // let ptr = self.as_ptr::<T>();
+        if self.addr == 0 {
             return Err(kerrmsg!("Attempt to read null VirtAddr"));
         }
-        if !ptr.is_aligned() {
+        if self.addr % align_of::<T>() != 0 {
             return Err(kerrmsg!("Attempt to read unaligned VirtAddr"));
         }
 
@@ -193,14 +194,37 @@ impl VirtAddr {
         Ok(unsafe { &mut *(self.as_mut_ptr()) })
     }
 
-    pub fn as_bytes(&self, read_len: usize) -> KResult<&[u8]> {
-        self.read_ok::<&[u8]>()?;
-        Ok(unsafe { core::slice::from_raw_parts(self.as_ptr(), read_len) })
+    pub fn read_bytes(&self, buf: &mut [u8]) -> KResult<usize> {
+        self.read_ok::<u8>()?;
+        unsafe { core::ptr::copy(self.as_ptr(), buf.as_mut_ptr(), buf.len()) };
+        Ok(buf.len())
     }
 
-    pub fn as_bytes_mut(&self, read_len: usize) -> KResult<&mut [u8]> {
-        self.read_ok::<&[u8]>()?;
-        Ok(unsafe { core::slice::from_raw_parts_mut(self.as_mut_ptr(), read_len) })
+    pub fn write<T: Sized>(&self, t: T) -> KResult<()> {
+        if self.addr == 0 {
+            return Err(kerrmsg!("Attempt to write to null VirtAddr"))
+        }
+        if self.addr % align_of::<T>() != 0 {
+            return Err(kerrmsg!("Attempt to write to unaligned VirtAddr"))
+        }
+        unsafe { core::ptr::write(self.as_mut_ptr(), t) };
+        Ok(())
+    }
+
+    pub fn write_bytes(&self, bytes: &[u8]) -> KResult<usize> {
+        if self.addr == 0 {
+            return Err(kerrmsg!("Attempt to write to null VirtAddr"))
+        }
+        unsafe { core::slice::from_raw_parts_mut(self.as_mut_ptr(), bytes.len()).copy_from_slice(bytes) };
+        Ok(bytes.len())
+    }
+
+    pub fn fill(&mut self, value: u8, len: usize) -> KResult<usize> {
+        if self.addr == 0 {
+            return Err(kerrmsg!("Attempt to write to null VirtAddr"))
+        }
+        unsafe { (self.value() as *mut u8).write_bytes(value, len) };
+        Ok(len)
     }
 
     #[inline]

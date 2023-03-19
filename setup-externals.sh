@@ -53,6 +53,9 @@ if [[ $@ =~ "makeimg" ]];
 then
     cd $STARTDIR
     mkdir -p initramfs/busybox_fs
+    cd testapp
+    make
+    cd $STARTDIR
     cd initramfs/busybox_fs
     rm -f ../initramfs_busybox
     cp -r $BUSYBOXDIR/_install/* ./

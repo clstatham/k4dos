@@ -25,6 +25,7 @@ rustc-demangle = "0.1.21"
 arrayvec = { version = "0.7.2", default-features = false }
 x2apic = "0.4.2"
 elfloader = "0.16.0"
+bitvec = { version = "1.0.1", default-features = false }
 
 [dependencies.lazy_static]
 version = "1.4.0"

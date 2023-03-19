@@ -4,11 +4,13 @@ use crate::{
     errno,
     mem::addr::VirtAddr,
     task::{get_scheduler, Task},
-    util::{errno::Errno, KResult},
+    util::{errno::Errno, KResult}, fs::opened_file::FileDesc,
 };
 
 pub mod arch_prctl;
 pub mod set_tid_address;
+pub mod write;
+pub mod writev;
 
 #[repr(packed)]
 #[derive(Default, Clone)]
@@ -78,6 +80,8 @@ impl<'a> SyscallHandler<'a> {
         let res = match n {
             SYS_ARCH_PRCTL => self.sys_arch_prctl(a1 as i32, VirtAddr::new(a2)),
             SYS_SET_TID_ADDRESS => self.sys_set_tid_address(VirtAddr::new(a1)),
+            SYS_WRITE => self.sys_write(a1 as FileDesc, VirtAddr::new(a2), a3),
+            SYS_WRITEV => self.sys_writev(a1 as FileDesc, VirtAddr::new(a2), a3),
             _ => Err(errno!(Errno::ENOSYS)),
         };
         // }

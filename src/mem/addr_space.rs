@@ -1,17 +1,17 @@
 use x86_64::{
     registers::control::{Cr3, Cr3Flags},
-    structures::paging::PhysFrame,
+    structures::paging::{PhysFrame, PageTableFlags},
 };
 
 use crate::util::KResult;
 
 use super::{
-    addr::PhysAddr,
+    addr::{PhysAddr, VirtAddr},
     allocator::alloc_kernel_frames,
     paging::{
         mapper::Mapper,
         table::{active_table, PageTable},
-        units::{AllocatedFrames, Frame, FrameRange},
+        units::{AllocatedFrames, Frame, FrameRange, Page},
     },
 };
 
@@ -22,7 +22,7 @@ pub struct AddressSpace {
 impl AddressSpace {
     pub fn new() -> KResult<Self> {
         let cr3 = unsafe {
-            let frame =alloc_kernel_frames(1)?;
+            let frame = alloc_kernel_frames(1)?;
             let phys_addr = frame.start_address();
             let virt_addr = phys_addr.as_hhdm_virt();
 
@@ -38,6 +38,17 @@ impl AddressSpace {
             for i in 256..512 {
                 page_table[i] = active_table[i];
             }
+
+            // let mut mapper = Mapper::new(page_table);
+            // mapper.map_to_single(Page::containing_address(VirtAddr::new(0x29000)), Frame::containing_address(PhysAddr::new(0x29000)), PageTableFlags::PRESENT | PageTableFlags::WRITABLE).unwrap();
+            // mapper.map_to_single(Page::containing_address(VirtAddr::new(0x3b000)), Frame::containing_address(PhysAddr::new(0x3b000)), PageTableFlags::PRESENT | PageTableFlags::WRITABLE).unwrap();
+            // mapper.map_to_single(Page::containing_address(VirtAddr::new(0x35000)), Frame::containing_address(PhysAddr::new(0x35000)), PageTableFlags::PRESENT | PageTableFlags::WRITABLE).unwrap();
+            // mapper.map_to_single(Page::containing_address(VirtAddr::new(0x3ef95000)), Frame::containing_address(PhysAddr::new(0x3ef95000)), PageTableFlags::PRESENT | PageTableFlags::WRITABLE).unwrap();
+            // mapper.map_to_single(Page::containing_address(VirtAddr::new(0x3ef94000)), Frame::containing_address(PhysAddr::new(0x3ef94000)), PageTableFlags::PRESENT | PageTableFlags::WRITABLE).unwrap();
+            // mapper.map_to_single(Page::containing_address(VirtAddr::new(0x3ef93000)), Frame::containing_address(PhysAddr::new(0x3ef93000)), PageTableFlags::PRESENT | PageTableFlags::WRITABLE).unwrap();
+            // mapper.map_to_single(Page::containing_address(VirtAddr::new(0x3ef92000)), Frame::containing_address(PhysAddr::new(0x3ef92000)), PageTableFlags::PRESENT | PageTableFlags::WRITABLE).unwrap();
+            
+            // page_table[0] = active_table[0];
 
             frame
         };

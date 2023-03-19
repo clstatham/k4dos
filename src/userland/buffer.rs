@@ -66,8 +66,9 @@ impl<'a> UserBuffer<'a> {
             Inner::Slice(src) => buffer[..len].copy_from_slice(&src[offset..(offset + len)]),
             Inner::User { base, .. } => {
                 // buffer[..len].copy_from_slice(core::slice::from_raw_parts(base.as_ptr(), len));
-                buffer[..len]
-                    .copy_from_slice(base.as_bytes(len).map_err(|_e| errno!(Errno::EINVAL))?);
+                // buffer[..len]
+                //     .copy_from_slice(base.as_bytes(len).map_err(|_e| errno!(Errno::EINVAL))?);
+                base.read_bytes(&mut buffer[..len])?;
             }
         }
         Ok(len)
@@ -225,12 +226,12 @@ impl<'a> UserBufferReader<'a> {
                 dst[..read_len].copy_from_slice(&src[self.pos..(self.pos + read_len)])
             }
             Inner::User { base, .. } => {
-                // base.add(self.pos).read_bytes(&mut dst[..read_len])?;
-                dst[..read_len].copy_from_slice(
-                    base.add(self.pos)
-                        .as_bytes(read_len)
-                        .map_err(|_e| errno!(Errno::EINVAL))?,
-                )
+                base.add(self.pos).read_bytes(&mut dst[..read_len])?;
+                // dst[..read_len].copy_from_slice(
+                //     base.add(self.pos)
+                //         .as_bytes(read_len)
+                //         .map_err(|_e| errno!(Errno::EINVAL))?,
+                // )
             }
         }
 
@@ -313,11 +314,11 @@ impl<'a> UserBufferWriter<'a> {
                 dst[self.pos..(self.pos + copy_len)].copy_from_slice(&src[..copy_len]);
             }
             InnerMut::User { base, .. } => {
-                // base.add(self.pos).write_bytes(&src[..copy_len])?;
-                base.add(self.pos)
-                    .as_bytes_mut(copy_len)
-                    .map_err(|_e| errno!(Errno::EINVAL))?
-                    .copy_from_slice(&src[..copy_len])
+                base.add(self.pos).write_bytes(&src[..copy_len])?;
+                // base.add(self.pos)
+                //     .as_bytes_mut(copy_len)
+                //     .map_err(|_e| errno!(Errno::EINVAL))?
+                //     .copy_from_slice(&src[..copy_len])
             }
         }
 
@@ -340,11 +341,11 @@ impl<'a> UserBufferWriter<'a> {
                 dst[self.pos..(self.pos + len)].fill(value);
             }
             InnerMut::User { base, .. } => {
-                // base.add(self.pos).fill(value, len)?;
-                base.add(self.pos)
-                    .as_bytes_mut(len)
-                    .map_err(|_e| errno!(Errno::EINVAL))?
-                    .fill(value)
+                base.add(self.pos).fill(value, len)?;
+                // base.add(self.pos)
+                //     .as_bytes_mut(len)
+                //     .map_err(|_e| errno!(Errno::EINVAL))?
+                //     .fill(value)
             }
         }
 

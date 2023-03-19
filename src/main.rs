@@ -28,9 +28,7 @@ pub mod util;
 use core::sync::atomic::AtomicUsize;
 
 use mem::addr::VirtAddr;
-use x86_64::instructions::{hlt, interrupts};
-
-use crate::task::get_scheduler;
+use x86_64::instructions::hlt;
 
 pub static PHYSICAL_OFFSET: AtomicUsize = AtomicUsize::new(0);
 

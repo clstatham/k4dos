@@ -32,7 +32,7 @@ use crate::{
         addr_space::AddressSpace,
         consts::{KERNEL_STACK_SIZE, PAGE_SIZE, USER_STACK_BOTTOM, USER_STACK_TOP},
     },
-    task::vmem::Vmem,
+    task::{vmem::Vmem, signal::Signal},
     userland::elf::{self, AuxvType},
     util::{stack::Stack, KResult},
 };
@@ -371,5 +371,18 @@ impl ArchTask {
         unsafe {
             wrmsr(IA32_FS_BASE, addr.value() as u64);
         }
+    }
+
+    pub fn setup_signal_stack(&mut self, frame: &mut InterruptFrame, signal: Signal, handler: VirtAddr) -> KResult<()> {
+        todo!("Signal stack")
+    }
+
+
+    pub fn setup_sigreturn_stack(
+        &self,
+        current_frame: &mut InterruptFrame,
+        signaled_frame: &InterruptFrame,
+    ) {
+        *current_frame = signaled_frame.clone();
     }
 }

@@ -14,6 +14,7 @@ use self::{opened_file::OpenOptions, path::PathBuf};
 pub mod initramfs;
 pub mod opened_file;
 pub mod path;
+pub mod tty;
 
 pub type FileRef = Arc<dyn File + Send + Sync>;
 pub type DirRef = Arc<dyn Directory + Send + Sync>;
