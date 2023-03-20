@@ -172,13 +172,14 @@ impl LineDiscipline {
                             current_line.clear();
                             if termios.lflag.contains(LFlag::ECHO) {
                                 callback(LineControl::Echo(b'\r'));
-                                // callback(LineControl::Echo(b'\n'));
+                                callback(LineControl::Echo(b'\n'));
                             }
                         }
                     }
                     b'\n' => {
                         current_line.push(b'\n');
                         // vga_print!("\n");
+                        // serial1_println!();
                         ringbuf.push_slice(current_line.as_slice());
                         current_line.clear();
                         if termios.lflag.contains(LFlag::ECHO) {

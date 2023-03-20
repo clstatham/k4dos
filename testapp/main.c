@@ -4,5 +4,5 @@
 
 void main(void) {
     puts("I'm a user mode process written in C!\n");
-    for (;;) {}
+    exit(0);
 }

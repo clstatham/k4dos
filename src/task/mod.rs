@@ -151,7 +151,7 @@ impl Task {
         // stderr
         files.open_with_fd(2, Arc::new(OpenedFile::new(console.clone(), OpenFlags::O_WRONLY.into(), 0)), OpenOptions::empty())?;
         let group = sched.find_or_create_group(1);
-        let (arch, vmem) = ArchTask::new_init(file, argv, envp)?;
+        let (arch, vmem) = ArchTask::new_binary(file, argv, envp)?;
         let t = Arc::new_cyclic(|sref| Self {
             sref: sref.clone(),
             arch: UnsafeCell::new(arch),
@@ -169,6 +169,19 @@ impl Task {
         group.lock().add(Arc::downgrade(&t));
         TTY.get().unwrap().set_foreground_process_group(Arc::downgrade(&group));
         Ok(t)
+    }
+
+    pub fn exec(&self, file: FileRef, argv: &[&[u8]], envp: &[&[u8]]) -> KResult<()> {
+        {   
+            self.opened_files.lock().close_cloexec_files();
+            self.vmem.lock().clear(&mut self.arch_mut().address_space.mapper());
+            *self.signals.lock() = SignalDelivery::new();
+            *self.sigset.lock() = SigSet::ZERO;
+            self.signaled_frame.store(None);
+        }
+        let lock = &mut self.vmem.lock();
+        unsafe { self.vmem.force_unlock() };
+        self.arch_mut().exec(lock, file, argv, envp)
     }
 
     pub fn make_child(&self, arch: UnsafeCell<ArchTask>) -> Arc<Task> {

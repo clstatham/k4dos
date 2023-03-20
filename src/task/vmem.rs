@@ -149,6 +149,9 @@ impl Vmem {
     pub fn unmap_area(&mut self, id: VmemAreaId, active_mapper: &mut Mapper) {
         for mp in self.mp.get_mut(&id).unwrap().iter_mut() {
             active_mapper.unmap(mp);
+            unsafe {
+                self.page_allocator.insert_free_region(**mp.pages());
+            }
         }
         self.areas.remove(&id);
         self.mp.remove(&id);

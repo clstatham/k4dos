@@ -159,14 +159,29 @@ impl<'a> UserBufferMut<'a> {
 
         Ok(len)
     }
-
-    fn flush(&mut self) -> KResult<()> {
-        Ok(())
-    }
 }
 
-extern "C" {
-    pub fn user_strncpy(dst: *mut u8, src: *const u8, max_len: usize) -> usize;
+unsafe extern "C" fn user_strncpy(dst: *mut u8, src: *const u8, max_len: usize) -> usize {
+    let out: usize;
+    core::arch::asm!("
+        mov rcx, rdx
+        test rcx, rcx
+        jz 2f
+    3:
+        mov al, [rsi]
+
+        test al, al
+        jz 2f
+
+        mov [rdi], al
+        add rdi, 1
+        add rsi, 1
+        loop 3b
+    2:
+        sub rdx, rcx
+        mov {}, rdx
+    ", out(reg) out);
+    out
 }
 
 pub struct UserCStr {

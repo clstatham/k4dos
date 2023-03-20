@@ -4,8 +4,10 @@ use crate::{
     errno,
     mem::addr::VirtAddr,
     task::{get_scheduler, Task, current_task, TaskId},
-    util::{errno::Errno, KResult}, fs::opened_file::FileDesc, userland::syscall::wait4::WaitOptions,
+    util::{errno::Errno, KResult}, fs::{opened_file::FileDesc, path::{PathBuf, Path}}, userland::syscall::wait4::WaitOptions,
 };
+
+use super::buffer::UserCStr;
 
 pub mod arch_prctl;
 pub mod set_tid_address;
@@ -16,6 +18,7 @@ pub mod ioctl;
 pub mod rt_sigprocmask;
 pub mod fork;
 pub mod wait4;
+pub mod execve;
 
 #[repr(packed)]
 #[derive(Default, Clone, Debug)]
@@ -87,6 +90,10 @@ impl<'a> SyscallHandler<'a> {
             SYS_RT_SIGPROCMASK => self.sys_rt_sigprocmask(a1, VirtAddr::new(a2), VirtAddr::new(a3), a4),
             SYS_FORK => self.sys_fork(),
             SYS_WAIT4 => self.sys_wait4(TaskId::new(a1), VirtAddr::new(a2), crate::bitflags_from_user!(WaitOptions, a3 as i32)?, VirtAddr::new(a4)),
+            SYS_EXECVE => self.sys_execve(&resolve_path(a1)?, VirtAddr::new(a2), VirtAddr::new(a3)),
+            SYS_GETTID => self.sys_getpid(), // todo
+            SYS_GETPID => self.sys_getpid(),
+
             _ => Err(errno!(Errno::ENOSYS)),
         };
         // }
@@ -107,6 +114,10 @@ macro_rules! bitflags_from_user {
             $crate::errno!($crate::util::errno::Errno::ENOSYS)
         })
     }};
+}
+
+fn resolve_path(uaddr: usize) -> KResult<PathBuf> {
+    Ok(Path::new(UserCStr::new(VirtAddr::new(uaddr), 512)?.as_str()).into())
 }
 
 fn syscall_name_by_number(n: usize) -> &'static str {
