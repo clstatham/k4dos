@@ -1,5 +1,5 @@
 
-use core::alloc::Layout;
+use core::{alloc::Layout, slice::SlicePattern};
 
 use alloc::{alloc::alloc_zeroed, boxed::Box, vec::Vec};
 use x86::{
@@ -7,7 +7,7 @@ use x86::{
     current::segmentation::swapgs,
     msr::{rdmsr, wrmsr, IA32_FS_BASE, IA32_GS_BASE},
     segmentation::SegmentSelector,
-    Ring, cpuid::CpuId,
+    Ring, cpuid::CpuId, tlb,
 };
 use x86_64::structures::paging::PageTableFlags;
 
@@ -19,7 +19,7 @@ use crate::{
         consts::{KERNEL_STACK_SIZE, PAGE_SIZE, USER_STACK_BOTTOM, USER_STACK_TOP}, allocator::alloc_kernel_frames,
     },
     task::{vmem::Vmem, signal::Signal, get_scheduler},
-    userland::elf::{self, AuxvType},
+    userland::{elf::{self, AuxvType}, syscall::SyscallFrame},
     util::{stack::Stack, KResult},
 };
 
@@ -89,7 +89,6 @@ unsafe extern "C" fn iretq_init() -> ! {
         crate::pop_regs!(),
         "
     
-    // sti
     iretq
     ",
         options(noreturn)
@@ -98,32 +97,15 @@ unsafe extern "C" fn iretq_init() -> ! {
 
 #[naked]
 unsafe extern "C" fn fork_init() -> ! {
-    core::arch::asm!(
+    core::arch::asm!(concat!(
         "
         cli
 
-        add rsp, 8
-
-        pop r15
-        pop r14
-        pop r13
-        pop r12
-        pop rbp
-        pop rbx
-        
-        pop r11
-        pop r10
-        pop r9
-        pop r8
-        pop rsi
-        pop rdi
-        pop rdx
-        pop rcx
-        pop rax
+        ", crate::pop_regs!(), "
 
         swapgs
         iretq
-    ",
+    "),
         options(noreturn)
     )
 }
@@ -285,14 +267,11 @@ unsafe extern "C" fn enter_usermode() -> ! {
 #[repr(C)]
 pub struct ArchTask {
     context: core::ptr::Unique<Context>,
-    // pub(super) rsp: u64,
-    // pub(super) fsbase: AtomicCell<u64>,
     kernel_stack: Box<[u8]>,
     user: bool,
     pub(crate) address_space: AddressSpace,
     fsbase: VirtAddr,
-    pub(crate) gsbase: VirtAddr,
-
+    gsbase: VirtAddr,
     fpu_storage: Option<Box<[u8]>>,
 }
 
@@ -465,12 +444,7 @@ impl ArchTask {
         assert_eq!(stack.top() % 16, 0);
 
         kframe.rsp = stack.top();
-        let fpu_storage = unsafe {
-            let xsave_size = CpuId::new().get_extended_state_info().unwrap().xsave_size();
-            let layout = Layout::from_size_align(xsave_size as usize, 8).unwrap();
-            let ptr = alloc_zeroed(layout);
-            Box::from_raw(core::ptr::slice_from_raw_parts_mut(ptr, 512))
-        };
+        let fpu_storage = Self::alloc_fpu_storage();
         current.switch();
         Ok(Self {
             context: unsafe { core::ptr::Unique::new_unchecked(context) },
@@ -482,6 +456,75 @@ impl ArchTask {
             // gsbase: VirtAddr::null(),
             fpu_storage: Some(fpu_storage)
         })
+    }
+
+    pub fn fork(&self, syscall_frame: &SyscallFrame) -> KResult<Self> {
+        assert!(self.user, "Cannot fork a kernel task");
+
+        let address_space = AddressSpace::current().fork(true)?;
+        unsafe { tlb::flush_all() };
+
+        let switch_stack = Self::alloc_switch_stack()?.as_mut_ptr::<u8>();
+        // let mut old_rsp = unsafe { self.context.as_ref().rsp };
+        // let mut old_stack = Stack::new(&mut old_rsp);
+
+        let mut new_rsp = switch_stack as usize;
+        let mut new_stack = Stack::new(&mut new_rsp);
+
+        unsafe {
+            let new_frame = new_stack.offset::<InterruptFrame>();
+            // let old_frame = old_stack.offset::<InterruptFrame>();
+            log::debug!("Old frame: {:#x?}", syscall_frame);
+            // *new_frame = *old_frame;
+            new_frame.cs = syscall_frame.cs as u64;
+            new_frame.r10 = syscall_frame.r10 as u64;
+            new_frame.r11 = syscall_frame.r11 as u64;
+            new_frame.r12 = syscall_frame.r12 as u64;
+            new_frame.r13 = syscall_frame.r13 as u64;
+            new_frame.r14 = syscall_frame.r14 as u64;
+            new_frame.r15 = syscall_frame.r15 as u64;
+            new_frame.r8 = syscall_frame.r8 as u64;
+            new_frame.r9 = syscall_frame.r9 as u64;
+            new_frame.rbp = syscall_frame.rbp as u64;
+            new_frame.rbx = syscall_frame.rbx as u64;
+            new_frame.rcx = syscall_frame.rcx as u64;
+            new_frame.rdi = syscall_frame.rdi as u64;
+            new_frame.rsi = syscall_frame.rsi as u64;
+            new_frame.ss = syscall_frame.ss as u64;
+            new_frame.rsp = syscall_frame.rsp as u64;
+            new_frame.rip = syscall_frame.rip as u64;
+
+            new_frame.rax = 0x0; // fork return value
+
+            new_stack.push(fork_init as usize);
+        }
+        let kframe_rsp = new_stack.top();
+
+        let context = unsafe { new_stack.offset::<Context>() };
+        *context = unsafe{ self.context.as_ref() }.clone();
+        // *context = Context::default();
+        context.rsp = kframe_rsp;
+        let mut fpu_storage = Self::alloc_fpu_storage();
+        fpu_storage.copy_from_slice(self.fpu_storage.as_ref().unwrap().as_slice());
+        Ok(Self {
+            context: unsafe { core::ptr::Unique::new_unchecked(context) },
+            address_space,
+            user: true,
+            kernel_stack: alloc::vec![0u8; KERNEL_STACK_SIZE].into_boxed_slice(),
+            fsbase: self.fsbase,
+            gsbase: self.gsbase,
+            fpu_storage: Some(fpu_storage)
+        })
+        
+    }
+
+    fn alloc_fpu_storage() -> Box<[u8]> {
+        unsafe {
+            let xsave_size = CpuId::new().get_extended_state_info().unwrap().xsave_size();
+            let layout = Layout::from_size_align(xsave_size as usize, 8).unwrap();
+            let ptr = alloc_zeroed(layout);
+            Box::from_raw(core::ptr::slice_from_raw_parts_mut(ptr, xsave_size as usize))
+        }
     }
 
     fn alloc_switch_stack() -> KResult<VirtAddr> {

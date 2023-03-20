@@ -13,7 +13,7 @@ use crate::{
             units::{MappedPages, Page, PageRange},
         },
     },
-    util::KResult,
+    util::KResult, task::current_task,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -160,6 +160,13 @@ impl Vmem {
         }
     }
 
+    pub fn fork_from(&mut self, parent: &Vmem) {
+        self.areas = parent.areas.clone();
+        self.mp = parent.mp.clone();
+        self.page_allocator = parent.page_allocator.clone();
+        self.next_id.store(parent.next_id.load(core::sync::atomic::Ordering::Acquire), core::sync::atomic::Ordering::Release);
+    }
+
     pub fn handle_page_fault(
         &mut self,
         active_mapper: &mut Mapper,
@@ -168,6 +175,7 @@ impl Vmem {
         reason: PageFaultErrorCode,
     ) {
         log::warn!("User page fault at {:?}!", instruction_pointer);
+        log::warn!("PID: {}", current_task().pid().as_usize());
         log::warn!("Faulted address: {:?}", faulted_addr);
         log::warn!("Reason: {:?}", reason);
         if faulted_addr.align_down(PAGE_SIZE) == VirtAddr::null() {

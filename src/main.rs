@@ -8,7 +8,8 @@
     naked_functions,
     asm_const,
     ptr_internals,
-    const_refs_to_cell
+    const_refs_to_cell,
+    slice_pattern
 )]
 
 extern crate alloc;

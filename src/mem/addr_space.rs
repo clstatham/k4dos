@@ -12,7 +12,7 @@ use super::{
         mapper::Mapper,
         table::{active_table, PageTable},
         units::{AllocatedFrames, Frame, FrameRange, Page},
-    },
+    }, consts::PAGE_TABLE_ENTRIES,
 };
 
 pub struct AddressSpace {
@@ -85,5 +85,67 @@ impl AddressSpace {
 
     pub fn mapper(&mut self) -> Mapper {
         unsafe { Mapper::new(&mut *self.cr3.start_address().as_hhdm_virt().as_mut_ptr()) }
+    }
+
+    pub fn is_active(&self) -> bool {
+        self.cr3.start_address().value() == Cr3::read().0.start_address().as_u64() as usize
+    }
+
+    pub fn fork(&mut self, set_cow: bool) -> KResult<AddressSpace> {
+        assert!(self.is_active(), "Can only fork the active address space");
+        let mut new = AddressSpace::new()?;
+
+        let mut my_mapper = self.mapper();
+        let my_p4 = my_mapper.p4();
+        let mut new_mapper = new.mapper();
+        let new_p4 = new_mapper.p4();
+
+        let mut insert_flags = PageTableFlags::PRESENT | PageTableFlags::USER_ACCESSIBLE;
+
+        if !set_cow {
+            insert_flags |= PageTableFlags::WRITABLE;
+        }
+
+        for p4_idx in 0..256 {
+            let my_entry = &my_p4[p4_idx];
+            if my_entry.is_unused() {
+                continue;
+            }
+            let my_p3 = my_p4.next_table(p4_idx).unwrap();
+            let new_p3 = new_p4.next_table_create(p4_idx, insert_flags)?;
+            for p3_idx in 0..PAGE_TABLE_ENTRIES {
+                let my_entry = &my_p3[p3_idx];
+                if my_entry.is_unused() {
+                    continue;
+                }
+                let my_p2 = my_p3.next_table(p3_idx).unwrap();
+                let new_p2 = new_p3.next_table_create(p3_idx, insert_flags)?;
+
+                for p2_idx in 0..PAGE_TABLE_ENTRIES {
+                    let my_entry = &my_p2[p2_idx];
+                    if my_entry.is_unused() {
+                        continue;
+                    }
+                    let my_p1 = my_p2.next_table(p2_idx).unwrap();
+                    let new_p1 = new_p2.next_table_create(p2_idx, insert_flags)?;
+
+                    for p1_idx in 0..PAGE_TABLE_ENTRIES {
+                        let my_entry = &my_p1[p1_idx];
+                        if my_entry.is_unused() {
+                            continue;
+                        }
+                        let mut flags = my_entry.flags();
+
+                        if set_cow {
+                            flags.remove(PageTableFlags::WRITABLE);
+                        }
+                        
+                        new_p1[p1_idx].set_frame(my_entry.frame().unwrap(), flags);
+                    }
+                }
+            }
+        }
+
+        Ok(new)
     }
 }

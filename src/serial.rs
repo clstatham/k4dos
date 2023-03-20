@@ -70,7 +70,7 @@ pub fn _print1(args: ::core::fmt::Arguments) {
 #[inline]
 pub fn serial1_recv() -> Option<u8> {
     // x86_64::instructions::interrupts::without_interrupts(|| {
-    SERIAL1.lock();
+    // SERIAL1.lock();
 
     unsafe {
         let line_sts = inb(SERIAL1_IOPORT + 5);

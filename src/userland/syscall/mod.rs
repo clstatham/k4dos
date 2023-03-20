@@ -3,8 +3,8 @@ use alloc::sync::Arc;
 use crate::{
     errno,
     mem::addr::VirtAddr,
-    task::{get_scheduler, Task, current_task},
-    util::{errno::Errno, KResult}, fs::opened_file::FileDesc,
+    task::{get_scheduler, Task, current_task, TaskId},
+    util::{errno::Errno, KResult}, fs::opened_file::FileDesc, userland::syscall::wait4::WaitOptions,
 };
 
 pub mod arch_prctl;
@@ -13,9 +13,12 @@ pub mod write;
 pub mod writev;
 pub mod read;
 pub mod ioctl;
+pub mod rt_sigprocmask;
+pub mod fork;
+pub mod wait4;
 
 #[repr(packed)]
-#[derive(Default, Clone)]
+#[derive(Default, Clone, Debug)]
 pub struct SyscallFrame {
     // preserved registers
     pub r15: usize,
@@ -36,11 +39,11 @@ pub struct SyscallFrame {
     pub rcx: usize,
     pub rax: usize,
     // // iret regs
-    // pub rip: usize,
-    // pub cs: usize,
-    // pub rflags: usize,
-    // pub rsp: usize,
-    // pub ss: usize,
+    pub rip: usize,
+    pub cs: usize,
+    pub rflags: usize,
+    pub rsp: usize,
+    pub ss: usize,
 }
 
 pub struct SyscallHandler<'a> {
@@ -81,11 +84,29 @@ impl<'a> SyscallHandler<'a> {
             SYS_WRITEV => self.sys_writev(a1 as FileDesc, VirtAddr::new(a2), a3),
             SYS_READ => self.sys_read(a1 as FileDesc, VirtAddr::new(a2), a3),
             SYS_IOCTL => self.sys_ioctl(a1 as FileDesc, a2, a3),
+            SYS_RT_SIGPROCMASK => self.sys_rt_sigprocmask(a1, VirtAddr::new(a2), VirtAddr::new(a3), a4),
+            SYS_FORK => self.sys_fork(),
+            SYS_WAIT4 => self.sys_wait4(TaskId::new(a1), VirtAddr::new(a2), crate::bitflags_from_user!(WaitOptions, a3 as i32)?, VirtAddr::new(a4)),
             _ => Err(errno!(Errno::ENOSYS)),
         };
         // }
         res
     }
+}
+
+#[macro_export]
+macro_rules! bitflags_from_user {
+    ($st:tt, $input:expr) => {{
+        let bits = $input;
+        $st::from_bits(bits).ok_or_else(|| {
+            log::warn!(
+                concat!("unsupported bitflags for ", stringify!($st), ": {:x}"),
+                bits
+            );
+
+            $crate::errno!($crate::util::errno::Errno::ENOSYS)
+        })
+    }};
 }
 
 fn syscall_name_by_number(n: usize) -> &'static str {

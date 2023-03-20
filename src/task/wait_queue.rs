@@ -47,6 +47,7 @@ impl WaitQueue {
                     .retain(|proc| !Arc::ptr_eq(proc, &current));
                 return Err(errno!(Errno::EINTR));
             }
+            drop(scheduler);
 
             let ret_value = match sleep_if_none() {
                 Ok(Some(ret_val)) => Some(Ok(ret_val)),
@@ -54,6 +55,7 @@ impl WaitQueue {
                 Err(err) => Some(Err(err)),
             };
 
+            let scheduler = get_scheduler().lock();
             if let Some(ret_val) = ret_value {
                 scheduler.resume_task(current.clone());
                 self.queue

@@ -13,10 +13,10 @@ use crate::{
     arch::{task::ArchTask, idt::InterruptFrame},
     fs::{opened_file::{OpenedFileTable, OpenedFile, OpenFlags, OpenOptions, FileDesc}, FileRef, path::{PathComponent, Path}, initramfs::get_root, tty::TTY},
     mem::addr::VirtAddr,
-    util::{KResult, SpinLock},
+    util::{KResult, SpinLock, errno::Errno, ctypes::c_int}, errno, userland::syscall::SyscallFrame,
 };
 
-use self::{scheduler::Scheduler, vmem::Vmem, signal::{SignalDelivery, SigSet, SignalMask}, group::{TaskGroup, PgId}};
+use self::{scheduler::Scheduler, vmem::Vmem, signal::{SignalDelivery, SigSet, SignalMask}, group::{TaskGroup, PgId}, wait_queue::WaitQueue};
 
 pub mod scheduler;
 pub mod vmem;
@@ -25,9 +25,10 @@ pub mod group;
 pub mod signal;
 
 static SCHEDULER: Once<Arc<SpinLock<Scheduler>>> = Once::new();
-
+pub static JOIN_WAIT_QUEUE: Once<WaitQueue> = Once::new();
 pub fn init() {
     SCHEDULER.call_once(|| Scheduler::new());
+    JOIN_WAIT_QUEUE.call_once(|| WaitQueue::new());
 }
 
 pub fn get_scheduler() -> &'static Arc<SpinLock<Scheduler>> {
@@ -60,9 +61,12 @@ impl TaskId {
 pub enum TaskState {
     Runnable,
     Waiting,
+    ExitedWith(c_int),
 }
 
 pub struct Task {
+    sref: Weak<Task>,
+
     arch: UnsafeCell<ArchTask>,
     state: AtomicCell<TaskState>,
 
@@ -70,8 +74,8 @@ pub struct Task {
 
     opened_files: Arc<SpinLock<OpenedFileTable>>,
 
-    parent: Weak<Task>,
-    children: Arc<SpinLock<Vec<Arc<Task>>>>,
+    parent: SpinLock<Weak<Task>>,
+    pub(crate) children: Arc<SpinLock<Vec<Arc<Task>>>>,
     group: AtomicRefCell<Weak<SpinLock<TaskGroup>>>,
 
     vmem: Arc<SpinLock<Vmem>>,
@@ -87,11 +91,12 @@ impl Task {
     pub fn new_idle(sched: &mut Scheduler) -> Arc<Task> {
         let pid = TaskId::new(0);
         let group = sched.find_or_create_group(0);
-        let t = Arc::new(Self {
+        let t = Arc::new_cyclic(|sref| Self {
+            sref: sref.clone(),
             arch: UnsafeCell::new(ArchTask::new_idle()),
             state: AtomicCell::new(TaskState::Runnable),
             pid,
-            parent: Weak::new(),
+            parent: SpinLock::new(Weak::new()),
             children: Arc::new(SpinLock::new(Vec::new())),
             opened_files: Arc::new(SpinLock::new(OpenedFileTable::new())),
             vmem: Arc::new(SpinLock::new(Vmem::new())),
@@ -107,7 +112,8 @@ impl Task {
     pub fn new_kernel(sched: &mut Scheduler, entry_point: fn(), enable_interrupts: bool) -> Arc<Task> {
         let pid = TaskId::allocate();
         let group = sched.find_or_create_group(0);
-        let t = Arc::new(Self {
+        let t = Arc::new_cyclic(|sref| Self {
+            sref: sref.clone(),
             arch: UnsafeCell::new(ArchTask::new_kernel(
                 VirtAddr::new(entry_point as usize),
                 enable_interrupts,
@@ -115,7 +121,7 @@ impl Task {
             group: AtomicRefCell::new(Arc::downgrade(&group)),
             state: AtomicCell::new(TaskState::Runnable),
             pid,
-            parent: Weak::new(),
+            parent: SpinLock::new(Weak::new()),
             children: Arc::new(SpinLock::new(Vec::new())),
             opened_files: Arc::new(SpinLock::new(OpenedFileTable::new())),
             vmem: Arc::new(SpinLock::new(Vmem::new())),
@@ -145,11 +151,13 @@ impl Task {
         // stderr
         files.open_with_fd(2, Arc::new(OpenedFile::new(console.clone(), OpenFlags::O_WRONLY.into(), 0)), OpenOptions::empty())?;
         let group = sched.find_or_create_group(1);
-        let t = Arc::new(Self {
-            arch: UnsafeCell::new(ArchTask::new_init(file, argv, envp)?),
+        let arch = ArchTask::new_init(file, argv, envp)?;
+        let t = Arc::new_cyclic(|sref| Self {
+            sref: sref.clone(),
+            arch: UnsafeCell::new(arch),
             state: AtomicCell::new(TaskState::Runnable),
             pid,
-            parent: Weak::new(),
+            parent: SpinLock::new(Weak::new()),
             group: AtomicRefCell::new(Arc::downgrade(&group)),
             children: Arc::new(SpinLock::new(Vec::new())),
             opened_files: Arc::new(SpinLock::new(files)),
@@ -161,6 +169,43 @@ impl Task {
         group.lock().add(Arc::downgrade(&t));
         TTY.get().unwrap().set_foreground_process_group(Arc::downgrade(&group));
         Ok(t)
+    }
+
+    pub fn make_child(&self, arch: UnsafeCell<ArchTask>) -> Arc<Task> {
+        let pid = TaskId::allocate();
+
+        let group = self.group.borrow().upgrade().unwrap();
+        let new = Arc::new_cyclic(|sref| Self {
+            sref: sref.clone(),
+            arch,
+            opened_files: Arc::new(SpinLock::new(self.opened_files.lock().clone())), // todo: deeper clone
+            children: Arc::new(SpinLock::new(Vec::new())),
+            parent: SpinLock::new(Weak::new()),
+            group: AtomicRefCell::new(Arc::downgrade(&group)),
+            state: AtomicCell::new(TaskState::Runnable),
+            pid,
+            vmem: Arc::new(SpinLock::new(Vmem::new())),
+            signals: Arc::new(SpinLock::new(SignalDelivery::new())),
+            signaled_frame: AtomicCell::new(None),
+            sigset: Arc::new(SpinLock::new(SigSet::ZERO)),
+        });
+        self.add_child(new.clone());
+        new.signals.lock().clone_from(&self.signals.lock());
+        new.vmem.lock().fork_from(&self.vmem.lock());
+        group.lock().add(Arc::downgrade(&new));
+        get_scheduler().lock().enqueue(new.clone());
+        new
+    }
+
+    pub fn fork(&self, frame: &SyscallFrame) -> Arc<Task> {
+        let arch = UnsafeCell::new(self.arch_mut().fork(frame).unwrap());
+        self.make_child(arch)
+    }
+
+    fn add_child(&self, child: Arc<Task>) {
+        let mut children = self.children.lock();
+        child.set_parent(self.sref.clone());
+        children.push(child);
     }
 
     #[allow(clippy::mut_from_ref)] // FIXME
@@ -178,6 +223,10 @@ impl Task {
 
     pub fn set_state(&self, state: TaskState) {
         self.state.store(state)
+    }
+
+    fn set_parent(&self, parent: Weak<Task>) {
+        *self.parent.lock() = parent;
     }
 
     pub fn belongs_to_group(&self, pg: &Weak<SpinLock<TaskGroup>>) -> bool {
@@ -211,17 +260,22 @@ impl Task {
     ) -> KResult<()> {
         let mut sigset = self.sigset.lock();
         // if let Ok(old) = oldset {
-        oldset.write_bytes(sigset.as_raw_slice())?;
+        if oldset.value() != 0 {
+            oldset.write_bytes(sigset.as_raw_slice()).map_err(|_| errno!(Errno::EINVAL))?;
+        }
+        
         // }
 
         // if let Ok(new) = set {
-            let new_set = set.read::<[u8; 128]>()?;
+        if set.value() != 0 {
+            let new_set = set.read::<[u8; 128]>().map_err(|_| errno!(Errno::EINVAL))?;
             let new_set = SigSet::new(*new_set);
             match how {
                 SignalMask::Block => *sigset |= new_set,
                 SignalMask::Unblock => *sigset &= !new_set,
                 SignalMask::Set => *sigset = new_set,
             }
+        }
         // }
 
         Ok(())

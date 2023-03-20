@@ -114,6 +114,7 @@ pub fn init(memmap: &mut [NonNullPtr<LimineMemmapEntry>]) -> KResult<()> {
     Ok(())
 }
 
+#[derive(Clone)]
 pub enum StaticListOrVec<T: Clone, const STATIC_CAP: usize> {
     StaticList(ArrayVec<T, STATIC_CAP>),
     Vec(Vec<T>),
@@ -205,6 +206,8 @@ impl<T: Clone, const CAP: usize> IndexMut<usize> for StaticListOrVec<T, CAP> {
 
 macro_rules! allocator_impl {
     ($name:ident, $unit:ident, $range:ident, $allocated:ident) => {
+        /// Even though this implements Clone, you should be very careful about cloning allocators.
+        #[derive(Clone)]
         pub struct $name {
             free_chunks: StaticListOrVec<$range, 256>,
         }
@@ -376,7 +379,7 @@ macro_rules! allocator_impl {
                     return;
                 }
                 unsafe {
-                    self.insert_free_region(allocation.clone());
+                    self.insert_free_region(*allocation.clone());
                 }
                 self.merge_contiguous_chunks();
             }

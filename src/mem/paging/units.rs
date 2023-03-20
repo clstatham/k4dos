@@ -301,6 +301,8 @@ impl Debug for PageRange {
 
 macro_rules! allocated_impl {
     ($name:ident, $range:ident) => {
+        /// Even though this implements Clone, you should be very careful about cloning allocations.
+        #[derive(Clone)]
         pub struct $name {
             inner: $range,
         }
@@ -356,6 +358,8 @@ use x86_64::structures::paging::PageTableFlags;
 
 macro_rules! mapped_impl {
     ($name:ident, $ap:ident) => {
+        /// Even though this implements Clone, you should be very careful about cloning mappings.
+        #[derive(Clone)]
         pub struct $name {
             pages: $ap,
             frames: AllocatedFrames,

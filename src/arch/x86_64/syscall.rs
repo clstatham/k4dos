@@ -156,7 +156,7 @@ fn handle_syscall(
             // if let Some(msg) = err.msg {
             log::error!(
                 "Syscall handler returned Err {:?} with msg: {:?}",
-                err.errno().unwrap(),
+                err.errno(),
                 err.msg()
             );
             // }

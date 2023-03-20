@@ -45,7 +45,7 @@ impl Scheduler {
     }
 
     pub fn enqueue(&self, task: Arc<Task>) {
-        // todo: set runnable
+        task.state.store(TaskState::Runnable);
         self.run_queue.lock().push_back(task)
     }
 
@@ -188,6 +188,7 @@ pub fn switch() {
         sched.current_task = None;
         unsafe { sched.run_queue.force_unlock() };
         unsafe { sched_lock.force_unlock() };
+        // log::debug!("Switching from preempt task to idle thread");
         arch_context_switch(sched.preempt_task.as_ref().unwrap().arch_mut(), sched.idle_thread.as_ref().unwrap().arch_mut());
     }
 }
