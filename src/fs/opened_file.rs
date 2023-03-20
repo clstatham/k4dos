@@ -141,6 +141,10 @@ impl OpenedFile {
     pub fn poll(&self) -> KResult<PollStatus> {
         self.as_file()?.poll()
     }
+
+    pub fn ioctl(&self, cmd: usize, arg: usize) -> KResult<isize> {
+        self.as_file()?.ioctl(cmd, arg)
+    }
 }
 
 #[derive(Clone)]

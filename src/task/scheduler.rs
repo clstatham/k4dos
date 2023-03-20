@@ -2,6 +2,8 @@ use alloc::{
     collections::{BTreeMap, VecDeque},
     sync::{Arc, Weak},
 };
+use atomic_refcell::AtomicRefCell;
+use crossbeam_utils::atomic::AtomicCell;
 use x86::current;
 
 use crate::{
@@ -19,29 +21,27 @@ use super::{
 };
 
 pub struct Scheduler {
-    sref: Weak<Self>,
-    run_queue: SpinLock<VecDeque<Arc<Task>>>,
-    idle_thread: Arc<SpinLock<Option<Arc<Task>>>>,
-    preempt_task: Arc<SpinLock<Option<Arc<Task>>>>,
-    current_task: Arc<SpinLock<Option<Arc<Task>>>>,
+    run_queue: Arc<SpinLock<VecDeque<Arc<Task>>>>,
+    idle_thread: Option<Arc<Task>>,
+    preempt_task: Option<Arc<Task>>,
+    current_task: Option<Arc<Task>>,
     pub(super) task_groups: SpinLock<BTreeMap<PgId, Arc<SpinLock<TaskGroup>>>>,
 }
 
 impl Scheduler {
-    pub fn new() -> Arc<Self> {
-        let s = Arc::new_cyclic(|sref| Self {
-            sref: sref.clone(),
-            run_queue: SpinLock::new(VecDeque::new()),
-            idle_thread: Arc::new(SpinLock::new(None)),
-            preempt_task: Arc::new(SpinLock::new(None)),
-            current_task: Arc::new(SpinLock::new(None)),
+    pub fn new() -> Arc<SpinLock<Self>> {
+        let mut s = Self {
+            run_queue: Arc::new(SpinLock::new(VecDeque::new())),
+            idle_thread: None,
+            preempt_task: None,
+            current_task: None,
             task_groups: SpinLock::new(BTreeMap::new()),
-        });
-        let idle_thread = Task::new_idle(&s);
-        let preempt_task = Task::new_kernel(&s, preempt, true);
-        *s.idle_thread.lock() = Some(idle_thread);
-        *s.preempt_task.lock() = Some(preempt_task);
-        s
+        };
+        let idle_thread = Task::new_idle(&mut s);
+        let preempt_task = Task::new_kernel(&mut s, preempt, false);
+        s.idle_thread = Some(idle_thread);
+        s.preempt_task = Some(preempt_task);
+        Arc::new(SpinLock::new(s))
     }
 
     pub fn enqueue(&self, task: Arc<Task>) {
@@ -49,8 +49,8 @@ impl Scheduler {
         self.run_queue.lock().push_back(task)
     }
 
-    pub fn current_task(&self) -> Arc<SpinLock<Option<Arc<Task>>>> {
-        self.current_task.clone()
+    pub fn current_task(&self) -> Arc<Task> {
+        self.current_task.as_ref().unwrap().clone()
     }
 
     pub fn find_group(&self, pgid: PgId) -> Option<Arc<SpinLock<TaskGroup>>> {
@@ -59,26 +59,25 @@ impl Scheduler {
 
     pub fn find_or_create_group(&self, pgid: PgId) -> Arc<SpinLock<TaskGroup>> {
         self.find_group(pgid).unwrap_or_else(|| {
-            let g = TaskGroup::new(self.sref.upgrade().unwrap(), pgid);
+            let g = TaskGroup::new(pgid);
             self.task_groups.lock().insert(pgid, g.clone());
             g
         })
     }
 
     pub fn with_kernel_addr_space_active<R>(&self, f: impl FnOnce() -> R) -> R {
-        let mut current = self.current_task.lock();
-        let current = current.as_mut().unwrap();
-        let current = &current.arch_mut().address_space;
-        self.preempt_task
-            .as_ref()
-            .lock()
+        // let mut current = self.current_task.lock();
+        // let current = current.as_mut().unwrap();
+        // let current = &current.arch_mut().address_space;
+        let current = &self.current_task();
+        self.idle_thread
             .as_ref()
             .unwrap()
             .arch_mut()
             .address_space
             .switch();
         let res = f();
-        current.switch();
+        current.arch_mut().address_space.switch();
         res
     }
 
@@ -104,9 +103,7 @@ impl Scheduler {
     }
 
     pub fn try_delivering_signal(&self, frame: &mut InterruptFrame) -> KResult<()> {
-        let current = self.current_task.as_ref().lock();
-        let current = current.as_ref().unwrap();
-
+        let current = self.current_task();
         if let Some((signal, sigaction)) = current.signals.lock().pop_pending() {
             let set = current.sigset.lock();
             if !set.get(signal as usize).as_deref().unwrap_or(&true) {
@@ -145,82 +142,60 @@ impl Scheduler {
         }
     }
 
-    pub fn switch(&self) {
-        let mut queue = self.run_queue.lock();
-        let mut current_lock = self.current_task.lock();
-        let idle = self.idle_thread.as_ref().lock();
-        let idle = idle.as_ref().unwrap();
-        let preempt = self.preempt_task.as_ref().lock();
-        let preempt = preempt.as_ref().unwrap();
-        if let Some(task) = queue.pop_front() {
-            if let Some(current_task) = current_lock.as_ref() {
-                if current_task.pid != task.pid {
-                    queue.push_back(current_task.clone());
-                }
-            }
-
-            *current_lock = Some(task.clone());
-            unsafe {
-                self.current_task.force_unlock();
-                self.run_queue.force_unlock();
-                self.idle_thread.force_unlock();
-                self.preempt_task.force_unlock();
-            }
-            log::debug!("Switching from preempt task to PID {:?}", task.pid);
-            arch_context_switch(preempt.arch_mut(), task.arch_mut());
-        } else {
-            if let Some(current_task) = current_lock.as_ref() {
-                let state = { current_task.get_state() };
-                if state == TaskState::Runnable {
-                    unsafe {
-                        self.current_task.force_unlock();
-                        self.run_queue.force_unlock();
-                        self.idle_thread.force_unlock();
-                        self.preempt_task.force_unlock();
-                    }
-                    log::debug!("Switching from preempt task to PID {:?}", current_task.pid);
-                    arch_context_switch(preempt.arch_mut(), current_task.arch_mut());
-                    // return;
-                }
-            }
-
-            // *current_lock = None;
-            // unsafe { self.current_task.force_unlock() };
-            // unsafe { self.run_queue.force_unlock() };
-            // arch_context_switch(self.preempt_task.arch_mut(), self.idle_thread.arch_mut());
-        }
-    }
-
     pub fn preempt(&self) {
-        // let guard = SavedInterruptStatus::save();
-        let idle = self.idle_thread.as_ref().lock();
-        let idle = idle.as_ref().unwrap();
-        let preempt = self.preempt_task.as_ref().lock();
-        let preempt = preempt.as_ref().unwrap();
-        let current_lock = self.current_task.lock();
-        if let Some(current_task) = current_lock.as_ref() {
-            unsafe {
-                self.current_task.force_unlock();
-                self.idle_thread.force_unlock();
-                self.preempt_task.force_unlock();
-            }
-            log::debug!("Switching from PID {:?} to preempt task", current_task.pid);
-            arch_context_switch(current_task.arch_mut(), preempt.arch_mut());
+        unsafe { get_scheduler().force_unlock() };
+        if let Some(current_task) = self.current_task.as_ref() {
+            // log::debug!("Switching from PID {:?} to preempt task", current_task.pid);
+            arch_context_switch(current_task.arch_mut(), self.preempt_task.as_ref().unwrap().arch_mut());
         } else {
-            unsafe {
-                self.current_task.force_unlock();
-                self.idle_thread.force_unlock();
-                self.preempt_task.force_unlock();
-            }
-            log::debug!("Switching from idle thread to preempt task");
-            arch_context_switch(idle.arch_mut(), preempt.arch_mut());
+            // log::debug!("Switching from idle thread to preempt task");
+            arch_context_switch(self.idle_thread.as_ref().unwrap().arch_mut(), self.preempt_task.as_ref().unwrap().arch_mut());
         }
     }
 }
 
+
+pub fn switch() {
+    let sched_lock = get_scheduler();
+    let mut sched = sched_lock.lock();
+    let mut queue = sched.run_queue.lock();
+    if let Some(task) = queue.pop_front() {
+        if let Some(current_task) = sched.current_task.as_ref() {
+            if current_task.pid != task.pid {
+                queue.push_back(current_task.clone());
+            }
+        }
+
+        core::mem::forget(queue);
+        sched.current_task = Some(task.clone());
+        // log::debug!("Switching from preempt task to PID {:?}", task.pid);
+        unsafe { sched_lock.force_unlock() };
+        unsafe { sched.run_queue.force_unlock() };
+        arch_context_switch(sched.preempt_task.as_ref().unwrap().arch_mut(), task.arch_mut());
+    } else {
+        if let Some(current_task) = sched.current_task.as_ref() {
+            let state = { current_task.get_state() };
+            if state == TaskState::Runnable {
+                // log::debug!("Switching from preempt task to PID {:?} (current task)", current_task.pid);
+                unsafe { sched.run_queue.force_unlock() };
+                unsafe { sched_lock.force_unlock() };
+                arch_context_switch(sched.preempt_task.as_ref().unwrap().arch_mut(), current_task.arch_mut());
+                return;
+            }
+        }
+
+        core::mem::forget(queue);
+        sched.current_task = None;
+        unsafe { sched.run_queue.force_unlock() };
+        unsafe { sched_lock.force_unlock() };
+        arch_context_switch(sched.preempt_task.as_ref().unwrap().arch_mut(), sched.idle_thread.as_ref().unwrap().arch_mut());
+    }
+}
+
+
 fn preempt() {
-    let scheduler = get_scheduler();
+    // let scheduler = get_scheduler();
     loop {
-        scheduler.switch();
+        switch();
     }
 }

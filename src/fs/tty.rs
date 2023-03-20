@@ -143,8 +143,6 @@ impl LineDiscipline {
     pub fn is_current_foreground(&self) -> bool {
         let fg = &*self.foreground_process_group.lock();
         let current = current_task();
-        let current = current.as_ref().lock();
-        let current = current.as_ref().unwrap();
         current.belongs_to_group(fg) || fg.upgrade().is_none()
     }
 
@@ -221,9 +219,10 @@ impl LineDiscipline {
         // let mut parser = ByteParser
         let mut writer = UserBufferWriter::from(buf);
         let read_len = self.wait_queue.sleep_signalable_until(|| {
-            if !self.is_current_foreground() {
-                return Ok(None);
-            }
+            // todo: check for this without relocking the scheduler
+            // if !self.is_current_foreground() {
+            //     return Ok(None);
+            // }
 
             let mut buf_lock = self.buf.lock();
             while writer.remaining_len() > 0 {
@@ -299,7 +298,7 @@ impl File for Tty {
         match cmd {
             // TIOCSPTLCK => Ok(0),
             TCGETS => {
-                let mut arg = VirtAddr::new(arg);
+                let arg = VirtAddr::new(arg);
                 arg.write(&Termios {
                     lflag: LFlag::all(),
                     iflag: IFlag::all(),
@@ -327,7 +326,7 @@ impl File for Tty {
             TIOCSPGRP => {
                 let arg = VirtAddr::new(arg);
                 let pgid = *arg.read::<c_int>()?;
-                let pg = get_scheduler().find_group(pgid).ok_or_else(|| errno!(Errno::ESRCH))?;
+                let pg = get_scheduler().lock().find_group(pgid).ok_or_else(|| errno!(Errno::ESRCH))?;
                 self.discipline
                     .set_foreground_process_group(Arc::downgrade(&pg));
             }

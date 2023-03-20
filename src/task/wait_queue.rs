@@ -2,7 +2,7 @@ use alloc::{collections::VecDeque, sync::Arc};
 
 use crate::{util::{SpinLock, KResult, errno::Errno}, errno};
 
-use super::{Task, current_task, TaskState, get_scheduler};
+use super::{Task, current_task, TaskState, get_scheduler, scheduler::switch};
 
 
 pub struct WaitQueue {
@@ -28,11 +28,17 @@ impl WaitQueue {
     {
         loop {
             let current = current_task();
-            let current = current.as_ref().lock();
-            let current = current.as_ref().unwrap().clone();
-            let scheduler = get_scheduler();
+            // let current = current.as_ref().lock();
+            // let current = current.as_ref().unwrap().clone();
+            let scheduler = get_scheduler().lock();
             current.set_state(TaskState::Waiting);
-            self.queue.lock().push_back(current.clone());
+            {
+                let mut q_lock = self.queue.lock();
+                if !q_lock.iter().any(|t| Arc::ptr_eq(t, &current)) {
+                    q_lock.push_back(current.clone());
+                }
+            }
+            // self.queue.lock().push_back(current.clone());
 
             if current.has_pending_signals() {
                 scheduler.resume_task(current.clone());
@@ -55,8 +61,10 @@ impl WaitQueue {
                     .retain(|proc| !Arc::ptr_eq(proc, &current));
                 return ret_val;
             }
-
-            get_scheduler().preempt();
+            // drop(scheduler);
+            // unsafe { get_scheduler().force_unlock() };
+            scheduler.preempt();
+            // switch();
         }
     }
 
@@ -64,7 +72,7 @@ impl WaitQueue {
         let mut q = self.queue.lock();
         let sched = get_scheduler();
         while let Some(proc) = q.pop_front() {
-            sched.resume_task(proc)
+            sched.lock().resume_task(proc)
         }
     }
 }

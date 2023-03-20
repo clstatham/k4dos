@@ -3,7 +3,7 @@ use alloc::sync::Arc;
 use crate::{
     errno,
     mem::addr::VirtAddr,
-    task::Task,
+    task::{Task, current_task},
     util::{errno::Errno, KResult},
 };
 
@@ -11,7 +11,7 @@ use super::SyscallHandler;
 
 impl<'a> SyscallHandler<'a> {
     pub fn sys_arch_prctl(&mut self, code: i32, uaddr: VirtAddr) -> KResult<isize> {
-        arch_prctl(self.task.as_ref().unwrap(), code, uaddr)?;
+        arch_prctl(&current_task(), code, uaddr)?;
         Ok(0)
     }
 }

@@ -145,7 +145,6 @@ fn handle_syscall(
 ) -> isize {
     let mut handler = SyscallHandler {
         frame: unsafe { &mut *frame },
-        task: None,
     };
 
     let retval = match handler.dispatch(a1, a2, a3, a4, a5, a6, n) {

@@ -4,12 +4,12 @@ use x86_64::instructions::interrupts;
 use xmas_elf::ElfFile;
 
 use crate::{
-    fs::{self, initramfs::get_root, path::Path, tty},
+    fs::{self, initramfs::get_root, path::Path, tty::{self, TTY}},
     mem::{
         self,
         allocator::{KERNEL_FRAME_ALLOCATOR, KERNEL_PAGE_ALLOCATOR},
     },
-    task::{get_scheduler, Task}, terminal_println,
+    task::{get_scheduler, Task, scheduler::switch}, terminal_println, serial::serial1_recv,
 };
 
 pub mod cpu_local;
@@ -122,13 +122,35 @@ pub fn arch_main() {
         .clone();
 
     tty::init();
-    sched.enqueue(Task::new_init(file, &[exe.as_bytes()], &[&[]]).unwrap());
 
     log::info!("Welcome to K4DOS!");
+
+    {   
+        let mut sched_lock = sched.lock();
+        let task = Task::new_init(file, &mut sched_lock, &[exe.as_bytes()], &[&[]]).unwrap();
+        sched_lock.enqueue(task);
+        let task = Task::new_kernel(&mut sched_lock, poll_serial1, true);
+        sched_lock.enqueue(task);
+    }
+
+    
+    
     
     loop {
         interrupts::enable_and_hlt();
-        interrupts::disable();
-        sched.preempt();
+        // interrupts::disable();
+        // // switch();
+        // let sched = get_scheduler();
+        // let sched_lock = sched.lock();
+        // sched_lock.preempt();
+    }
+}
+
+fn poll_serial1() {
+    loop {
+        let c = serial1_recv();
+        if let Some(c) = c {
+            TTY.get().unwrap().input_char(c);
+        }
     }
 }

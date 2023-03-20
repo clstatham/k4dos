@@ -24,18 +24,18 @@ pub mod wait_queue;
 pub mod group;
 pub mod signal;
 
-static SCHEDULER: Once<Arc<Scheduler>> = Once::new();
+static SCHEDULER: Once<Arc<SpinLock<Scheduler>>> = Once::new();
 
 pub fn init() {
     SCHEDULER.call_once(|| Scheduler::new());
 }
 
-pub fn get_scheduler() -> &'static Scheduler {
+pub fn get_scheduler() -> &'static Arc<SpinLock<Scheduler>> {
     SCHEDULER.get().unwrap()
 }
 
-pub fn current_task() -> Arc<SpinLock<Option<Arc<Task>>>> {
-    get_scheduler().current_task()
+pub fn current_task() -> Arc<Task> {
+    get_scheduler().lock().current_task().clone()
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -47,7 +47,7 @@ impl TaskId {
     }
 
     fn allocate() -> Self {
-        static NEXT_PID: AtomicUsize = AtomicUsize::new(1);
+        static NEXT_PID: AtomicUsize = AtomicUsize::new(2);
         Self::new(NEXT_PID.fetch_add(1, Ordering::AcqRel))
     }
 
@@ -84,8 +84,8 @@ pub struct Task {
 unsafe impl Sync for Task {}
 
 impl Task {
-    pub fn new_idle(sched: &Arc<Scheduler>) -> Arc<Task> {
-        let pid = TaskId::allocate();
+    pub fn new_idle(sched: &mut Scheduler) -> Arc<Task> {
+        let pid = TaskId::new(0);
         let group = sched.find_or_create_group(0);
         let t = Arc::new(Self {
             arch: UnsafeCell::new(ArchTask::new_idle()),
@@ -104,7 +104,7 @@ impl Task {
         t
     }
 
-    pub fn new_kernel(sched: &Arc<Scheduler>, entry_point: fn(), enable_interrupts: bool) -> Arc<Task> {
+    pub fn new_kernel(sched: &mut Scheduler, entry_point: fn(), enable_interrupts: bool) -> Arc<Task> {
         let pid = TaskId::allocate();
         let group = sched.find_or_create_group(0);
         let t = Arc::new(Self {
@@ -129,6 +129,7 @@ impl Task {
 
     pub fn new_init(
         file: FileRef,
+        sched: &mut Scheduler,
         argv: &[&[u8]],
         envp: &[&[u8]],
     ) -> KResult<Arc<Task>> {
@@ -143,7 +144,7 @@ impl Task {
         files.open_with_fd(1, Arc::new(OpenedFile::new(console.clone(), OpenFlags::O_WRONLY.into(), 0)), OpenOptions::empty())?;
         // stderr
         files.open_with_fd(2, Arc::new(OpenedFile::new(console.clone(), OpenFlags::O_WRONLY.into(), 0)), OpenOptions::empty())?;
-        let group = get_scheduler().find_or_create_group(1);
+        let group = sched.find_or_create_group(1);
         let t = Arc::new(Self {
             arch: UnsafeCell::new(ArchTask::new_init(file, argv, envp)?),
             state: AtomicCell::new(TaskState::Runnable),
@@ -162,6 +163,7 @@ impl Task {
         Ok(t)
     }
 
+    #[allow(clippy::mut_from_ref)] // FIXME
     pub fn arch_mut(&self) -> &mut ArchTask {
         unsafe { &mut *self.arch.get() }
     }

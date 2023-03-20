@@ -1,6 +1,6 @@
 use core::{ops::Add, mem::size_of};
 
-use crate::{mem::addr::VirtAddr, fs::opened_file::FileDesc, util::KResult, userland::buffer::UserBuffer};
+use crate::{mem::addr::VirtAddr, fs::opened_file::FileDesc, util::KResult, userland::buffer::UserBuffer, task::current_task};
 
 use super::SyscallHandler;
 
@@ -22,7 +22,7 @@ impl<'a> SyscallHandler<'a> {
     ) -> KResult<isize> {
         let iov_count = iov_count.min(IOV_MAX);
 
-        let file = self.task.as_ref().unwrap().get_opened_file_by_fd(fd)?;
+        let file = current_task().get_opened_file_by_fd(fd)?;
         let mut total: usize = 0;
         for i in 0..iov_count {
             let mut iov: IoVec = *iov_base.add(i * size_of::<IoVec>()).read::<IoVec>()?;

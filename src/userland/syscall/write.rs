@@ -1,4 +1,4 @@
-use crate::{fs::opened_file::FileDesc, mem::addr::VirtAddr, userland::buffer::UserBuffer, util::KResult};
+use crate::{fs::opened_file::FileDesc, mem::addr::VirtAddr, userland::buffer::UserBuffer, util::KResult, task::current_task};
 
 use super::SyscallHandler;
 
@@ -10,7 +10,7 @@ impl<'a> SyscallHandler<'a> {
         // let written_len = user_buf
         //     .read_at(&mut buf, 0, &OpenOptions::empty())
         //     .map_err(|err| errno!(Errno::ETMP))?;
-        let file = self.task.as_ref().unwrap().get_opened_file_by_fd(fd)?;
+        let file = current_task().get_opened_file_by_fd(fd)?;
         let written_len = file.write(user_buf)?;
         Ok(written_len as isize)
     }

@@ -6,7 +6,7 @@ use spin::mutex::{SpinMutex, SpinMutexGuard};
 use x86::current::rflags::{self, RFlags};
 
 // use crate::interrupts::SavedInterruptStatus;
-use crate::{kerrmsg, terminal_println};
+use crate::{kerrmsg, terminal_println, backtrace};
 
 use super::error::KResult;
 
@@ -55,11 +55,12 @@ impl<T: ?Sized> SpinLock<T> {
 
     pub fn lock(&self) -> SpinLockGuard<'_, T> {
         if self.inner.is_locked() {
-            terminal_println!(
+            serial0_println!(
                 "WARNING: Tried to relock SpinLock of {}",
                 core::any::type_name::<T>()
             );
             // backtrace::backtrace();
+            backtrace::unwind_stack().unwrap();
         }
 
         let saved_intr_status = SavedInterruptStatus::save();

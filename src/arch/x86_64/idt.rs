@@ -18,7 +18,7 @@ use x86_64::{
 
 use crate::{
     mem::{addr::VirtAddr, consts::MAX_LOW_VADDR},
-    task::get_scheduler,
+    task::{get_scheduler, current_task},
     util::SpinLock,
 };
 
@@ -33,7 +33,8 @@ pub const PIC_2_OFFSET: u8 = PIC_1_OFFSET + 8;
 pub static PICS: Mutex<ChainedPics> =
     Mutex::new(unsafe { ChainedPics::new(PIC_1_OFFSET, PIC_2_OFFSET) });
 
-pub const TIMER_IRQ: u8 = 32;
+pub const TIMER_IRQ: u8 = PIC_1_OFFSET + 0;
+pub const COM2_IRQ: u8 = PIC_1_OFFSET + 3;
 // pub const ERROR_IRQ: u8 = 34;
 // pub const SPURIOUS_IRQ: u8 = 35;
 
@@ -92,6 +93,7 @@ lazy_static! {
 
             // idt[TIMER_IDT_IDX as usize].set_handler_fn(timer_handler);
             idt[TIMER_IRQ as usize].set_handler_addr(x86_64::VirtAddr::new(timer_handler as u64));
+            idt[COM2_IRQ as usize].set_handler_addr(x86_64::VirtAddr::new(com2_handler as u64));
             // idt[ERROR_IRQ as usize].set_handler_fn(lapic_error_handler);
             // idt[SPURIOUS_IRQ as usize].set_handler_fn(lapic_spurious_handler);
         }
@@ -215,6 +217,7 @@ interrupt_handler!(vmm_communication_exception_handler, 0x1D, has_error!());
 interrupt_handler!(security_exception_handler, 0x1E, has_error!());
 
 interrupt_handler!(timer_handler, 32, no_error!());
+interrupt_handler!(com2_handler, 35, no_error!());
 
 use x86::irq::*;
 
@@ -226,11 +229,13 @@ extern "C" fn x64_handle_interrupt(vector: u8, stack_frame: *mut InterruptErrorF
     match vector {
         TIMER_IRQ => {
             // log::info!("tick");
-            if stack_frame.frame.cs & 0b11 != 0 {
-                get_scheduler().with_kernel_addr_space_active(|| notify_eoi(TIMER_IRQ));
-            } else {
-                notify_eoi(TIMER_IRQ);
-            }
+            let sched = get_scheduler();
+            let sched_lock = sched.lock();
+            notify_eoi(TIMER_IRQ);
+            sched_lock.preempt();
+        }
+        COM2_IRQ => {
+            notify_eoi(COM2_IRQ);
         }
         // SPURIOUS_IRQ => {
         //     notify_eoi(0);
@@ -311,22 +316,18 @@ extern "C" fn x64_handle_interrupt(vector: u8, stack_frame: *mut InterruptErrorF
             let cr3 = x86_64::registers::control::Cr3::read_raw().0;
             let error_code = PageFaultErrorCode::from_bits_truncate(error_code);
             if error_code.contains(PageFaultErrorCode::USER_MODE) {
-                unsafe {
-                    core::arch::asm!("swapgs");
-                }
-                get_scheduler()
-                    .current_task()
-                    .lock()
-                    .as_ref()
-                    .unwrap()
+                // unsafe {
+                //     core::arch::asm!("swapgs");
+                // }
+                    current_task()
                     .handle_page_fault(
                         VirtAddr::new(accessed_address as usize),
                         VirtAddr::new(stack_frame.frame.rip as usize),
                         error_code,
                     );
-                unsafe {
-                    core::arch::asm!("swapgs");
-                }
+                // unsafe {
+                //     core::arch::asm!("swapgs");
+                // }
                 return;
             }
 
@@ -430,6 +431,7 @@ pub fn init() {
         outb(0x40, (DIVISOR >> 8) as u8);
     }
     unmask_irq(TIMER_IRQ);
+    unmask_irq(COM2_IRQ);
 }
 
 extern "x86-interrupt" fn lapic_error_handler(stack_frame: InterruptStackFrame) {

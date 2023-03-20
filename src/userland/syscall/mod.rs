@@ -3,7 +3,7 @@ use alloc::sync::Arc;
 use crate::{
     errno,
     mem::addr::VirtAddr,
-    task::{get_scheduler, Task},
+    task::{get_scheduler, Task, current_task},
     util::{errno::Errno, KResult}, fs::opened_file::FileDesc,
 };
 
@@ -11,6 +11,8 @@ pub mod arch_prctl;
 pub mod set_tid_address;
 pub mod write;
 pub mod writev;
+pub mod read;
+pub mod ioctl;
 
 #[repr(packed)]
 #[derive(Default, Clone)]
@@ -44,7 +46,6 @@ pub struct SyscallFrame {
 pub struct SyscallHandler<'a> {
     pub frame: &'a mut SyscallFrame,
     // pub frame: &'a u8,
-    pub task: Option<Arc<Task>>,
 }
 
 impl<'a> SyscallHandler<'a> {
@@ -60,13 +61,9 @@ impl<'a> SyscallHandler<'a> {
         n: usize,
     ) -> KResult<isize> {
         // {
-        let current = get_scheduler().current_task();
-        let mut current = current.lock();
-        let current = current.as_mut().unwrap();
-        self.task = Some(current.clone());
         log::trace!(
             "[{}] SYSCALL #{} {}({:#x}, {:#x}, {:#x}, {:#x}, {:#x}, {:#x})",
-            current.pid().as_usize(),
+            current_task().pid().as_usize(),
             n,
             syscall_name_by_number(n),
             a1,
@@ -82,6 +79,8 @@ impl<'a> SyscallHandler<'a> {
             SYS_SET_TID_ADDRESS => self.sys_set_tid_address(VirtAddr::new(a1)),
             SYS_WRITE => self.sys_write(a1 as FileDesc, VirtAddr::new(a2), a3),
             SYS_WRITEV => self.sys_writev(a1 as FileDesc, VirtAddr::new(a2), a3),
+            SYS_READ => self.sys_read(a1 as FileDesc, VirtAddr::new(a2), a3),
+            SYS_IOCTL => self.sys_ioctl(a1 as FileDesc, a2, a3),
             _ => Err(errno!(Errno::ENOSYS)),
         };
         // }
