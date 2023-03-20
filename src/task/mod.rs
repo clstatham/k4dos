@@ -151,7 +151,7 @@ impl Task {
         // stderr
         files.open_with_fd(2, Arc::new(OpenedFile::new(console.clone(), OpenFlags::O_WRONLY.into(), 0)), OpenOptions::empty())?;
         let group = sched.find_or_create_group(1);
-        let arch = ArchTask::new_init(file, argv, envp)?;
+        let (arch, vmem) = ArchTask::new_init(file, argv, envp)?;
         let t = Arc::new_cyclic(|sref| Self {
             sref: sref.clone(),
             arch: UnsafeCell::new(arch),
@@ -161,7 +161,7 @@ impl Task {
             group: AtomicRefCell::new(Arc::downgrade(&group)),
             children: Arc::new(SpinLock::new(Vec::new())),
             opened_files: Arc::new(SpinLock::new(files)),
-            vmem: Arc::new(SpinLock::new(Vmem::new())),
+            vmem: Arc::new(SpinLock::new(vmem)),
             signaled_frame: AtomicCell::new(None),
             signals: Arc::new(SpinLock::new(SignalDelivery::new())),
             sigset: Arc::new(SpinLock::new(SigSet::ZERO)),

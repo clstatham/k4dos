@@ -160,11 +160,21 @@ impl Vmem {
         }
     }
 
+    pub fn log(&self) {
+        log::debug!("BEGIN VIRTUAL MEMORY STATE DUMP");
+        for (_, area) in self.areas.iter() {
+            log::debug!("{:>16x?} .. {:>16x?}   | {:?}", area.start_addr, area.end_addr, area.flags);
+        }
+        log::debug!("END VIRTUAL MEMORY STATE DUMP");
+    }
+
     pub fn fork_from(&mut self, parent: &Vmem) {
         self.areas = parent.areas.clone();
         self.mp = parent.mp.clone();
         self.page_allocator = parent.page_allocator.clone();
         self.next_id.store(parent.next_id.load(core::sync::atomic::Ordering::Acquire), core::sync::atomic::Ordering::Release);
+        // parent.log();
+        // self.log();
     }
 
     pub fn handle_page_fault(
@@ -207,11 +217,11 @@ impl Vmem {
                     .iter_mut()
                     .find(|mp| mp.pages().contains(Page::containing_address(faulted_addr)))
                     .unwrap();
-                let orig_flags = mp.flags();
+                // let orig_flags = mp.flags();
                 active_mapper.set_flags(mp, area.flags);
 
                 if area.flags.contains(PageTableFlags::WRITABLE)
-                    && !orig_flags.contains(PageTableFlags::WRITABLE)
+                    && reason.contains(PageFaultErrorCode::CAUSED_BY_WRITE)
                 {
                     // COW
                     todo!("COW")

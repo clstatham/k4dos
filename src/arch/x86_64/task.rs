@@ -341,7 +341,7 @@ impl ArchTask {
     }
 
     // #[allow(unreachable_code)]
-    pub fn new_init(file: FileRef, argv: &[&[u8]], envp: &[&[u8]]) -> KResult<Self> {
+    pub fn new_init(file: FileRef, argv: &[&[u8]], envp: &[&[u8]]) -> KResult<(Self, Vmem)> {
         let mut userland_entry = elf::load_elf(file)?;
 
         // let switch_stack = alloc::vec![0u8; KERNEL_STACK_SIZE].into_boxed_slice();
@@ -446,7 +446,7 @@ impl ArchTask {
         kframe.rsp = stack.top();
         let fpu_storage = Self::alloc_fpu_storage();
         current.switch();
-        Ok(Self {
+        Ok((Self {
             context: unsafe { core::ptr::Unique::new_unchecked(context) },
             kernel_stack: alloc::vec![0u8; KERNEL_STACK_SIZE].into_boxed_slice(),
             user: true,
@@ -455,7 +455,7 @@ impl ArchTask {
             gsbase: unsafe { VirtAddr::new(rdmsr(IA32_GS_BASE) as usize) },
             // gsbase: VirtAddr::null(),
             fpu_storage: Some(fpu_storage)
-        })
+        }, userland_entry.vmem))
     }
 
     pub fn fork(&self, syscall_frame: &SyscallFrame) -> KResult<Self> {
