@@ -1,5 +1,4 @@
-
-use crate::{fs::opened_file::FileDesc, util::KResult, task::current_task};
+use crate::{fs::opened_file::FileDesc, task::current_task, util::KResult};
 
 use super::SyscallHandler;
 

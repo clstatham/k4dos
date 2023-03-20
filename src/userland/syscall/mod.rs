@@ -2,24 +2,29 @@ use alloc::sync::Arc;
 
 use crate::{
     errno,
+    fs::{
+        opened_file::FileDesc,
+        path::{Path, PathBuf},
+    },
     mem::addr::VirtAddr,
-    task::{get_scheduler, Task, current_task, TaskId},
-    util::{errno::Errno, KResult, ctypes::c_int}, fs::{opened_file::FileDesc, path::{PathBuf, Path}}, userland::syscall::wait4::WaitOptions,
+    task::{current_task, get_scheduler, Task, TaskId},
+    userland::syscall::wait4::WaitOptions,
+    util::{ctypes::c_int, errno::Errno, KResult},
 };
 
 use super::buffer::UserCStr;
 
 pub mod arch_prctl;
-pub mod set_tid_address;
-pub mod write;
-pub mod writev;
-pub mod read;
-pub mod ioctl;
-pub mod rt_sigprocmask;
-pub mod fork;
-pub mod wait4;
 pub mod execve;
 pub mod exit;
+pub mod fork;
+pub mod ioctl;
+pub mod read;
+pub mod rt_sigprocmask;
+pub mod set_tid_address;
+pub mod wait4;
+pub mod write;
+pub mod writev;
 
 #[repr(packed)]
 #[derive(Default, Clone, Debug)]
@@ -88,9 +93,16 @@ impl<'a> SyscallHandler<'a> {
             SYS_WRITEV => self.sys_writev(a1 as FileDesc, VirtAddr::new(a2), a3),
             SYS_READ => self.sys_read(a1 as FileDesc, VirtAddr::new(a2), a3),
             SYS_IOCTL => self.sys_ioctl(a1 as FileDesc, a2, a3),
-            SYS_RT_SIGPROCMASK => self.sys_rt_sigprocmask(a1, VirtAddr::new(a2), VirtAddr::new(a3), a4),
+            SYS_RT_SIGPROCMASK => {
+                self.sys_rt_sigprocmask(a1, VirtAddr::new(a2), VirtAddr::new(a3), a4)
+            }
             SYS_FORK => self.sys_fork(),
-            SYS_WAIT4 => self.sys_wait4(TaskId::new(a1), VirtAddr::new(a2), crate::bitflags_from_user!(WaitOptions, a3 as i32)?, VirtAddr::new(a4)),
+            SYS_WAIT4 => self.sys_wait4(
+                TaskId::new(a1),
+                VirtAddr::new(a2),
+                crate::bitflags_from_user!(WaitOptions, a3 as i32)?,
+                VirtAddr::new(a4),
+            ),
             SYS_EXECVE => self.sys_execve(&resolve_path(a1)?, VirtAddr::new(a2), VirtAddr::new(a3)),
             SYS_GETTID => self.sys_getpid(), // todo
             SYS_GETPID => self.sys_getpid(),

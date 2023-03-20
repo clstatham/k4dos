@@ -13,10 +13,16 @@ use spin::Once;
 
 use crate::{
     errno,
-    util::{ctypes::c_int, errno::Errno, error::KResult, lock::SpinLock, ringbuffer::RingBuffer}, task::{wait_queue::WaitQueue, group::TaskGroup, current_task, signal::SIGINT, get_scheduler}, userland::buffer::{UserBuffer, UserBufferReader, UserBufferMut, UserBufferWriter}, mem::addr::VirtAddr,
+    mem::addr::VirtAddr,
+    task::{current_task, get_scheduler, group::TaskGroup, signal::SIGINT, wait_queue::WaitQueue},
+    userland::buffer::{UserBuffer, UserBufferMut, UserBufferReader, UserBufferWriter},
+    util::{ctypes::c_int, errno::Errno, error::KResult, lock::SpinLock, ringbuffer::RingBuffer},
 };
 
-use super::{initramfs::get_root, INode, path::Path, opened_file::OpenOptions, File, PollStatus, Stat, S_IFCHR, FsNode};
+use super::{
+    initramfs::get_root, opened_file::OpenOptions, path::Path, File, FsNode, INode, PollStatus,
+    Stat, S_IFCHR,
+};
 
 pub static TTY: Once<Arc<Tty>> = Once::new();
 
@@ -329,7 +335,9 @@ impl File for Tty {
             TIOCSPGRP => {
                 let arg = VirtAddr::new(arg);
                 let pgid = *arg.read::<c_int>()?;
-                let pg = get_scheduler().find_group(pgid).ok_or_else(|| errno!(Errno::ESRCH))?;
+                let pg = get_scheduler()
+                    .find_group(pgid)
+                    .ok_or_else(|| errno!(Errno::ESRCH))?;
                 self.discipline
                     .set_foreground_process_group(Arc::downgrade(&pg));
             }
@@ -377,14 +385,12 @@ impl File for Tty {
         let mut total_len = 0;
         let mut reader = UserBufferReader::from(buf);
         while reader.remaining_len() > 0 {
-            
             // get_scheduler().with_kernel_addr_space_active(|| {
-                let copied_len = reader.read_bytes(&mut tmp)?;
-                serial1_print!("{}", String::from_utf8_lossy(&tmp.as_slice()[..copied_len]));
-                total_len += copied_len;
-                // Ok(())
+            let copied_len = reader.read_bytes(&mut tmp)?;
+            serial1_print!("{}", String::from_utf8_lossy(&tmp.as_slice()[..copied_len]));
+            total_len += copied_len;
+            // Ok(())
             // })?;
-            
         }
         Ok(total_len)
     }

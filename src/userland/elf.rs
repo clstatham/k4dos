@@ -8,9 +8,7 @@ use xmas_elf::{header::HeaderPt2, program::Type};
 use crate::{
     errno,
     fs::{opened_file::OpenOptions, FileRef},
-    mem::{
-        addr::VirtAddr, addr_space::AddressSpace, consts::PAGE_SIZE,
-    },
+    mem::{addr::VirtAddr, addr_space::AddressSpace, consts::PAGE_SIZE},
     task::vmem::Vmem,
     userland::buffer::UserBufferMut,
     util::{align_down, align_up, errno::Errno, KError, KResult},

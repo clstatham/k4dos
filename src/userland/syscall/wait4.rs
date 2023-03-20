@@ -1,7 +1,10 @@
-
 use bitflags::bitflags;
 
-use crate::{task::{TaskId, JOIN_WAIT_QUEUE, current_task, TaskState}, util::{ctypes::c_int, KResult}, mem::addr::VirtAddr};
+use crate::{
+    mem::addr::VirtAddr,
+    task::{current_task, TaskId, TaskState, JOIN_WAIT_QUEUE},
+    util::{ctypes::c_int, KResult},
+};
 
 use super::SyscallHandler;
 
@@ -53,7 +56,7 @@ impl<'a> SyscallHandler<'a> {
         if status.value() != 0 {
             status.write::<c_int>(status_val)?;
         }
-            
+
         // }
 
         Ok(got_pid.as_usize() as isize)

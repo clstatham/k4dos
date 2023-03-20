@@ -1,8 +1,11 @@
-use alloc::{vec::Vec, sync::{Weak, Arc}};
+use alloc::{
+    sync::{Arc, Weak},
+    vec::Vec,
+};
 
 use crate::util::SpinLock;
 
-use super::{Task, get_scheduler, scheduler::Scheduler, signal::Signal};
+use super::{get_scheduler, scheduler::Scheduler, signal::Signal, Task};
 
 pub type PgId = i32;
 
@@ -13,7 +16,10 @@ pub struct TaskGroup {
 
 impl TaskGroup {
     pub(super) fn new(pgid: PgId) -> Arc<SpinLock<TaskGroup>> {
-        let pg = Arc::new(SpinLock::new(TaskGroup { pgid, tasks: Vec::new() }));
+        let pg = Arc::new(SpinLock::new(TaskGroup {
+            pgid,
+            tasks: Vec::new(),
+        }));
         // sched.task_groups.lock().insert(pgid, pg.clone());
         pg
     }

@@ -1,6 +1,7 @@
 use alloc::{
     collections::{BTreeMap, VecDeque},
-    sync::{Arc, Weak}, vec::Vec,
+    sync::{Arc, Weak},
+    vec::Vec,
 };
 use atomic_refcell::AtomicRefCell;
 use crossbeam_utils::atomic::AtomicCell;
@@ -11,14 +12,15 @@ use crate::{
     arch::{idt::InterruptFrame, task::arch_context_switch},
     fs::FileRef,
     mem::addr::VirtAddr,
-    util::{KResult, SpinLock, ctypes::c_int},
+    util::{ctypes::c_int, KResult, SpinLock},
 };
 
 use super::{
     get_scheduler,
     group::{PgId, TaskGroup},
     signal::{SigAction, Signal, SIGCHLD},
-    Task, TaskId, TaskState, JOIN_WAIT_QUEUE, wait_queue::WaitQueue,
+    wait_queue::WaitQueue,
+    Task, TaskId, TaskState, JOIN_WAIT_QUEUE,
 };
 
 pub struct Scheduler {
@@ -51,7 +53,6 @@ impl Scheduler {
         s.enqueue(reaper_task);
         Arc::new(s)
     }
-    
 
     pub fn enqueue(&self, task: Arc<Task>) {
         task.state.store(TaskState::Runnable);
@@ -102,7 +103,6 @@ impl Scheduler {
         self.preempt();
         unreachable!()
     }
-
 
     pub fn wake_all(&self, queue: &WaitQueue) {
         let mut q = queue.queue.lock();
@@ -174,13 +174,16 @@ impl Scheduler {
 
     pub fn preempt(&self) {
         // unsafe { get_scheduler().force_unlock() };
-        let current= self.current_task.read();
+        let current = self.current_task.read();
         if let Some(current_task) = current.as_ref().cloned() {
             // log::debug!("Switching from PID {:?} to preempt task", current_task.pid);
             // unsafe { self.current_task.force_read_decrement() };
             // core::mem::forget(current);
             drop(current);
-            arch_context_switch(current_task.arch_mut(), self.preempt_task.as_ref().unwrap().arch_mut());
+            arch_context_switch(
+                current_task.arch_mut(),
+                self.preempt_task.as_ref().unwrap().arch_mut(),
+            );
         } else {
             // log::debug!("Switching from idle thread to preempt task");
             // if self.current_task.reader_count() > 0 {
@@ -188,11 +191,13 @@ impl Scheduler {
             // unsafe { self.current_task.force_read_decrement() };
             // core::mem::forget(current);
             // }
-            arch_context_switch(self.idle_thread.as_ref().unwrap().arch_mut(), self.preempt_task.as_ref().unwrap().arch_mut());
+            arch_context_switch(
+                self.idle_thread.as_ref().unwrap().arch_mut(),
+                self.preempt_task.as_ref().unwrap().arch_mut(),
+            );
         }
     }
 }
-
 
 pub fn switch() {
     let sched = get_scheduler();
@@ -229,7 +234,10 @@ pub fn switch() {
         drop(current);
         // unsafe { sched.current_task.force_write_unlock() };
         // core::mem::forget(current);
-        arch_context_switch(sched.preempt_task.as_ref().unwrap().arch_mut(), task.arch_mut());
+        arch_context_switch(
+            sched.preempt_task.as_ref().unwrap().arch_mut(),
+            task.arch_mut(),
+        );
     } else {
         if let Some(current_task) = current.as_ref().cloned() {
             let state = { current_task.get_state() };
@@ -240,7 +248,10 @@ pub fn switch() {
                 // unsafe { sched.current_task.force_write_unlock() };
                 drop(current);
                 // core::mem::forget(current);
-                arch_context_switch(sched.preempt_task.as_ref().unwrap().arch_mut(), current_task.arch_mut());
+                arch_context_switch(
+                    sched.preempt_task.as_ref().unwrap().arch_mut(),
+                    current_task.arch_mut(),
+                );
                 return;
             }
         }
@@ -255,7 +266,10 @@ pub fn switch() {
         // log::debug!("Switching from preempt task to idle thread");
         // unsafe { sched.current_task.force_write_unlock() };
         // drop(current);
-        arch_context_switch(sched.preempt_task.as_ref().unwrap().arch_mut(), sched.idle_thread.as_ref().unwrap().arch_mut());
+        arch_context_switch(
+            sched.preempt_task.as_ref().unwrap().arch_mut(),
+            sched.idle_thread.as_ref().unwrap().arch_mut(),
+        );
     }
 }
 

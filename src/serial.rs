@@ -1,8 +1,8 @@
 use lazy_static::lazy_static;
 
 use uart_16550::SerialPort;
-use x86::io::outb;
 use x86::io::inb;
+use x86::io::outb;
 
 use crate::util::lock::SpinLock;
 
@@ -13,7 +13,7 @@ lazy_static! {
     pub static ref SERIAL0: SpinLock<SerialPort> = {
         let mut serial_port = unsafe { SerialPort::new(SERIAL0_IOPORT) };
         serial_port.init();
-        
+
         SpinLock::new(serial_port)
     };
     pub static ref SERIAL1: SpinLock<SerialPort> = {
@@ -75,11 +75,11 @@ pub fn serial1_recv() -> Option<u8> {
     unsafe {
         let line_sts = inb(SERIAL1_IOPORT + 5);
         if line_sts & 0x1 != 0 {
-            return Some(inb(SERIAL1_IOPORT))
+            return Some(inb(SERIAL1_IOPORT));
         }
         None
     }
-    
+
     // })
 }
 
@@ -99,4 +99,3 @@ macro_rules! serial1_println {
     ($fmt:expr, $($arg:tt)*) => ($crate::serial1_print!(
         concat!($fmt, "\n"), $($arg)*));
 }
-

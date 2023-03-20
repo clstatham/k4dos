@@ -1,4 +1,7 @@
-use crate::{util::{ctypes::c_int, KResult}, task::{get_scheduler}};
+use crate::{
+    task::get_scheduler,
+    util::{ctypes::c_int, KResult},
+};
 
 use super::SyscallHandler;
 

@@ -3,26 +3,43 @@ use core::{
     sync::atomic::{AtomicUsize, Ordering},
 };
 
-use alloc::{sync::{Arc, Weak}, vec::Vec};
+use alloc::{
+    sync::{Arc, Weak},
+    vec::Vec,
+};
 use atomic_refcell::AtomicRefCell;
 use crossbeam_utils::atomic::AtomicCell;
 use spin::{Once, RwLock};
 use x86_64::structures::idt::PageFaultErrorCode;
 
 use crate::{
-    arch::{task::ArchTask, idt::InterruptFrame},
-    fs::{opened_file::{OpenedFileTable, OpenedFile, OpenFlags, OpenOptions, FileDesc}, FileRef, path::{PathComponent, Path}, initramfs::get_root, tty::TTY},
+    arch::{idt::InterruptFrame, task::ArchTask},
+    errno,
+    fs::{
+        initramfs::get_root,
+        opened_file::{FileDesc, OpenFlags, OpenOptions, OpenedFile, OpenedFileTable},
+        path::{Path, PathComponent},
+        tty::TTY,
+        FileRef,
+    },
     mem::addr::VirtAddr,
-    util::{KResult, SpinLock, errno::Errno, ctypes::c_int}, errno, userland::syscall::SyscallFrame,
+    userland::syscall::SyscallFrame,
+    util::{ctypes::c_int, errno::Errno, KResult, SpinLock},
 };
 
-use self::{scheduler::Scheduler, vmem::Vmem, signal::{SignalDelivery, SigSet, SignalMask}, group::{TaskGroup, PgId}, wait_queue::WaitQueue};
+use self::{
+    group::{PgId, TaskGroup},
+    scheduler::Scheduler,
+    signal::{SigSet, SignalDelivery, SignalMask},
+    vmem::Vmem,
+    wait_queue::WaitQueue,
+};
 
+pub mod group;
 pub mod scheduler;
+pub mod signal;
 pub mod vmem;
 pub mod wait_queue;
-pub mod group;
-pub mod signal;
 
 static SCHEDULER: Once<Arc<Scheduler>> = Once::new();
 pub static JOIN_WAIT_QUEUE: Once<WaitQueue> = Once::new();
@@ -141,15 +158,42 @@ impl Task {
     ) -> KResult<Arc<Task>> {
         let pid = TaskId::new(1);
 
-        let console = get_root().unwrap().lookup_path(Path::new("/dev/tty"), true).unwrap();
+        let console = get_root()
+            .unwrap()
+            .lookup_path(Path::new("/dev/tty"), true)
+            .unwrap();
 
         let mut files = OpenedFileTable::new();
         // stdin
-        files.open_with_fd(0, Arc::new(OpenedFile::new(console.clone(), OpenFlags::O_RDONLY.into(), 0)), OpenOptions::empty())?;
+        files.open_with_fd(
+            0,
+            Arc::new(OpenedFile::new(
+                console.clone(),
+                OpenFlags::O_RDONLY.into(),
+                0,
+            )),
+            OpenOptions::empty(),
+        )?;
         // stdout
-        files.open_with_fd(1, Arc::new(OpenedFile::new(console.clone(), OpenFlags::O_WRONLY.into(), 0)), OpenOptions::empty())?;
+        files.open_with_fd(
+            1,
+            Arc::new(OpenedFile::new(
+                console.clone(),
+                OpenFlags::O_WRONLY.into(),
+                0,
+            )),
+            OpenOptions::empty(),
+        )?;
         // stderr
-        files.open_with_fd(2, Arc::new(OpenedFile::new(console.clone(), OpenFlags::O_WRONLY.into(), 0)), OpenOptions::empty())?;
+        files.open_with_fd(
+            2,
+            Arc::new(OpenedFile::new(
+                console.clone(),
+                OpenFlags::O_WRONLY.into(),
+                0,
+            )),
+            OpenOptions::empty(),
+        )?;
         let group = sched.find_or_create_group(1);
         let (arch, vmem) = ArchTask::new_binary(file, argv, envp)?;
         let t = Arc::new_cyclic(|sref| Self {
@@ -167,14 +211,18 @@ impl Task {
             sigset: Arc::new(SpinLock::new(SigSet::ZERO)),
         });
         group.lock().add(Arc::downgrade(&t));
-        TTY.get().unwrap().set_foreground_process_group(Arc::downgrade(&group));
+        TTY.get()
+            .unwrap()
+            .set_foreground_process_group(Arc::downgrade(&group));
         Ok(t)
     }
 
     pub fn exec(&self, file: FileRef, argv: &[&[u8]], envp: &[&[u8]]) -> KResult<()> {
-        {   
+        {
             self.opened_files.lock().close_cloexec_files();
-            self.vmem.lock().clear(&mut self.arch_mut().address_space.mapper());
+            self.vmem
+                .lock()
+                .clear(&mut self.arch_mut().address_space.mapper());
             *self.signals.lock() = SignalDelivery::new();
             *self.sigset.lock() = SigSet::ZERO;
             self.signaled_frame.store(None);
@@ -263,7 +311,6 @@ impl Task {
             .handle_page_fault(&mut mapper, faulted_addr, instruction_pointer, reason);
     }
 
-
     pub fn set_signal_mask(
         &self,
         how: SignalMask,
@@ -274,9 +321,11 @@ impl Task {
         let mut sigset = self.sigset.lock();
         // if let Ok(old) = oldset {
         if oldset.value() != 0 {
-            oldset.write_bytes(sigset.as_raw_slice()).map_err(|_| errno!(Errno::EINVAL))?;
+            oldset
+                .write_bytes(sigset.as_raw_slice())
+                .map_err(|_| errno!(Errno::EINVAL))?;
         }
-        
+
         // }
 
         // if let Ok(new) = set {
@@ -293,7 +342,6 @@ impl Task {
 
         Ok(())
     }
-
 
     pub fn has_pending_signals(&self) -> bool {
         self.signals.lock().is_pending()

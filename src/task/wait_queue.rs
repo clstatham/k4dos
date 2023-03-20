@@ -1,9 +1,11 @@
 use alloc::{collections::VecDeque, sync::Arc};
 
-use crate::{util::{SpinLock, KResult, errno::Errno}, errno};
+use crate::{
+    errno,
+    util::{errno::Errno, KResult, SpinLock},
+};
 
-use super::{Task, current_task, TaskState, get_scheduler, scheduler::switch};
-
+use super::{current_task, get_scheduler, scheduler::switch, Task, TaskState};
 
 pub struct WaitQueue {
     pub(super) queue: SpinLock<VecDeque<Arc<Task>>>,

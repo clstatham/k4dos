@@ -18,7 +18,7 @@ use x86_64::{
 
 use crate::{
     mem::{addr::VirtAddr, consts::MAX_LOW_VADDR},
-    task::{get_scheduler, current_task},
+    task::{current_task, get_scheduler},
     util::SpinLock,
 };
 
@@ -318,12 +318,11 @@ extern "C" fn x64_handle_interrupt(vector: u8, stack_frame: *mut InterruptErrorF
                 // unsafe {
                 //     core::arch::asm!("swapgs");
                 // }
-                    current_task()
-                    .handle_page_fault(
-                        VirtAddr::new(accessed_address as usize),
-                        VirtAddr::new(stack_frame.frame.rip as usize),
-                        error_code,
-                    );
+                current_task().handle_page_fault(
+                    VirtAddr::new(accessed_address as usize),
+                    VirtAddr::new(stack_frame.frame.rip as usize),
+                    error_code,
+                );
                 // unsafe {
                 //     core::arch::asm!("swapgs");
                 // }

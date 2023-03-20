@@ -6,7 +6,7 @@ use spin::mutex::{SpinMutex, SpinMutexGuard};
 use x86::current::rflags::{self, RFlags};
 
 // use crate::interrupts::SavedInterruptStatus;
-use crate::{kerrmsg, terminal_println, backtrace};
+use crate::{backtrace, kerrmsg, terminal_println};
 
 use super::error::KResult;
 

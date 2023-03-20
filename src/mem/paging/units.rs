@@ -205,10 +205,7 @@ macro_rules! range_impl {
                 self.end.inclusive_end_address()
             }
 
-            pub fn merge_with(
-                &mut self,
-                other: Self,
-            ) -> $crate::util::error::KResult<()> {
+            pub fn merge_with(&mut self, other: Self) -> $crate::util::error::KResult<()> {
                 if other.is_empty() {
                     return Ok(());
                 }

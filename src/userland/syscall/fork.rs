@@ -1,4 +1,4 @@
-use crate::{util::KResult, task::current_task};
+use crate::{task::current_task, util::KResult};
 
 use super::SyscallHandler;
 

@@ -5,9 +5,7 @@ use core::mem::align_of;
 use core::ops::*;
 
 use crate::kerrmsg;
-use crate::{
-    util::{align_down, align_up, KResult},
-};
+use crate::util::{align_down, align_up, KResult};
 
 use super::consts::PAGE_SIZE;
 
@@ -202,10 +200,10 @@ impl VirtAddr {
 
     pub fn write<T: Sized>(&self, t: T) -> KResult<()> {
         if self.addr == 0 {
-            return Err(kerrmsg!("Attempt to write to null VirtAddr"))
+            return Err(kerrmsg!("Attempt to write to null VirtAddr"));
         }
         if self.addr % align_of::<T>() != 0 {
-            return Err(kerrmsg!("Attempt to write to unaligned VirtAddr"))
+            return Err(kerrmsg!("Attempt to write to unaligned VirtAddr"));
         }
         unsafe { core::ptr::write(self.as_mut_ptr(), t) };
         Ok(())
@@ -213,15 +211,17 @@ impl VirtAddr {
 
     pub fn write_bytes(&self, bytes: &[u8]) -> KResult<usize> {
         if self.addr == 0 {
-            return Err(kerrmsg!("Attempt to write to null VirtAddr"))
+            return Err(kerrmsg!("Attempt to write to null VirtAddr"));
         }
-        unsafe { core::slice::from_raw_parts_mut(self.as_mut_ptr(), bytes.len()).copy_from_slice(bytes) };
+        unsafe {
+            core::slice::from_raw_parts_mut(self.as_mut_ptr(), bytes.len()).copy_from_slice(bytes)
+        };
         Ok(bytes.len())
     }
 
     pub fn fill(&mut self, value: u8, len: usize) -> KResult<usize> {
         if self.addr == 0 {
-            return Err(kerrmsg!("Attempt to write to null VirtAddr"))
+            return Err(kerrmsg!("Attempt to write to null VirtAddr"));
         }
         unsafe { (self.value() as *mut u8).write_bytes(value, len) };
         Ok(len)

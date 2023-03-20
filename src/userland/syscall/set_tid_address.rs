@@ -1,4 +1,4 @@
-use crate::{mem::addr::VirtAddr, util::KResult, task::current_task};
+use crate::{mem::addr::VirtAddr, task::current_task, util::KResult};
 
 use super::SyscallHandler;
 

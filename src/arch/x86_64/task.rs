@@ -1,13 +1,13 @@
-
 use core::{alloc::Layout, slice::SlicePattern};
 
 use alloc::{alloc::alloc_zeroed, boxed::Box, vec::Vec};
 use x86::{
     controlregs,
+    cpuid::CpuId,
     current::segmentation::swapgs,
     msr::{rdmsr, wrmsr, IA32_FS_BASE, IA32_GS_BASE},
     segmentation::SegmentSelector,
-    Ring, cpuid::CpuId, tlb,
+    tlb, Ring,
 };
 use x86_64::structures::paging::PageTableFlags;
 
@@ -16,10 +16,14 @@ use crate::{
     mem::{
         addr::VirtAddr,
         addr_space::AddressSpace,
-        consts::{KERNEL_STACK_SIZE, PAGE_SIZE, USER_STACK_BOTTOM, USER_STACK_TOP}, allocator::alloc_kernel_frames,
+        allocator::alloc_kernel_frames,
+        consts::{KERNEL_STACK_SIZE, PAGE_SIZE, USER_STACK_BOTTOM, USER_STACK_TOP},
     },
-    task::{vmem::Vmem, signal::Signal, get_scheduler},
-    userland::{elf::{self, AuxvType}, syscall::SyscallFrame},
+    task::{get_scheduler, signal::Signal, vmem::Vmem},
+    userland::{
+        elf::{self, AuxvType},
+        syscall::SyscallFrame,
+    },
     util::{stack::Stack, KResult},
 };
 
@@ -43,7 +47,6 @@ fn xrstor(fpu: &Box<[u8]>) {
 
 pub fn arch_context_switch(prev: &mut ArchTask, next: &mut ArchTask) {
     unsafe {
-        
         prev.fsbase = VirtAddr::new(rdmsr(IA32_FS_BASE) as usize);
         // prev.gsbase = VirtAddr::new(rdmsr(IA32_GS_BASE) as usize);
         wrmsr(IA32_FS_BASE, next.fsbase.value() as u64);
@@ -53,9 +56,6 @@ pub fn arch_context_switch(prev: &mut ArchTask, next: &mut ArchTask) {
             (next.kernel_stack.as_ptr() as usize + next.kernel_stack.len()) as u64,
         );
         swapgs();
-
-        
-
 
         if let Some(fpu) = prev.fpu_storage.as_mut() {
             // xsave(fpu);
@@ -97,15 +97,19 @@ unsafe extern "C" fn iretq_init() -> ! {
 
 #[naked]
 unsafe extern "C" fn fork_init() -> ! {
-    core::arch::asm!(concat!(
-        "
+    core::arch::asm!(
+        concat!(
+            "
         cli
 
-        ", crate::pop_regs!(), "
+        ",
+            crate::pop_regs!(),
+            "
 
         swapgs
         iretq
-    "),
+    "
+        ),
         options(noreturn)
     )
 }
@@ -161,7 +165,7 @@ unsafe extern "sysv64" fn context_switch(_prev: &mut Context, _next: &mut Contex
     options(noreturn))
 }
 
-unsafe extern "C" fn switch_finish_hook () {}
+unsafe extern "C" fn switch_finish_hook() {}
 
 // #[naked]
 // unsafe extern "C" fn context_switch(_prev: &mut Context, _next: &mut Context) {
@@ -173,7 +177,7 @@ unsafe extern "C" fn switch_finish_hook () {}
 //         push r13
 //         push r14
 //         push r15
-        
+
 //         // mov rax, cr3
 //         // push rax
 
@@ -210,9 +214,7 @@ pub struct Context {
     rbx: usize,
     rbp: usize,
 
-    
     rflags: usize,
-    
 }
 
 #[repr(C)]
@@ -396,23 +398,20 @@ impl ArchTask {
         // self.user = true;
 
         userland_entry.addr_space.switch();
-        
-        userland_entry
-            .vmem
-            .map_area(
-                VirtAddr::new(USER_STACK_BOTTOM),
-                VirtAddr::new(USER_STACK_TOP),
-                PageTableFlags::PRESENT
-                    | PageTableFlags::WRITABLE
-                    | PageTableFlags::USER_ACCESSIBLE
-                    | PageTableFlags::NO_EXECUTE,
-                &mut userland_entry.addr_space.mapper(),
-            )?;
+
+        userland_entry.vmem.map_area(
+            VirtAddr::new(USER_STACK_BOTTOM),
+            VirtAddr::new(USER_STACK_TOP),
+            PageTableFlags::PRESENT
+                | PageTableFlags::WRITABLE
+                | PageTableFlags::USER_ACCESSIBLE
+                | PageTableFlags::NO_EXECUTE,
+            &mut userland_entry.addr_space.mapper(),
+        )?;
 
         // first the kernel stack for the context switch
 
-        let mut stack_ptr =
-            switch_stack.as_mut_ptr::<u8>() as usize;
+        let mut stack_ptr = switch_stack.as_mut_ptr::<u8>() as usize;
         let mut stack = Stack::new(&mut stack_ptr);
 
         let kframe = unsafe { stack.offset::<UserlandEntryRegs>() };
@@ -422,7 +421,6 @@ impl ArchTask {
         // kframe.rip = userland_entry.entry_point.value() as u64;
         kframe.rcx = userland_entry.entry_point.value();
         kframe.r11 = 0x200;
-        
 
         // kframe.rsp = (USER_STACK_TOP - core::mem::size_of::<usize>()) as u64;
         // kframe.rflags = if enable_interrupts { 0x200 } else { 0 };
@@ -490,19 +488,28 @@ impl ArchTask {
         kframe.rsp = stack.top();
         let fpu_storage = Self::alloc_fpu_storage();
         current.switch();
-        Ok((Self {
-            context: unsafe { core::ptr::Unique::new_unchecked(context) },
-            kernel_stack: alloc::vec![0u8; KERNEL_STACK_SIZE].into_boxed_slice(),
-            user: true,
-            address_space: userland_entry.addr_space,
-            fsbase: userland_entry.fsbase.unwrap_or(VirtAddr::null()),
-            gsbase: unsafe { VirtAddr::new(rdmsr(IA32_GS_BASE) as usize) },
-            // gsbase: VirtAddr::null(),
-            fpu_storage: Some(fpu_storage)
-        }, userland_entry.vmem))
+        Ok((
+            Self {
+                context: unsafe { core::ptr::Unique::new_unchecked(context) },
+                kernel_stack: alloc::vec![0u8; KERNEL_STACK_SIZE].into_boxed_slice(),
+                user: true,
+                address_space: userland_entry.addr_space,
+                fsbase: userland_entry.fsbase.unwrap_or(VirtAddr::null()),
+                gsbase: unsafe { VirtAddr::new(rdmsr(IA32_GS_BASE) as usize) },
+                // gsbase: VirtAddr::null(),
+                fpu_storage: Some(fpu_storage),
+            },
+            userland_entry.vmem,
+        ))
     }
 
-    pub fn exec(&mut self, vmem: &mut Vmem, file: FileRef, argv: &[&[u8]], envp: &[&[u8]]) -> KResult<()> {
+    pub fn exec(
+        &mut self,
+        vmem: &mut Vmem,
+        file: FileRef,
+        argv: &[&[u8]],
+        envp: &[&[u8]],
+    ) -> KResult<()> {
         let userland_entry = elf::load_elf(file)?;
 
         // let switch_stack = alloc::vec![0u8; KERNEL_STACK_SIZE].into_boxed_slice();
@@ -519,23 +526,21 @@ impl ArchTask {
         *vmem = userland_entry.vmem;
 
         self.address_space.switch();
-        
+
         // userland_entry
-            vmem
-            .map_area(
-                VirtAddr::new(USER_STACK_BOTTOM),
-                VirtAddr::new(USER_STACK_TOP),
-                PageTableFlags::PRESENT
-                    | PageTableFlags::WRITABLE
-                    | PageTableFlags::USER_ACCESSIBLE
-                    | PageTableFlags::NO_EXECUTE,
-                &mut self.address_space.mapper(),
-            )?;
+        vmem.map_area(
+            VirtAddr::new(USER_STACK_BOTTOM),
+            VirtAddr::new(USER_STACK_TOP),
+            PageTableFlags::PRESENT
+                | PageTableFlags::WRITABLE
+                | PageTableFlags::USER_ACCESSIBLE
+                | PageTableFlags::NO_EXECUTE,
+            &mut self.address_space.mapper(),
+        )?;
 
         // first the kernel stack for the context switch
 
-        let mut stack_ptr =
-            switch_stack.as_mut_ptr::<u8>() as usize;
+        let mut stack_ptr = switch_stack.as_mut_ptr::<u8>() as usize;
         let mut stack = Stack::new(&mut stack_ptr);
 
         let kframe = unsafe { stack.offset::<UserlandEntryRegs>() };
@@ -545,7 +550,7 @@ impl ArchTask {
         // kframe.rip = userland_entry.entry_point.value() as u64;
         kframe.rcx = userland_entry.entry_point.value();
         kframe.r11 = 0x200;
-        
+
         let context = unsafe { stack.offset::<Context>() };
         *context = Context::default();
 
@@ -654,7 +659,7 @@ impl ArchTask {
         let kframe_rsp = new_stack.top();
 
         let context = unsafe { new_stack.offset::<Context>() };
-        *context = unsafe{ self.context.as_ref() }.clone();
+        *context = unsafe { self.context.as_ref() }.clone();
         // *context = Context::default();
         context.rsp = kframe_rsp;
         let mut fpu_storage = Self::alloc_fpu_storage();
@@ -666,9 +671,8 @@ impl ArchTask {
             kernel_stack: alloc::vec![0u8; KERNEL_STACK_SIZE].into_boxed_slice(),
             fsbase: self.fsbase,
             gsbase: self.gsbase,
-            fpu_storage: Some(fpu_storage)
+            fpu_storage: Some(fpu_storage),
         })
-        
     }
 
     fn alloc_fpu_storage() -> Box<[u8]> {
@@ -676,7 +680,10 @@ impl ArchTask {
             let xsave_size = CpuId::new().get_extended_state_info().unwrap().xsave_size();
             let layout = Layout::from_size_align(xsave_size as usize, 8).unwrap();
             let ptr = alloc_zeroed(layout);
-            Box::from_raw(core::ptr::slice_from_raw_parts_mut(ptr, xsave_size as usize))
+            Box::from_raw(core::ptr::slice_from_raw_parts_mut(
+                ptr,
+                xsave_size as usize,
+            ))
         }
     }
 
@@ -691,10 +698,14 @@ impl ArchTask {
         }
     }
 
-    pub fn setup_signal_stack(&mut self, frame: &mut InterruptFrame, signal: Signal, handler: VirtAddr) -> KResult<()> {
+    pub fn setup_signal_stack(
+        &mut self,
+        frame: &mut InterruptFrame,
+        signal: Signal,
+        handler: VirtAddr,
+    ) -> KResult<()> {
         todo!("Signal stack")
     }
-
 
     pub fn setup_sigreturn_stack(
         &self,

@@ -1,6 +1,6 @@
 use x86_64::{
     registers::control::{Cr3, Cr3Flags},
-    structures::paging::{PhysFrame, PageTableFlags},
+    structures::paging::{PageTableFlags, PhysFrame},
 };
 
 use crate::util::KResult;
@@ -8,11 +8,12 @@ use crate::util::KResult;
 use super::{
     addr::{PhysAddr, VirtAddr},
     allocator::alloc_kernel_frames,
+    consts::PAGE_TABLE_ENTRIES,
     paging::{
         mapper::Mapper,
         table::{active_table, PageTable},
         units::{AllocatedFrames, Frame, FrameRange, Page},
-    }, consts::PAGE_TABLE_ENTRIES,
+    },
 };
 
 pub struct AddressSpace {
@@ -47,7 +48,7 @@ impl AddressSpace {
             // mapper.map_to_single(Page::containing_address(VirtAddr::new(0x3ef94000)), Frame::containing_address(PhysAddr::new(0x3ef94000)), PageTableFlags::PRESENT | PageTableFlags::WRITABLE).unwrap();
             // mapper.map_to_single(Page::containing_address(VirtAddr::new(0x3ef93000)), Frame::containing_address(PhysAddr::new(0x3ef93000)), PageTableFlags::PRESENT | PageTableFlags::WRITABLE).unwrap();
             // mapper.map_to_single(Page::containing_address(VirtAddr::new(0x3ef92000)), Frame::containing_address(PhysAddr::new(0x3ef92000)), PageTableFlags::PRESENT | PageTableFlags::WRITABLE).unwrap();
-            
+
             // page_table[0] = active_table[0];
 
             frame
@@ -139,7 +140,7 @@ impl AddressSpace {
                         if set_cow {
                             flags.remove(PageTableFlags::WRITABLE);
                         }
-                        
+
                         new_p1[p1_idx].set_frame(my_entry.frame().unwrap(), flags);
                     }
                 }

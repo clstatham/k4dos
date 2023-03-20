@@ -6,14 +6,15 @@ use x86_64::structures::{idt::PageFaultErrorCode, paging::PageTableFlags};
 use crate::{
     mem::{
         addr::VirtAddr,
-        allocator::{PageAllocator, alloc_kernel_frames},
+        allocator::{alloc_kernel_frames, PageAllocator},
         consts::PAGE_SIZE,
         paging::{
             mapper::Mapper,
             units::{MappedPages, Page, PageRange},
         },
     },
-    util::KResult, task::current_task,
+    task::current_task,
+    util::KResult,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -130,12 +131,10 @@ impl Vmem {
         flags: PageTableFlags,
         active_mapper: &mut Mapper,
     ) -> KResult<VmemAreaId> {
-        let ap = self
-            .page_allocator
-            .allocate_range(PageRange::new(
-                Page::containing_address(start_addr),
-                Page::containing_address(end_addr - 1),
-            ))?;
+        let ap = self.page_allocator.allocate_range(PageRange::new(
+            Page::containing_address(start_addr),
+            Page::containing_address(end_addr - 1),
+        ))?;
         let mp = active_mapper.map(ap, flags)?;
         let id = self.add_area(
             start_addr.align_down(PAGE_SIZE),
@@ -166,7 +165,12 @@ impl Vmem {
     pub fn log(&self) {
         log::debug!("BEGIN VIRTUAL MEMORY STATE DUMP");
         for (_, area) in self.areas.iter() {
-            log::debug!("{:>16x?} .. {:>16x?}   | {:?}", area.start_addr, area.end_addr, area.flags);
+            log::debug!(
+                "{:>16x?} .. {:>16x?}   | {:?}",
+                area.start_addr,
+                area.end_addr,
+                area.flags
+            );
         }
         log::debug!("END VIRTUAL MEMORY STATE DUMP");
     }
@@ -175,7 +179,10 @@ impl Vmem {
         self.areas = parent.areas.clone();
         self.mp = parent.mp.clone();
         self.page_allocator = parent.page_allocator.clone();
-        self.next_id.store(parent.next_id.load(core::sync::atomic::Ordering::Acquire), core::sync::atomic::Ordering::Release);
+        self.next_id.store(
+            parent.next_id.load(core::sync::atomic::Ordering::Acquire),
+            core::sync::atomic::Ordering::Release,
+        );
         // parent.log();
         // self.log();
     }
@@ -214,23 +221,35 @@ impl Vmem {
             } else {
                 // set new flags, handle COW
                 // todo: update `self.mp` to reflect these changes - this will cause problems!
-                
+
                 if area.flags.contains(PageTableFlags::WRITABLE)
                     && reason.contains(PageFaultErrorCode::CAUSED_BY_WRITE)
                 {
                     // COW
                     let new_frame = alloc_kernel_frames(1).unwrap();
                     let new_page = unsafe {
-                        core::slice::from_raw_parts_mut(new_frame.start_address().as_hhdm_virt().as_mut_ptr::<u8>(), PAGE_SIZE)
+                        core::slice::from_raw_parts_mut(
+                            new_frame.start_address().as_hhdm_virt().as_mut_ptr::<u8>(),
+                            PAGE_SIZE,
+                        )
                     };
                     let old_page = unsafe {
-                        core::slice::from_raw_parts(faulted_addr.align_down(PAGE_SIZE).as_ptr::<u8>(), PAGE_SIZE)
+                        core::slice::from_raw_parts(
+                            faulted_addr.align_down(PAGE_SIZE).as_ptr::<u8>(),
+                            PAGE_SIZE,
+                        )
                     };
                     new_page.copy_from_slice(old_page);
                     unsafe {
                         active_mapper.unmap_single(Page::containing_address(faulted_addr));
                     }
-                    active_mapper.map_to_single(Page::containing_address(faulted_addr), new_frame.start(), area.flags).unwrap();
+                    active_mapper
+                        .map_to_single(
+                            Page::containing_address(faulted_addr),
+                            new_frame.start(),
+                            area.flags,
+                        )
+                        .unwrap();
                 } else {
                     let mp = self
                         .mp

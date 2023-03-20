@@ -2,11 +2,12 @@ use x86::tlb;
 use x86_64::structures::paging::PageTableFlags;
 
 use crate::{
+    kerrmsg,
     mem::{
         addr::{PhysAddr, VirtAddr},
         allocator::alloc_kernel_frames,
     },
-    util::KResult, kerrmsg,
+    util::KResult,
 };
 
 use super::{
@@ -95,11 +96,7 @@ impl<'a> Mapper<'a> {
         Ok(unsafe { MappedPages::assume_mapped(pages, frames, flags) })
     }
 
-    pub fn map(
-        &mut self,
-        pages: AllocatedPages,
-        flags: PageTableFlags,
-    ) -> KResult<MappedPages> {
+    pub fn map(&mut self, pages: AllocatedPages, flags: PageTableFlags) -> KResult<MappedPages> {
         let frames = alloc_kernel_frames(pages.size_in_pages())?;
         self.map_to(pages, frames, flags)
     }

@@ -3,7 +3,7 @@ use alloc::sync::Arc;
 use crate::{
     errno,
     mem::addr::VirtAddr,
-    task::{Task, current_task},
+    task::{current_task, Task},
     util::{errno::Errno, KResult},
 };
 

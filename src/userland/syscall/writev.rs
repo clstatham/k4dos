@@ -1,9 +1,11 @@
-use core::{ops::Add, mem::size_of};
+use core::{mem::size_of, ops::Add};
 
-use crate::{mem::addr::VirtAddr, fs::opened_file::FileDesc, util::KResult, userland::buffer::UserBuffer, task::current_task};
+use crate::{
+    fs::opened_file::FileDesc, mem::addr::VirtAddr, task::current_task,
+    userland::buffer::UserBuffer, util::KResult,
+};
 
 use super::SyscallHandler;
-
 
 pub const IOV_MAX: usize = 1024;
 #[repr(C)]

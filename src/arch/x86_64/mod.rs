@@ -1,15 +1,25 @@
 use limine::*;
-use x86::{controlregs::{self, Cr4, Xcr0, Cr0}, cpuid::CpuId};
+use x86::{
+    controlregs::{self, Cr0, Cr4, Xcr0},
+    cpuid::CpuId,
+};
 use x86_64::instructions::interrupts;
 use xmas_elf::ElfFile;
 
 use crate::{
-    fs::{self, initramfs::get_root, path::Path, tty::{self, TTY}},
+    fs::{
+        self,
+        initramfs::get_root,
+        path::Path,
+        tty::{self, TTY},
+    },
     mem::{
         self,
         allocator::{KERNEL_FRAME_ALLOCATOR, KERNEL_PAGE_ALLOCATOR},
     },
-    task::{get_scheduler, Task, scheduler::switch}, terminal_println, serial::serial1_recv,
+    serial::serial1_recv,
+    task::{get_scheduler, scheduler::switch, Task},
+    terminal_println,
 };
 
 pub mod cpu_local;
@@ -59,8 +69,15 @@ pub fn arch_main() {
     assert!(features.has_sse(), "SSE not available");
     unsafe {
         controlregs::cr4_write(controlregs::cr4() | Cr4::CR4_ENABLE_OS_XSAVE);
-        x86_64::registers::control::Cr4::write_raw(x86_64::registers::control::Cr4::read_raw() | (3 << 9));
-        controlregs::xcr0_write(controlregs::xcr0() | Xcr0::XCR0_SSE_STATE | Xcr0::XCR0_FPU_MMX_STATE | Xcr0::XCR0_AVX_STATE);
+        x86_64::registers::control::Cr4::write_raw(
+            x86_64::registers::control::Cr4::read_raw() | (3 << 9),
+        );
+        controlregs::xcr0_write(
+            controlregs::xcr0()
+                | Xcr0::XCR0_SSE_STATE
+                | Xcr0::XCR0_FPU_MMX_STATE
+                | Xcr0::XCR0_AVX_STATE,
+        );
         controlregs::cr0_write(controlregs::cr0() & !Cr0::CR0_EMULATE_COPROCESSOR);
         controlregs::cr0_write(controlregs::cr0() | Cr0::CR0_MONITOR_COPROCESSOR);
     }
@@ -125,16 +142,13 @@ pub fn arch_main() {
 
     log::info!("Welcome to K4DOS!");
 
-    {   
+    {
         let task = Task::new_init(file, &sched, &[exe.as_bytes()], &[&[]]).unwrap();
         sched.enqueue(task);
         let task = Task::new_kernel(&sched, poll_serial1, true);
         sched.enqueue(task);
     }
 
-    
-    
-    
     loop {
         interrupts::enable_and_hlt();
         // interrupts::disable();

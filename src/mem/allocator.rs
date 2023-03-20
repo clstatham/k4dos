@@ -11,8 +11,8 @@ use super::consts::{MAX_LOW_VADDR, MIN_HIGH_VADDR, PAGE_SIZE};
 use super::paging::units::{
     AllocatedFrames, AllocatedPages, Frame, FrameRange, Page, PageIndex, PageRange,
 };
-use crate::util::{align_down, KResult, SpinLock};
 use crate::kerrmsg;
+use crate::util::{align_down, KResult, SpinLock};
 
 pub static KERNEL_FRAME_ALLOCATOR: Once<SpinLock<FrameAllocator>> = Once::new();
 pub static KERNEL_PAGE_ALLOCATOR: Once<SpinLock<PageAllocator>> = Once::new();
@@ -29,10 +29,7 @@ pub fn alloc_kernel_frames(count: usize) -> KResult<AllocatedFrames> {
         .allocate(count)
 }
 
-pub fn alloc_kernel_frames_at(
-    start: Frame,
-    count: usize,
-) -> KResult<AllocatedFrames> {
+pub fn alloc_kernel_frames_at(start: Frame, count: usize) -> KResult<AllocatedFrames> {
     KERNEL_FRAME_ALLOCATOR
         .get()
         .ok_or(kerrmsg!("KERNEL_FRAME_ALLOCATOR not initialized"))?
@@ -50,10 +47,7 @@ pub fn alloc_kernel_pages(count: usize) -> KResult<AllocatedPages> {
         .allocate(count)
 }
 
-pub fn alloc_kernel_pages_at(
-    start: Page,
-    count: usize,
-) -> KResult<AllocatedPages> {
+pub fn alloc_kernel_pages_at(start: Page, count: usize) -> KResult<AllocatedPages> {
     KERNEL_PAGE_ALLOCATOR
         .get()
         .ok_or(kerrmsg!("KERNEL_PAGE_ALLOCATOR not initialized"))?
@@ -294,9 +288,7 @@ macro_rules! allocator_impl {
 
                 let allocation = match allocation {
                     Some(a) => a,
-                    None => {
-                        return Err(kerrmsg!("couldn't find chunk for allocation"))
-                    }
+                    None => return Err(kerrmsg!("couldn't find chunk for allocation")),
                 };
                 let index_to_remove = index_to_remove.unwrap();
                 self.free_chunks.remove(index_to_remove);
@@ -358,18 +350,11 @@ macro_rules! allocator_impl {
                 self.allocate_internal(None, count)
             }
 
-            pub fn allocate_at(
-                &mut self,
-                start: $unit,
-                count: usize,
-            ) -> KResult<$allocated> {
+            pub fn allocate_at(&mut self, start: $unit, count: usize) -> KResult<$allocated> {
                 self.allocate_internal(Some(start), count)
             }
 
-            pub fn allocate_range(
-                &mut self,
-                range: $range,
-            ) -> KResult<$allocated> {
+            pub fn allocate_range(&mut self, range: $range) -> KResult<$allocated> {
                 let count = range.size_in_pages();
                 self.allocate_internal(Some(range.start()), count)
             }

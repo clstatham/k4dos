@@ -6,12 +6,13 @@ use core::{
 use x86_64::{registers::control::Cr3, structures::paging::PageTableFlags};
 
 use crate::{
+    kerrmsg,
     mem::{
         addr::{PhysAddr, VirtAddr},
-        allocator::{alloc_kernel_frames},
+        allocator::alloc_kernel_frames,
         consts::{PAGE_SIZE, PAGE_TABLE_ENTRIES},
     },
-    util::{KError, KResult}, kerrmsg,
+    util::{KError, KResult},
 };
 
 use super::units::Frame;
@@ -131,9 +132,7 @@ impl PageTable {
                     created = true;
                 }
                 Err(e) => {
-                    return Err(kerrmsg!(
-                        "Failed to allocate frame for new page table"
-                    ));
+                    return Err(kerrmsg!("Failed to allocate frame for new page table"));
                 }
             }
         } else {
