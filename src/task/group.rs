@@ -29,21 +29,21 @@ impl TaskGroup {
     pub fn remove(&mut self, task: &Weak<Task>) {
         self.tasks.retain(|p| !Weak::ptr_eq(p, task));
         if self.tasks.is_empty() {
-            get_scheduler().lock().task_groups.lock().remove(&self.pgid);
+            get_scheduler().task_groups.lock().remove(&self.pgid);
         }
     }
 
     pub fn gc_dropped_processes(&mut self) {
         self.tasks.retain(|task| task.upgrade().is_some());
         if self.tasks.is_empty() {
-            get_scheduler().lock().task_groups.lock().remove(&self.pgid);
+            get_scheduler().task_groups.lock().remove(&self.pgid);
         }
     }
 
     pub fn signal(&mut self, signal: Signal) {
         for task in self.tasks.iter() {
             // task.upgrade().unwrap().send_signal(signal);
-            get_scheduler().lock().send_signal_to(task.upgrade().unwrap(), signal);
+            get_scheduler().send_signal_to(task.upgrade().unwrap(), signal);
         }
     }
 }

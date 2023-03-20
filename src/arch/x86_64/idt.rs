@@ -230,9 +230,8 @@ extern "C" fn x64_handle_interrupt(vector: u8, stack_frame: *mut InterruptErrorF
         TIMER_IRQ => {
             // log::info!("tick");
             let sched = get_scheduler();
-            let sched_lock = sched.lock();
             notify_eoi(TIMER_IRQ);
-            sched_lock.preempt();
+            sched.preempt();
         }
         COM2_IRQ => {
             notify_eoi(COM2_IRQ);

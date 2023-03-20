@@ -4,7 +4,7 @@ use crate::{
     errno,
     mem::addr::VirtAddr,
     task::{get_scheduler, Task, current_task, TaskId},
-    util::{errno::Errno, KResult}, fs::{opened_file::FileDesc, path::{PathBuf, Path}}, userland::syscall::wait4::WaitOptions,
+    util::{errno::Errno, KResult, ctypes::c_int}, fs::{opened_file::FileDesc, path::{PathBuf, Path}}, userland::syscall::wait4::WaitOptions,
 };
 
 use super::buffer::UserCStr;
@@ -19,6 +19,7 @@ pub mod rt_sigprocmask;
 pub mod fork;
 pub mod wait4;
 pub mod execve;
+pub mod exit;
 
 #[repr(packed)]
 #[derive(Default, Clone, Debug)]
@@ -93,7 +94,7 @@ impl<'a> SyscallHandler<'a> {
             SYS_EXECVE => self.sys_execve(&resolve_path(a1)?, VirtAddr::new(a2), VirtAddr::new(a3)),
             SYS_GETTID => self.sys_getpid(), // todo
             SYS_GETPID => self.sys_getpid(),
-
+            SYS_EXIT => self.sys_exit(a1 as c_int),
             _ => Err(errno!(Errno::ENOSYS)),
         };
         // }

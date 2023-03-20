@@ -6,7 +6,7 @@ use core::{
 use alloc::{sync::{Arc, Weak}, vec::Vec};
 use atomic_refcell::AtomicRefCell;
 use crossbeam_utils::atomic::AtomicCell;
-use spin::Once;
+use spin::{Once, RwLock};
 use x86_64::structures::idt::PageFaultErrorCode;
 
 use crate::{
@@ -24,19 +24,19 @@ pub mod wait_queue;
 pub mod group;
 pub mod signal;
 
-static SCHEDULER: Once<Arc<SpinLock<Scheduler>>> = Once::new();
+static SCHEDULER: Once<Arc<Scheduler>> = Once::new();
 pub static JOIN_WAIT_QUEUE: Once<WaitQueue> = Once::new();
 pub fn init() {
     SCHEDULER.call_once(|| Scheduler::new());
     JOIN_WAIT_QUEUE.call_once(|| WaitQueue::new());
 }
 
-pub fn get_scheduler() -> &'static Arc<SpinLock<Scheduler>> {
+pub fn get_scheduler() -> &'static Arc<Scheduler> {
     SCHEDULER.get().unwrap()
 }
 
 pub fn current_task() -> Arc<Task> {
-    get_scheduler().lock().current_task().clone()
+    get_scheduler().current_task().clone()
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -109,7 +109,7 @@ impl Task {
         t
     }
 
-    pub fn new_kernel(sched: &mut Scheduler, entry_point: fn(), enable_interrupts: bool) -> Arc<Task> {
+    pub fn new_kernel(sched: &Scheduler, entry_point: fn(), enable_interrupts: bool) -> Arc<Task> {
         let pid = TaskId::allocate();
         let group = sched.find_or_create_group(0);
         let t = Arc::new_cyclic(|sref| Self {
@@ -135,7 +135,7 @@ impl Task {
 
     pub fn new_init(
         file: FileRef,
-        sched: &mut Scheduler,
+        sched: &Arc<Scheduler>,
         argv: &[&[u8]],
         envp: &[&[u8]],
     ) -> KResult<Arc<Task>> {
@@ -180,7 +180,7 @@ impl Task {
             self.signaled_frame.store(None);
         }
         let lock = &mut self.vmem.lock();
-        unsafe { self.vmem.force_unlock() };
+        // unsafe { self.vmem.force_unlock() };
         self.arch_mut().exec(lock, file, argv, envp)
     }
 
@@ -206,7 +206,7 @@ impl Task {
         new.signals.lock().clone_from(&self.signals.lock());
         new.vmem.lock().fork_from(&self.vmem.lock());
         group.lock().add(Arc::downgrade(&new));
-        get_scheduler().lock().enqueue(new.clone());
+        get_scheduler().enqueue(new.clone());
         new
     }
 

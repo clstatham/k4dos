@@ -126,11 +126,10 @@ pub fn arch_main() {
     log::info!("Welcome to K4DOS!");
 
     {   
-        let mut sched_lock = sched.lock();
-        let task = Task::new_init(file, &mut sched_lock, &[exe.as_bytes()], &[&[]]).unwrap();
-        sched_lock.enqueue(task);
-        let task = Task::new_kernel(&mut sched_lock, poll_serial1, true);
-        sched_lock.enqueue(task);
+        let task = Task::new_init(file, &sched, &[exe.as_bytes()], &[&[]]).unwrap();
+        sched.enqueue(task);
+        let task = Task::new_kernel(&sched, poll_serial1, true);
+        sched.enqueue(task);
     }
 
     

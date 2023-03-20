@@ -6,7 +6,7 @@ use super::{Task, current_task, TaskState, get_scheduler, scheduler::switch};
 
 
 pub struct WaitQueue {
-    queue: SpinLock<VecDeque<Arc<Task>>>,
+    pub(super) queue: SpinLock<VecDeque<Arc<Task>>>,
 }
 
 impl Default for WaitQueue {
@@ -30,7 +30,7 @@ impl WaitQueue {
             let current = current_task();
             // let current = current.as_ref().lock();
             // let current = current.as_ref().unwrap().clone();
-            let scheduler = get_scheduler().lock();
+            let scheduler = get_scheduler();
             current.set_state(TaskState::Waiting);
             {
                 let mut q_lock = self.queue.lock();
@@ -47,7 +47,7 @@ impl WaitQueue {
                     .retain(|proc| !Arc::ptr_eq(proc, &current));
                 return Err(errno!(Errno::EINTR));
             }
-            drop(scheduler);
+            // drop(scheduler);
 
             let ret_value = match sleep_if_none() {
                 Ok(Some(ret_val)) => Some(Ok(ret_val)),
@@ -55,7 +55,7 @@ impl WaitQueue {
                 Err(err) => Some(Err(err)),
             };
 
-            let scheduler = get_scheduler().lock();
+            // let scheduler = get_scheduler();
             if let Some(ret_val) = ret_value {
                 scheduler.resume_task(current.clone());
                 self.queue
@@ -67,14 +67,6 @@ impl WaitQueue {
             // unsafe { get_scheduler().force_unlock() };
             scheduler.preempt();
             // switch();
-        }
-    }
-
-    pub fn wake_all(&self) {
-        let mut q = self.queue.lock();
-        let sched = get_scheduler();
-        while let Some(proc) = q.pop_front() {
-            sched.lock().resume_task(proc)
         }
     }
 }

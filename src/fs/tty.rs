@@ -210,7 +210,8 @@ impl LineDiscipline {
         }
 
         if written_len > 0 {
-            self.wait_queue.wake_all();
+            // self.wait_queue.wake_all();
+            get_scheduler().wake_all(&self.wait_queue);
             // POLL_WAIT_QUEUE.wake_all();
         }
         Ok(written_len)
@@ -221,9 +222,9 @@ impl LineDiscipline {
         let mut writer = UserBufferWriter::from(buf);
         let read_len = self.wait_queue.sleep_signalable_until(|| {
             // todo: check for this without relocking the scheduler
-            // if !self.is_current_foreground() {
-            //     return Ok(None);
-            // }
+            if !self.is_current_foreground() {
+                return Ok(None);
+            }
 
             let mut buf_lock = self.buf.lock();
             while writer.remaining_len() > 0 {
@@ -241,7 +242,8 @@ impl LineDiscipline {
             }
         })?;
         if read_len > 0 {
-            self.wait_queue.wake_all();
+            // self.wait_queue.wake_all();
+            get_scheduler().wake_all(&self.wait_queue);
             // POLL_WAIT_QUEUE.wake_all();
         }
         Ok(read_len)
@@ -327,7 +329,7 @@ impl File for Tty {
             TIOCSPGRP => {
                 let arg = VirtAddr::new(arg);
                 let pgid = *arg.read::<c_int>()?;
-                let pg = get_scheduler().lock().find_group(pgid).ok_or_else(|| errno!(Errno::ESRCH))?;
+                let pg = get_scheduler().find_group(pgid).ok_or_else(|| errno!(Errno::ESRCH))?;
                 self.discipline
                     .set_foreground_process_group(Arc::downgrade(&pg));
             }
