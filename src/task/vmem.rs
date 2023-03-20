@@ -6,7 +6,7 @@ use x86_64::structures::{idt::PageFaultErrorCode, paging::PageTableFlags};
 use crate::{
     mem::{
         addr::VirtAddr,
-        allocator::PageAllocator,
+        allocator::{PageAllocator, alloc_kernel_frames},
         consts::PAGE_SIZE,
         paging::{
             mapper::Mapper,
@@ -210,21 +210,34 @@ impl Vmem {
                 self.mp.get_mut(&area.id).unwrap().push(mp);
             } else {
                 // set new flags, handle COW
-                let mp = self
-                    .mp
-                    .get_mut(&area.id)
-                    .unwrap()
-                    .iter_mut()
-                    .find(|mp| mp.pages().contains(Page::containing_address(faulted_addr)))
-                    .unwrap();
-                // let orig_flags = mp.flags();
-                active_mapper.set_flags(mp, area.flags);
-
+                // todo: update `self.mp` to reflect these changes - this will cause problems!
+                
                 if area.flags.contains(PageTableFlags::WRITABLE)
                     && reason.contains(PageFaultErrorCode::CAUSED_BY_WRITE)
                 {
                     // COW
-                    todo!("COW")
+                    let new_frame = alloc_kernel_frames(1).unwrap();
+                    let new_page = unsafe {
+                        core::slice::from_raw_parts_mut(new_frame.start_address().as_hhdm_virt().as_mut_ptr::<u8>(), PAGE_SIZE)
+                    };
+                    let old_page = unsafe {
+                        core::slice::from_raw_parts(faulted_addr.align_down(PAGE_SIZE).as_ptr::<u8>(), PAGE_SIZE)
+                    };
+                    new_page.copy_from_slice(old_page);
+                    unsafe {
+                        active_mapper.unmap_single(Page::containing_address(faulted_addr));
+                    }
+                    active_mapper.map_to_single(Page::containing_address(faulted_addr), new_frame.start(), area.flags).unwrap();
+                } else {
+                    let mp = self
+                        .mp
+                        .get_mut(&area.id)
+                        .unwrap()
+                        .iter_mut()
+                        .find(|mp| mp.pages().contains(Page::containing_address(faulted_addr)))
+                        .unwrap();
+                    // let orig_flags = mp.flags();
+                    active_mapper.set_flags(mp, area.flags);
                 }
             }
         } else {
