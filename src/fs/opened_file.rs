@@ -11,11 +11,12 @@ use crate::{
     util::{ctypes::c_int, errno::Errno, error::KResult},
 };
 
-use super::{path::PathComponent, DirRef, FileRef, INode, PollStatus};
+use super::{path::PathComponent, DirRef, FileRef, INode, PollStatus, DirEntry};
 
 const FD_MAX: c_int = 1024;
 
 bitflags! {
+    #[derive(Clone, Copy)]
     pub struct OpenFlags: i32 {
         const O_RDONLY = 0;
         const O_WRONLY = 1;
@@ -144,6 +145,15 @@ impl OpenedFile {
 
     pub fn ioctl(&self, cmd: usize, arg: usize) -> KResult<isize> {
         self.as_file()?.ioctl(cmd, arg)
+    }
+
+    
+    pub fn readdir(&self) -> KResult<Option<DirEntry>> {
+        let pos = self.pos();
+
+        let entry = self.as_dir()?.readdir(pos)?;
+        self.pos.fetch_add(1);
+        Ok(entry)
     }
 }
 

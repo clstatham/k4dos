@@ -89,7 +89,7 @@ pub struct Task {
 
     pid: TaskId,
 
-    opened_files: Arc<SpinLock<OpenedFileTable>>,
+    pub(crate) opened_files: Arc<SpinLock<OpenedFileTable>>,
 
     parent: SpinLock<Weak<Task>>,
     pub(crate) children: Arc<SpinLock<Vec<Arc<Task>>>>,
@@ -228,7 +228,7 @@ impl Task {
             self.signaled_frame.store(None);
         }
         let lock = &mut self.vmem.lock();
-        // unsafe { self.vmem.force_unlock() };
+        unsafe { self.vmem.force_unlock() };
         self.arch_mut().exec(lock, file, argv, envp)
     }
 
@@ -278,6 +278,14 @@ impl Task {
         self.pid
     }
 
+    pub fn ppid(&self) -> TaskId {
+        if let Some(parent) = self.parent.lock().upgrade() {
+            parent.pid
+        } else {
+            TaskId::new(0)
+        }
+    }
+
     pub fn get_state(&self) -> TaskState {
         self.state.load()
     }
@@ -307,12 +315,12 @@ impl Task {
         faulted_addr: VirtAddr,
         stack_frame: InterruptErrorFrame,
         reason: PageFaultErrorCode,
-    ) {
+    ) -> KResult<()> {
         let addr_space = &mut self.arch_mut().address_space;
         let mut mapper = addr_space.mapper();
         self.vmem
             .lock()
-            .handle_page_fault(&mut mapper, faulted_addr, stack_frame, reason);
+            .handle_page_fault(&mut mapper, faulted_addr, stack_frame, reason)
     }
 
     pub fn set_signal_mask(

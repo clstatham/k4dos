@@ -351,7 +351,7 @@ impl Vmem {
         faulted_addr: VirtAddr,
         stack_frame: InterruptErrorFrame,
         reason: PageFaultErrorCode,
-    ) {
+    ) -> KResult<()> {
         log::warn!("User page fault at {:#x}!", stack_frame.frame.rip as usize);
         log::warn!("PID: {}", current_task().pid().as_usize());
         log::warn!("Faulted address: {:?}", faulted_addr);
@@ -390,6 +390,7 @@ impl Vmem {
                     .unwrap();
                 }
                 self.mp.get_mut(&area.id).unwrap().push(mp);
+                return Ok(())
             } else if reason.contains(PageFaultErrorCode::CAUSED_BY_WRITE) {
                 if !area.prot.contains(MMapProt::PROT_WRITE) {
                     log::error!("User segmentation fault: illegal write");
@@ -421,9 +422,12 @@ impl Vmem {
                         area.prot.into(),
                     )
                     .unwrap();
+                return Ok(())
             }
         } else {
             todo!("Kill process that accessed memory it doesn't own")
         }
+
+        Err(errno!(Errno::EFAULT))
     }
 }

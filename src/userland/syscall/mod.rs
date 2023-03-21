@@ -3,8 +3,8 @@ use alloc::sync::Arc;
 use crate::{
     errno,
     fs::{
-        opened_file::FileDesc,
-        path::{Path, PathBuf},
+        opened_file::{FileDesc, OpenFlags},
+        path::{Path, PathBuf}, FileMode,
     },
     mem::addr::VirtAddr,
     task::{current_task, get_scheduler, Task, TaskId, vmem::{MMapProt, MMapFlags}},
@@ -26,6 +26,10 @@ pub mod wait4;
 pub mod write;
 pub mod writev;
 pub mod mmap;
+pub mod stat;
+pub mod open;
+pub mod fcntl;
+pub mod getcwd;
 
 #[repr(packed)]
 #[derive(Default, Clone, Debug)]
@@ -107,6 +111,7 @@ impl<'a> SyscallHandler<'a> {
             SYS_EXECVE => self.sys_execve(&resolve_path(a1)?, VirtAddr::new(a2), VirtAddr::new(a3)),
             SYS_GETTID => self.sys_getpid(), // todo
             SYS_GETPID => self.sys_getpid(),
+            SYS_GETPPID => self.sys_getppid(),
             SYS_EXIT => self.sys_exit(a1 as c_int),
             SYS_MMAP => self.sys_mmap(VirtAddr::new(a1), a2, crate::bitflags_from_user!(MMapProt, a3 as u64), crate::bitflags_from_user!(MMapFlags, a4 as u64), a5 as FileDesc, a6),
             SYS_MPROTECT => self.sys_mprotect(VirtAddr::new(a1), a2, crate::bitflags_from_user!(MMapProt, a3 as u64)),
@@ -116,6 +121,11 @@ impl<'a> SyscallHandler<'a> {
             SYS_SETUID => Ok(0),    // TODO:
             SYS_SETGID => Ok(0),    // TODO:
             SYS_SETGROUPS => Ok(0), // TODO:
+            SYS_STAT => self.sys_stat(&resolve_path(a1)?, VirtAddr::new(a2)),
+            SYS_FSTAT => self.sys_fstat(a1 as FileDesc, VirtAddr::new(a2)),
+            SYS_OPEN => self.sys_open(&resolve_path(a1)?, crate::bitflags_from_user!(OpenFlags, a2 as i32), FileMode::new(a3 as u32)),
+            SYS_GETCWD => self.sys_getcwd(VirtAddr::new(a1), a2 as u64),
+            SYS_GETDENTS64 => self.sys_getdents64(a1 as FileDesc, VirtAddr::new(a2), a3),
             _ => Err(errno!(Errno::ENOSYS)),
         };
         // }

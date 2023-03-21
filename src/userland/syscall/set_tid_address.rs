@@ -10,4 +10,8 @@ impl<'a> SyscallHandler<'a> {
     pub fn sys_getpid(&mut self) -> KResult<isize> {
         Ok(current_task().pid().as_usize() as isize)
     }
+
+    pub fn sys_getppid(&mut self) -> KResult<isize> {
+        Ok(current_task().ppid().as_usize() as isize)
+    }
 }

@@ -6,7 +6,7 @@ use alloc::{
 
 use crate::{
     errno,
-    fs::{alloc_inode_no, Directory, FileMode, FsNode, INode, Stat, S_IFDIR},
+    fs::{alloc_inode_no, Directory, FileMode, FsNode, INode, Stat, S_IFDIR, DirEntry, FileType},
     util::{errno::Errno, lock::SpinLock, KResult},
 };
 
@@ -82,6 +82,34 @@ impl Directory for InitRamFsDir {
 
     fn stat(&self) -> KResult<Stat> {
         Ok(self.inner.lock().stat)
+    }
+
+    fn readdir(&self, index: usize) -> KResult<Option<crate::fs::DirEntry>> {
+        let entry = self
+            .inner
+            .lock()
+            .children
+            .values()
+            .nth(index)
+            .map(|entry| match entry {
+                INode::Dir(dir) => DirEntry {
+                    inode_no: dir.stat().unwrap().inode_no,
+                    file_type: FileType::Directory,
+                    name: dir.get_name(),
+                },
+                INode::File(file) => DirEntry {
+                    inode_no: file.stat().unwrap().inode_no,
+                    file_type: FileType::Directory,
+                    name: file.get_name(),
+                },
+                INode::Symlink(link) => DirEntry {
+                    inode_no: link.stat().unwrap().inode_no,
+                    file_type: FileType::Link,
+                    name: link.get_name(),
+                },
+            });
+
+        Ok(entry)
     }
 }
 

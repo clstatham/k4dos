@@ -314,33 +314,33 @@ extern "C" fn x64_handle_interrupt(vector: u8, stack_frame: *mut InterruptErrorF
             let accessed_address = x86_64::registers::control::Cr2::read_raw();
             let cr3 = x86_64::registers::control::Cr3::read_raw().0;
             let error_code = PageFaultErrorCode::from_bits_truncate(error_code);
-            if error_code.contains(PageFaultErrorCode::USER_MODE) {
+            // if error_code.contains(PageFaultErrorCode::USER_MODE) {
                 // unsafe {
                 //     core::arch::asm!("swapgs");
                 // }
-                current_task().handle_page_fault(
-                    VirtAddr::new(accessed_address as usize),
-                    stack_frame.clone(),
-                    error_code,
-                );
-                // unsafe {
-                //     core::arch::asm!("swapgs");
-                // }
-                return;
-            }
-
-            log::error!(
-                "\nEXCEPTION: PAGE FAULT while accessing {:#x}\n\
-                error code: {:?}\ncr3: {:#x}\n{:#x?}",
-                accessed_address,
+            if current_task().handle_page_fault(
+                VirtAddr::new(accessed_address as usize),
+                stack_frame.clone(),
                 error_code,
-                cr3.start_address().as_u64(),
-                stack_frame,
-            );
-
-            log::error!("Exception IP {:#x}", stack_frame.frame.rip as usize);
-            log::error!("Faulted access address {:#x}", accessed_address,);
-            panic!()
+            ).is_err() {
+                log::error!(
+                    "\nEXCEPTION: PAGE FAULT while accessing {:#x}\n\
+                    error code: {:?}\ncr3: {:#x}\n{:#x?}",
+                    accessed_address,
+                    error_code,
+                    cr3.start_address().as_u64(),
+                    stack_frame,
+                );
+    
+                log::error!("Exception IP {:#x}", stack_frame.frame.rip as usize);
+                log::error!("Faulted access address {:#x}", accessed_address,);
+                panic!()
+            }
+            return;
+            // unsafe {
+            //     core::arch::asm!("swapgs");
+            // }
+            // }
         }
         X87_FPU_VECTOR => {
             log::error!("\nEXCEPTION: x87 FLOATING POINT\n{:#x?}", stack_frame);

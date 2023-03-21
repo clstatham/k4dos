@@ -189,6 +189,7 @@ impl LineDiscipline {
                         ringbuf.push_slice(current_line.as_slice());
                         current_line.clear();
                         if termios.lflag.contains(LFlag::ECHO) {
+                            // callback(LineControl::Echo(b'\r'));
                             callback(LineControl::Echo(b'\n'));
                         }
                     }

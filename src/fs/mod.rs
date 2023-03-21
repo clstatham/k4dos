@@ -270,6 +270,8 @@ pub trait Directory: FsNode {
         // "EINVAL - The named file is not a symbolic link." -- readlink(2)
         Err(errno!(Errno::EINVAL))
     }
+
+    fn readdir(&self, index: usize) -> KResult<Option<DirEntry>>;
 }
 
 #[derive(Clone)]
