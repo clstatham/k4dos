@@ -16,6 +16,52 @@ use crate::{
 
 pub static KERNEL_ELF: Once<ElfFile<'static>> = Once::new();
 
+pub fn unwind_user_stack_from(mut rbp: usize) -> KResult<()> {
+    let _guard = SavedInterruptStatus::save();
+    let mut addr_space = AddressSpace::current();
+    let pt = addr_space.mapper();
+
+    if rbp == 0 {
+        log::trace!("<empty backtrace>");
+        return Ok(());
+    }
+
+    log::trace!("---BEGIN BACKTRACE---");
+    for depth in 0..16 {
+        if let Some(rip_rbp) = rbp.checked_add(size_of::<usize>()) {
+            if pt.translate(VirtAddr::new(rip_rbp)).is_none() {
+                log::trace!("{:>2}: <guard page>", depth);
+                break;
+            }
+
+            let rip = unsafe { *(rip_rbp as *const usize) };
+            if rip == 0 {
+                break;
+            }
+
+            unsafe {
+                rbp = *(rbp as *const usize);
+            }
+
+            // let mut name = None;
+            // for data in symbol_table {
+            //     let st_value = data.value() as usize;
+            //     let st_size = data.size() as usize;
+
+            //     if rip >= st_value && rip < (st_value + st_size) {
+            //         let mangled_name = data.get_name(&kernel_elf).unwrap_or("<unknown>");
+            //         name = Some(rustc_demangle::demangle(mangled_name));
+            //     }
+            // }
+
+            log::trace!("{:>2}: 0x{:016x} - <unknown>", depth, rip);
+        } else {
+            break;
+        }
+    }
+    Ok(())
+}
+
 pub fn unwind_stack() -> KResult<()> {
     let _guard = SavedInterruptStatus::save();
 

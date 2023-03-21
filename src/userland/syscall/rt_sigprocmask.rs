@@ -1,8 +1,8 @@
 use crate::{
     errno,
     mem::addr::VirtAddr,
-    task::{current_task, signal::SignalMask},
-    util::{errno::Errno, error::KResult},
+    task::{current_task, signal::{SignalMask, SIG_IGN, SigAction, SIG_DFL, DEFAULT_ACTIONS}},
+    util::{errno::Errno, error::KResult, ctypes::c_int},
 };
 
 use super::SyscallHandler;
@@ -28,6 +28,23 @@ impl<'a> SyscallHandler<'a> {
 
         current_task().set_signal_mask(how, set, oldset, length)?;
 
+        Ok(0)
+    }
+
+    pub fn sys_rt_sigaction(&mut self, signum: c_int, act: VirtAddr, _: VirtAddr) -> KResult<isize> {
+        if act != VirtAddr::null() {
+            let handler = *act.read::<usize>()?;
+            let new_action = match handler {
+                SIG_IGN => SigAction::Ignore,
+                SIG_DFL => match DEFAULT_ACTIONS.get(signum as usize) {
+                    Some(def) => *def,
+                    None => return Err(errno!(Errno::EINVAL)),
+                }
+                _ => SigAction::Handler { handler }
+            };
+
+            current_task().signals.lock().set_action(signum, new_action)?;
+        }
         Ok(0)
     }
 }

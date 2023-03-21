@@ -320,7 +320,7 @@ extern "C" fn x64_handle_interrupt(vector: u8, stack_frame: *mut InterruptErrorF
                 // }
                 current_task().handle_page_fault(
                     VirtAddr::new(accessed_address as usize),
-                    VirtAddr::new(stack_frame.frame.rip as usize),
+                    stack_frame.clone(),
                     error_code,
                 );
                 // unsafe {

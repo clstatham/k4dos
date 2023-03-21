@@ -4,19 +4,21 @@ use alloc::{collections::BTreeMap, vec::Vec};
 use x86_64::structures::{idt::PageFaultErrorCode, paging::PageTableFlags};
 
 use crate::{
+    arch::idt::InterruptErrorFrame,
+    backtrace, errno,
+    fs::{opened_file::FileDesc, FileRef},
     mem::{
         addr::VirtAddr,
         allocator::{alloc_kernel_frames, PageAllocator},
-        consts::{PAGE_SIZE, MAX_LOW_VADDR, USER_VALLOC_BASE, USER_VALLOC_END, USER_STACK_TOP},
+        consts::{MAX_LOW_VADDR, PAGE_SIZE, USER_STACK_TOP, USER_VALLOC_BASE, USER_VALLOC_END},
         paging::{
             mapper::Mapper,
             units::{MappedPages, Page, PageRange},
         },
     },
-    task::current_task,
-    util::{KResult, errno::Errno, align_up}, fs::{opened_file::FileDesc, FileRef}, errno,
+    task::{current_task, get_scheduler, signal::SIGSEGV},
+    util::{align_up, errno::Errno, KResult},
 };
-
 
 bitflags::bitflags! {
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -36,7 +38,6 @@ bitflags::bitflags! {
         const MAP_ANONYMOUS = 0x20;
     }
 }
-
 
 impl From<MMapProt> for PageTableFlags {
     fn from(e: MMapProt) -> Self {
@@ -67,7 +68,7 @@ pub enum MMapKind {
         file: FileRef,
         offset: usize,
         size: usize,
-    }
+    },
 }
 
 #[derive(Clone)]
@@ -147,7 +148,11 @@ impl Vmem {
         )
     }
 
-    pub fn area_containing(&mut self, start_addr: VirtAddr, end_addr: VirtAddr) -> Option<&mut VmemArea> {
+    pub fn area_containing(
+        &mut self,
+        start_addr: VirtAddr,
+        end_addr: VirtAddr,
+    ) -> Option<&mut VmemArea> {
         for area in self.areas.iter_mut() {
             if area.contains_addr(start_addr) && area.contains_addr(end_addr) {
                 return Some(area);
@@ -155,10 +160,6 @@ impl Vmem {
         }
         None
     }
-
-    // pub fn area(&self, id: VmemAreaId) -> Option<&VmemArea> {
-    //     self.areas.get(&id)
-    // }
 
     pub fn add_area(
         &mut self,
@@ -171,20 +172,17 @@ impl Vmem {
         if self.area_containing(start_addr, end_addr).is_some() {
             // return Err(errno!(Errno::EAGAIN));
             self.log();
-            panic!()
+            panic!("Cannot add vmem area that already exists");
         }
         let id = self.alloc_id();
-        self.areas.push(
-            VmemArea {
-                id,
-                start_addr,
-                end_addr,
-                flags,
-                prot,
-                kind,
-            },
-        );
-        // self.zero_memory(start_addr, end_addr);
+        self.areas.push(VmemArea {
+            id,
+            start_addr,
+            end_addr,
+            flags,
+            prot,
+            kind,
+        });
         self.areas.sort_by_key(|area| area.start_address());
         self.mp.insert(id, Vec::new());
         Ok(id)
@@ -195,58 +193,86 @@ impl Vmem {
         Ok(())
     }
 
-    pub fn mprotect(&mut self, start_addr: VirtAddr, size: usize, protection: MMapProt) -> KResult<()> {
-        // let size_aligned = align_up(size, PAGE_SIZE);
-        let area = self.area_containing(start_addr, start_addr + size - 1).ok_or(errno!(Errno::ENOMEM))?;
+    pub fn mprotect(
+        &mut self,
+        start_addr: VirtAddr,
+        size: usize,
+        protection: MMapProt,
+    ) -> KResult<()> {
+        let area = self
+            .area_containing(start_addr, start_addr + size - 1)
+            .ok_or(errno!(Errno::ENOMEM))?;
         area.prot = protection;
         Ok(())
     }
 
-    pub fn mmap(&mut self, start_addr: VirtAddr, size: usize, protection: MMapProt, flags: MMapFlags, fd: FileDesc, offset: usize) -> KResult<VirtAddr> {
+    pub fn mmap(
+        &mut self,
+        start_addr: VirtAddr,
+        size: usize,
+        protection: MMapProt,
+        flags: MMapFlags,
+        fd: FileDesc,
+        offset: usize,
+    ) -> KResult<VirtAddr> {
         if size == 0 {
-            return Err(errno!(Errno::EFAULT))
+            return Err(errno!(Errno::EFAULT));
         }
-        
+
         let size_aligned = align_up(size, PAGE_SIZE);
         if start_addr == VirtAddr::null() {
             let start = self.find_free_space_above(VirtAddr::new(0x7000_0000_0000), size_aligned);
             if let Some((start, prev)) = start {
                 if let Some(prev_idx) = prev {
                     let prev = &mut self.areas[prev_idx];
-                    if prev.end_addr == start && prev.flags == flags && prev.prot == protection && matches!(prev.kind, MMapKind::Anonymous) {
+                    if prev.end_addr == start
+                        && prev.flags == flags
+                        && prev.prot == protection
+                        && matches!(prev.kind, MMapKind::Anonymous)
+                    {
                         prev.end_addr = start + size_aligned;
-                        self.log();
+                        // self.log();
                         return Ok(start);
                     }
                 }
 
-                self.add_area(start, start + size_aligned, flags, protection, MMapKind::Anonymous)?;
-                self.log();
-                return Ok(start)
+                self.add_area(
+                    start,
+                    start + size_aligned,
+                    flags,
+                    protection,
+                    MMapKind::Anonymous,
+                )?;
+                // self.log();
+                return Ok(start);
             }
 
-            return Err(errno!(Errno::ENOMEM))
+            return Err(errno!(Errno::ENOMEM));
         }
         // todo!()
         Err(errno!(Errno::ENOSYS))
     }
 
-    fn find_free_space_above(&mut self, minimum_start: VirtAddr, size: usize) -> Option<(VirtAddr, Option<usize>)> {
+    fn find_free_space_above(
+        &mut self,
+        minimum_start: VirtAddr,
+        size: usize,
+    ) -> Option<(VirtAddr, Option<usize>)> {
         if self.areas.is_empty() {
-            return Some((minimum_start, None))
+            return Some((minimum_start, None));
         }
 
         assert!(self.areas.is_sorted_by_key(|a| a.start_addr));
-        for i in 0..self.areas.len()-1 {
-            if self.areas[i+1].start_addr >= minimum_start + size {
-                if self.areas[i+1].start_addr.value() - self.areas[i].end_addr.value() >= size {
+        for i in 0..self.areas.len() - 1 {
+            if self.areas[i + 1].start_addr >= minimum_start + size {
+                if self.areas[i + 1].start_addr.value() - self.areas[i].end_addr.value() >= size {
                     if self.areas[i].end_addr < minimum_start {
-                        return Some((minimum_start, Some(i)))
+                        return Some((minimum_start, Some(i)));
                     } else {
-                        return Some((self.areas[i].end_addr, Some(i)))
+                        return Some((self.areas[i].end_addr, Some(i)));
                     }
                 }
-                return None
+                return None;
             }
         }
 
@@ -278,7 +304,7 @@ impl Vmem {
         Ok(id)
     }
 
-    pub fn unmap_area(&mut self, id: VmemAreaId, active_mapper: &mut Mapper)-> Option<()> {
+    pub fn unmap_area(&mut self, id: VmemAreaId, active_mapper: &mut Mapper) -> Option<()> {
         for mp in self.mp.get_mut(&id)?.iter_mut() {
             active_mapper.unmap(mp);
             unsafe {
@@ -317,23 +343,25 @@ impl Vmem {
             parent.next_id.load(core::sync::atomic::Ordering::Acquire),
             core::sync::atomic::Ordering::Release,
         );
-        // parent.log();
-        // self.log();
     }
 
     pub fn handle_page_fault(
         &mut self,
         active_mapper: &mut Mapper,
         faulted_addr: VirtAddr,
-        instruction_pointer: VirtAddr,
+        stack_frame: InterruptErrorFrame,
         reason: PageFaultErrorCode,
     ) {
-        log::warn!("User page fault at {:?}!", instruction_pointer);
+        log::warn!("User page fault at {:#x}!", stack_frame.frame.rip as usize);
         log::warn!("PID: {}", current_task().pid().as_usize());
         log::warn!("Faulted address: {:?}", faulted_addr);
         log::warn!("Reason: {:?}", reason);
+        // backtrace::unwind_user_stack_from(stack_frame.frame.rbp as usize).unwrap();
         if faulted_addr.align_down(PAGE_SIZE) == VirtAddr::null() {
-            todo!("Kill process that accessed null pointer")
+            // todo!("Kill process that accessed null pointer")
+            log::error!("User segmentation fault: null pointer access");
+            get_scheduler().send_signal_to(current_task(), SIGSEGV);
+            get_scheduler().exit_current(1);
         }
 
         let mut faulted_area = None;
@@ -345,64 +373,54 @@ impl Vmem {
         }
 
         if let Some(area) = faulted_area {
-            let trans = active_mapper.translate(faulted_addr);
-            if trans.is_none() {
+            // let trans = active_mapper.translate(faulted_addr);
+            if !reason.contains(PageFaultErrorCode::PROTECTION_VIOLATION) {
+                // set present
+                // flags |= PageTableFlags::PRESENT;
+                // unsafe {
+                //     active_mapper.set_flags_single(Page::containing_address(faulted_addr), flags);
+                // }
+                // if trans.is_none() {
                 // allocate and map pages
                 let page = Page::containing_address(faulted_addr);
                 let ap = self.page_allocator.allocate_at(page, 1).unwrap();
                 let mp = active_mapper.map(ap, area.prot.into()).unwrap();
-                self.zero_memory(page.start_address(), page.start_address() + PAGE_SIZE).unwrap();
+                if !matches!(area.kind, MMapKind::File { .. }) {
+                    self.zero_memory(page.start_address(), page.start_address() + PAGE_SIZE)
+                    .unwrap();
+                }
                 self.mp.get_mut(&area.id).unwrap().push(mp);
-            } else {
-                let (_frame, mut flags) = trans.unwrap();
-                // set new flags, handle COW
-                // todo: update `self.mp` to reflect these changes - this will cause problems!
-                if !reason.contains(PageFaultErrorCode::PROTECTION_VIOLATION) {
-                    // set present
-                    flags |= PageTableFlags::PRESENT;
-                    unsafe {
-                        active_mapper.set_flags_single(Page::containing_address(faulted_addr), flags);
-                    }
+            } else if reason.contains(PageFaultErrorCode::CAUSED_BY_WRITE) {
+                if !area.prot.contains(MMapProt::PROT_WRITE) {
+                    log::error!("User segmentation fault: illegal write");
+                    get_scheduler().send_signal_to(current_task(), SIGSEGV);
+                    get_scheduler().exit_current(1);
                 }
-                if area.prot.contains(MMapProt::PROT_WRITE)
-                    && reason.contains(PageFaultErrorCode::CAUSED_BY_WRITE)
-                {
-                    // COW
-                    let new_frame = alloc_kernel_frames(1).unwrap();
-                    let new_page = unsafe {
-                        core::slice::from_raw_parts_mut(
-                            new_frame.start_address().as_hhdm_virt().as_mut_ptr::<u8>(),
-                            PAGE_SIZE,
-                        )
-                    };
-                    let old_page = unsafe {
-                        core::slice::from_raw_parts(
-                            faulted_addr.align_down(PAGE_SIZE).as_ptr::<u8>(),
-                            PAGE_SIZE,
-                        )
-                    };
-                    new_page.copy_from_slice(old_page);
-                    unsafe {
-                        active_mapper.unmap_single(Page::containing_address(faulted_addr));
-                    }
-                    active_mapper
-                        .map_to_single(
-                            Page::containing_address(faulted_addr),
-                            new_frame.start(),
-                            area.prot.into(),
-                        )
-                        .unwrap();
-                } else {
-                    unsafe {
-                        active_mapper.set_flags_single(Page::containing_address(faulted_addr), area.prot.into());
-                        // log::debug!("{:>2x?}", core::slice::from_raw_parts::<u8>(faulted_addr.align_down(PAGE_SIZE).as_ptr(), PAGE_SIZE));
-                        // gotta zero out the memory IFF it doesn't belong to a file
-                        if matches!(area.kind, MMapKind::Anonymous) {
-                            self.zero_memory(faulted_addr.align_down(PAGE_SIZE), faulted_addr.align_down(PAGE_SIZE) + PAGE_SIZE).unwrap();
-                        }
-                    }
-                    
+                // COW
+                let new_frame = alloc_kernel_frames(1).unwrap();
+                let new_page = unsafe {
+                    core::slice::from_raw_parts_mut(
+                        new_frame.start_address().as_hhdm_virt().as_mut_ptr::<u8>(),
+                        PAGE_SIZE,
+                    )
+                };
+                let old_page = unsafe {
+                    core::slice::from_raw_parts(
+                        faulted_addr.align_down(PAGE_SIZE).as_ptr::<u8>(),
+                        PAGE_SIZE,
+                    )
+                };
+                new_page.copy_from_slice(old_page);
+                unsafe {
+                    active_mapper.unmap_single(Page::containing_address(faulted_addr));
                 }
+                active_mapper
+                    .map_to_single(
+                        Page::containing_address(faulted_addr),
+                        new_frame.start(),
+                        area.prot.into(),
+                    )
+                    .unwrap();
             }
         } else {
             todo!("Kill process that accessed memory it doesn't own")

@@ -13,7 +13,7 @@ use spin::{Once, RwLock};
 use x86_64::structures::idt::PageFaultErrorCode;
 
 use crate::{
-    arch::{idt::InterruptFrame, task::ArchTask},
+    arch::{idt::{InterruptFrame, InterruptErrorFrame}, task::ArchTask},
     errno,
     fs::{
         initramfs::get_root,
@@ -97,7 +97,7 @@ pub struct Task {
 
     vmem: Arc<SpinLock<Vmem>>,
 
-    signals: Arc<SpinLock<SignalDelivery>>,
+    pub(crate) signals: Arc<SpinLock<SignalDelivery>>,
     signaled_frame: AtomicCell<Option<InterruptFrame>>,
     sigset: Arc<SpinLock<SigSet>>,
 }
@@ -305,14 +305,14 @@ impl Task {
     pub fn handle_page_fault(
         &self,
         faulted_addr: VirtAddr,
-        instruction_pointer: VirtAddr,
+        stack_frame: InterruptErrorFrame,
         reason: PageFaultErrorCode,
     ) {
         let addr_space = &mut self.arch_mut().address_space;
         let mut mapper = addr_space.mapper();
         self.vmem
             .lock()
-            .handle_page_fault(&mut mapper, faulted_addr, instruction_pointer, reason);
+            .handle_page_fault(&mut mapper, faulted_addr, stack_frame, reason);
     }
 
     pub fn set_signal_mask(

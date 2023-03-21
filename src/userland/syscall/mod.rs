@@ -110,6 +110,12 @@ impl<'a> SyscallHandler<'a> {
             SYS_EXIT => self.sys_exit(a1 as c_int),
             SYS_MMAP => self.sys_mmap(VirtAddr::new(a1), a2, crate::bitflags_from_user!(MMapProt, a3 as u64), crate::bitflags_from_user!(MMapFlags, a4 as u64), a5 as FileDesc, a6),
             SYS_MPROTECT => self.sys_mprotect(VirtAddr::new(a1), a2, crate::bitflags_from_user!(MMapProt, a3 as u64)),
+            SYS_RT_SIGACTION => self.sys_rt_sigaction(a1 as c_int, VirtAddr::new(a2), VirtAddr::new(a3)),
+            SYS_GETUID => Ok(0),    // TODO:
+            SYS_GETEUID => Ok(0),   // TODO:
+            SYS_SETUID => Ok(0),    // TODO:
+            SYS_SETGID => Ok(0),    // TODO:
+            SYS_SETGROUPS => Ok(0), // TODO:
             _ => Err(errno!(Errno::ENOSYS)),
         };
         // }
