@@ -16,7 +16,7 @@ use crate::{
     arch::{idt::{InterruptFrame, InterruptErrorFrame}, task::ArchTask},
     errno,
     fs::{
-        initramfs::get_root,
+        initramfs::{get_root, root::RootFs},
         opened_file::{FileDesc, OpenFlags, OpenOptions, OpenedFile, OpenedFileTable},
         path::{Path, PathComponent},
         tty::TTY,
@@ -89,6 +89,7 @@ pub struct Task {
 
     pid: TaskId,
 
+    pub(crate) root_fs: Arc<SpinLock<RootFs>>,
     pub(crate) opened_files: Arc<SpinLock<OpenedFileTable>>,
 
     parent: SpinLock<Weak<Task>>,
@@ -115,6 +116,7 @@ impl Task {
             pid,
             parent: SpinLock::new(Weak::new()),
             children: Arc::new(SpinLock::new(Vec::new())),
+            root_fs: Arc::new(SpinLock::new(get_root().unwrap().clone())),
             opened_files: Arc::new(SpinLock::new(OpenedFileTable::new())),
             vmem: Arc::new(SpinLock::new(Vmem::new())),
             signaled_frame: AtomicCell::new(None),
@@ -140,6 +142,7 @@ impl Task {
             pid,
             parent: SpinLock::new(Weak::new()),
             children: Arc::new(SpinLock::new(Vec::new())),
+            root_fs: Arc::new(SpinLock::new(get_root().unwrap().clone())),
             opened_files: Arc::new(SpinLock::new(OpenedFileTable::new())),
             vmem: Arc::new(SpinLock::new(Vmem::new())),
             signaled_frame: AtomicCell::new(None),
@@ -160,7 +163,7 @@ impl Task {
 
         let console = get_root()
             .unwrap()
-            .lookup_path(Path::new("/dev/console"), true)
+            .lookup_path(Path::new("/dev/tty"), true)
             .unwrap();
 
         let mut files = OpenedFileTable::new();
@@ -204,6 +207,7 @@ impl Task {
             parent: SpinLock::new(Weak::new()),
             group: AtomicRefCell::new(Arc::downgrade(&group)),
             children: Arc::new(SpinLock::new(Vec::new())),
+            root_fs: Arc::new(SpinLock::new(get_root().unwrap().clone())),
             opened_files: Arc::new(SpinLock::new(files)),
             vmem: Arc::new(SpinLock::new(vmem)),
             signaled_frame: AtomicCell::new(None),
@@ -239,6 +243,7 @@ impl Task {
         let new = Arc::new_cyclic(|sref| Self {
             sref: sref.clone(),
             arch,
+            root_fs: Arc::new(SpinLock::new(self.root_fs.lock().clone())),
             opened_files: Arc::new(SpinLock::new(self.opened_files.lock().clone())), // todo: deeper clone
             children: Arc::new(SpinLock::new(Vec::new())),
             parent: SpinLock::new(Weak::new()),

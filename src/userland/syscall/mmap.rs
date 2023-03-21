@@ -15,5 +15,11 @@ impl<'a> SyscallHandler<'a> {
         current_task().vmem().lock().mprotect(addr, size, prot)?;
         Ok(0)
     }
+
+    pub fn sys_munmap(&mut self, addr: VirtAddr, size: usize) -> KResult<isize> {
+        let current = current_task();
+        current.vmem().lock().munmap(&mut current.arch_mut().address_space.mapper(), addr, addr + size)?;
+        Ok(0)
+    }
 }
 

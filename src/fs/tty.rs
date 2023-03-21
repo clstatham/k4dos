@@ -27,14 +27,14 @@ use super::{
 pub static TTY: Once<Arc<Tty>> = Once::new();
 
 pub fn init() {
-    TTY.call_once(|| Arc::new(Tty::new("console")));
+    TTY.call_once(|| Arc::new(Tty::new("tty")));
     get_root()
         .unwrap()
         .lookup(Path::new("dev"))
         .unwrap()
         .as_dir()
         .unwrap()
-        .insert("console", INode::File(TTY.get().unwrap().clone()));
+        .insert("tty", INode::File(TTY.get().unwrap().clone()));
 }
 
 bitflags! {
@@ -277,7 +277,7 @@ pub struct Tty {
 
 impl Default for Tty {
     fn default() -> Self {
-        Self::new("console")
+        Self::new("tty")
     }
 }
 

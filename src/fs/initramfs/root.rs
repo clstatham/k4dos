@@ -13,6 +13,8 @@ use super::dir::InitRamFsDir;
 
 const MAX_SYMLINK_FOLLOW_DEPTH: usize = 20;
 
+
+#[derive(Clone)]
 pub struct RootFs {
     root_path: Arc<PathComponent>,
     cwd_path: Arc<PathComponent>,
@@ -41,6 +43,11 @@ impl RootFs {
 
     pub fn cwd_dir(&self) -> DirRef {
         self.cwd_path.inode.as_dir().unwrap().clone()
+    }
+
+    pub fn chdir(&mut self, path: &Path) -> KResult<()> {
+        self.cwd_path = self.lookup_path(path, true)?;
+        Ok(())
     }
 
     pub fn lookup(&self, path: &Path) -> KResult<INode> {

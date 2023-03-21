@@ -120,11 +120,11 @@ pub fn arch_main() {
     log::info!("Loading IDT.");
     idt::init();
 
-    log::info!("Initializing task scheduler.");
-    crate::task::init();
-
     log::info!("Initializing filesystems.");
     fs::initramfs::init().unwrap();
+
+    log::info!("Initializing task scheduler.");
+    crate::task::init();
 
     log::info!("Starting init process.");
 

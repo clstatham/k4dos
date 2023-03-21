@@ -4,7 +4,7 @@ use super::SyscallHandler;
 
 impl<'a> SyscallHandler<'a> {
     pub fn sys_stat(&mut self, path: &Path, buf: VirtAddr) -> KResult<isize> {
-        let stat = get_root().unwrap().lookup(path)?.stat()?;
+        let stat = current_task().root_fs.lock().lookup(path)?.stat()?;
         buf.write(stat)?;
         Ok(0)
     }

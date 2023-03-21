@@ -119,7 +119,7 @@ impl VmemArea {
 
 pub struct Vmem {
     areas: Vec<VmemArea>,
-    mp: BTreeMap<VmemAreaId, Vec<MappedPages>>,
+    // mp: BTreeMap<VmemAreaId, Vec<MappedPages>>,
     next_id: AtomicUsize,
     page_allocator: PageAllocator,
 }
@@ -135,7 +135,7 @@ impl Vmem {
         }
         Self {
             areas: Vec::new(),
-            mp: BTreeMap::new(),
+            // mp: BTreeMap::new(),
             next_id: AtomicUsize::new(0),
             page_allocator,
         }
@@ -184,7 +184,7 @@ impl Vmem {
             kind,
         });
         self.areas.sort_by_key(|area| area.start_address());
-        self.mp.insert(id, Vec::new());
+        // self.mp.insert(id, Vec::new());
         Ok(id)
     }
 
@@ -300,27 +300,83 @@ impl Vmem {
             prot,
             kind,
         )?;
-        self.mp.get_mut(&id).unwrap().push(mp);
+        // self.mp.get_mut(&id).unwrap().push(mp);
         Ok(id)
     }
 
-    pub fn unmap_area(&mut self, id: VmemAreaId, active_mapper: &mut Mapper) -> Option<()> {
-        for mp in self.mp.get_mut(&id)?.iter_mut() {
-            active_mapper.unmap(mp);
+    unsafe fn do_unmap(&mut self, start_addr: VirtAddr, end_addr: VirtAddr, active_mapper: &mut Mapper) -> Option<()> {
+        // for mp in self.mp.get_mut(&id)?.iter_mut() {
+        //     active_mapper.unmap(mp);
+        //     unsafe {
+        //         self.page_allocator.insert_free_region(**mp.pages());
+        //     }
+        // }
+        // let area = self.areas.iter().find(|area| area.id == id)?;
+        let range = PageRange::new(Page::containing_address(start_addr), Page::containing_address(end_addr - 1));
+        unsafe {
+            self.page_allocator.insert_free_region(range)
+        }
+        for page in range.iter() {
             unsafe {
-                self.page_allocator.insert_free_region(**mp.pages());
+                active_mapper.unmap_single(page);
             }
         }
-        self.areas.retain(|area| area.id != id);
-        self.mp.remove(&id);
+        // self.areas.retain(|area| area.id != id);
+        // self.mp.remove(&id);
         Some(())
+    }
+
+    pub fn munmap(&mut self, active_mapper: &mut Mapper, start_addr: VirtAddr, end_addr: VirtAddr) -> KResult<()> {
+        let area_idx = self.areas.iter_mut().enumerate().find(|(idx, area)| area.contains_addr(start_addr)).map(|(idx, area)| idx).unwrap();
+        let area_clone = self.areas[area_idx].clone();
+        if start_addr <= area_clone.start_addr && end_addr >= area_clone.end_addr {
+            // remove the whole area and continue recursively unmapping until the whole range is unmapped
+            unsafe {
+                self.do_unmap(area_clone.start_addr, area_clone.end_addr, active_mapper);
+            }
+            self.areas.remove(area_idx);
+            self.munmap(active_mapper, area_clone.end_addr, end_addr)?;
+        } else if start_addr >= area_clone.start_addr && end_addr < area_clone.end_addr {
+            // split the area in two
+            unsafe {
+                self.do_unmap(start_addr, end_addr, active_mapper);
+            }
+            todo!();
+            assert!(!matches!(area_clone.kind, MMapKind::File { .. })); // todo: handle this
+            self.add_area(area_clone.start_addr, start_addr, area_clone.flags, area_clone.prot, area_clone.kind.clone())?;
+            self.add_area(end_addr, area_clone.end_addr, area_clone.flags, area_clone.prot, area_clone.kind)?;
+        } else if start_addr <= area_clone.start_addr && end_addr < area_clone.end_addr {
+            // replace the end of the area (start was unmapped)
+            assert!(!matches!(area_clone.kind, MMapKind::File { .. })); // todo: handle this
+            // self.add_area(end_addr, area.end_addr, area.flags, area.prot, area.kind)?;
+            unsafe {
+                self.do_unmap(area_clone.start_addr, end_addr, active_mapper);
+            }
+            self.areas[area_idx].start_addr = end_addr;
+        } else if start_addr > area_clone.start_addr && end_addr >= area_clone.end_addr {
+            // replace the start of the area (end was unmapped)
+            unsafe {
+                self.do_unmap(start_addr, area_clone.end_addr, active_mapper);
+            }
+            // self.add_area(area.start_addr, end_addr, area.flags, area.prot, area.kind)?;
+            self.areas[area_idx].end_addr = end_addr;
+        } else {
+            log::debug!("Area:  {:?} .. {:?}", area_clone.start_addr, area_clone.end_addr);
+            log::debug!("Unmap: {:?} .. {:?}", start_addr, end_addr);
+            unreachable!()
+        }
+        Ok(())
     }
 
     pub fn clear(&mut self, active_mapper: &mut Mapper) {
         for id in 0..self.next_id.load(core::sync::atomic::Ordering::Acquire) {
-            self.unmap_area(VmemAreaId(id), active_mapper);
+            // self.unmap_area(VmemAreaId(id), active_mapper);
+            if let Some(area) = self.areas.get(id) {
+
+            }
         }
     }
+
 
     pub fn log(&self) {
         log::debug!("BEGIN VIRTUAL MEMORY STATE DUMP");
@@ -337,7 +393,7 @@ impl Vmem {
 
     pub fn fork_from(&mut self, parent: &Vmem) {
         self.areas = parent.areas.clone();
-        self.mp = parent.mp.clone();
+        // self.mp = parent.mp.clone();
         self.page_allocator = parent.page_allocator.clone();
         self.next_id.store(
             parent.next_id.load(core::sync::atomic::Ordering::Acquire),
@@ -352,15 +408,20 @@ impl Vmem {
         stack_frame: InterruptErrorFrame,
         reason: PageFaultErrorCode,
     ) -> KResult<()> {
-        log::warn!("User page fault at {:#x}!", stack_frame.frame.rip as usize);
+        let dump_and_exit = || {
+            log::error!("{:#x?}", stack_frame);
+            get_scheduler().send_signal_to(current_task(), SIGSEGV);
+            get_scheduler().exit_current(1);
+        };
+
+        log::warn!("User page fault at {:#x}", stack_frame.frame.rip as usize);
         log::warn!("PID: {}", current_task().pid().as_usize());
         log::warn!("Faulted address: {:?}", faulted_addr);
         log::warn!("Reason: {:?}", reason);
         // backtrace::unwind_user_stack_from(stack_frame.frame.rbp as usize).unwrap();
         if faulted_addr.align_down(PAGE_SIZE) == VirtAddr::null() {
             log::error!("User segmentation fault: null pointer access");
-            get_scheduler().send_signal_to(current_task(), SIGSEGV);
-            get_scheduler().exit_current(1);
+            dump_and_exit();
         }
 
         let mut faulted_area = None;
@@ -376,11 +437,13 @@ impl Vmem {
                 // allocate and map pages
                 let page = Page::containing_address(faulted_addr);
                 let ap = self.page_allocator.allocate_at(page, 1)?;
-                let mp = active_mapper.map(ap, area.prot.into())?;
+                let _mp = active_mapper.map(ap, area.prot.into())?;
                 if !matches!(area.kind, MMapKind::File { .. }) {
                     self.zero_memory(page.start_address(), page.start_address() + PAGE_SIZE)?;
+                } else {
+                    panic!("WTF DO I DO");
                 }
-                self.mp.get_mut(&area.id).unwrap().push(mp);
+                // self.mp.get_mut(&area.id).unwrap().push(mp);
                 return Ok(())
             } else if reason.contains(PageFaultErrorCode::CAUSED_BY_WRITE) {
                 if !area.prot.contains(MMapProt::PROT_WRITE) {
@@ -416,8 +479,7 @@ impl Vmem {
             }
         } else {
             log::error!("User segmentation fault: illegal access");
-            get_scheduler().send_signal_to(current_task(), SIGSEGV);
-            get_scheduler().exit_current(1);
+            dump_and_exit();
         }
 
         Err(errno!(Errno::EFAULT))

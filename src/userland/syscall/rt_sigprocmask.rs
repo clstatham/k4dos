@@ -32,7 +32,7 @@ impl<'a> SyscallHandler<'a> {
     }
 
     pub fn sys_rt_sigaction(&mut self, signum: c_int, act: VirtAddr, sigreturn: VirtAddr) -> KResult<isize> {
-        if act != VirtAddr::null() && sigreturn != VirtAddr::null() {
+        if act != VirtAddr::null() {
             let handler = *act.read::<usize>()?;
             let sigreturn = *sigreturn.read::<usize>()?;
             let new_action = match handler {

@@ -2,14 +2,14 @@ use core::mem::size_of;
 
 use alloc::string::String;
 
-use crate::{mem::addr::VirtAddr, util::{KResult, errno::Errno, align_up}, fs::{initramfs::get_root, opened_file::{OpenOptions, FileDesc}}, errno, userland::buffer::{UserBufferMut, UserBufferWriter}, task::current_task};
+use crate::{mem::addr::VirtAddr, util::{KResult, errno::Errno, align_up}, fs::{initramfs::get_root, opened_file::{OpenOptions, FileDesc}, path::Path}, errno, userland::buffer::{UserBufferMut, UserBufferWriter}, task::current_task};
 
 use super::SyscallHandler;
 
 
 impl<'a> SyscallHandler<'a> {
     pub fn sys_getcwd(&mut self, buf: VirtAddr, len: u64) -> KResult<isize> {
-        let cwd = get_root().unwrap()
+        let cwd = current_task().root_fs.lock()
             .cwd_path()
             .resolve_abs_path();
 
@@ -57,5 +57,10 @@ impl<'a> SyscallHandler<'a> {
         }
 
         Ok(writer.written_len() as isize)
+    }
+
+    pub fn sys_chdir(&mut self, path: &Path) -> KResult<isize> {
+        current_task().root_fs.lock().chdir(path)?;
+        Ok(0)
     }
 }

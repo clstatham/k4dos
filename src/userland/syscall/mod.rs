@@ -117,6 +117,7 @@ impl<'a> SyscallHandler<'a> {
             SYS_EXIT => self.sys_exit(a1 as c_int),
             SYS_MMAP => self.sys_mmap(VirtAddr::new(a1), a2, crate::bitflags_from_user!(MMapProt, a3 as u64), crate::bitflags_from_user!(MMapFlags, a4 as u64), a5 as FileDesc, a6),
             SYS_MPROTECT => self.sys_mprotect(VirtAddr::new(a1), a2, crate::bitflags_from_user!(MMapProt, a3 as u64)),
+            SYS_MUNMAP => self.sys_munmap(VirtAddr::new(a1), a2),
             SYS_RT_SIGACTION => self.sys_rt_sigaction(a1 as c_int, VirtAddr::new(a2), VirtAddr::new(a3)),
             SYS_GETUID => Ok(0),    // TODO:
             SYS_GETEUID => Ok(0),   // TODO:
@@ -132,6 +133,7 @@ impl<'a> SyscallHandler<'a> {
             SYS_UNAME => self.sys_uname(VirtAddr::new(a1)),
             SYS_CLOSE => self.sys_close(a1 as FileDesc),
             SYS_POLL => self.sys_poll(VirtAddr::new(a1), a2 as c_nfds, a3 as c_int),
+            SYS_CHDIR => self.sys_chdir(&resolve_path(a1)?),
             _ => Err(errno!(Errno::ENOSYS)),
         };
         // }
@@ -515,6 +517,7 @@ const SYS_LSTAT: usize = 6;
 const SYS_POLL: usize = 7;
 const SYS_MMAP: usize = 9;
 const SYS_MPROTECT: usize = 10;
+const SYS_MUNMAP: usize = 11;
 const SYS_BRK: usize = 12;
 const SYS_RT_SIGACTION: usize = 13;
 const SYS_RT_SIGPROCMASK: usize = 14;

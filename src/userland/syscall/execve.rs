@@ -26,7 +26,7 @@ impl<'a> SyscallHandler<'a> {
     ) -> KResult<isize> {
         let current = current_task();
         log::debug!("Statting path {}", path);
-        let exefile = get_root().unwrap().lookup(path)?.as_file()?.clone();
+        let exefile = current_task().root_fs.lock().lookup(path)?.as_file()?.clone();
 
         let mut argv = Vec::new();
         for i in 0..ARG_MAX {

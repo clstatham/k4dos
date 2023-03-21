@@ -14,7 +14,8 @@ fn create(path: &Path, flags: OpenFlags, mode: FileMode) -> KResult<INode> {
         .parent_and_basename()
         .ok_or_else(|| errno!(Errno::EEXIST))?;
 
-    let root = get_root().unwrap();
+    let current = current_task();
+    let root = current.root_fs.lock();
     let inode = INode::File(Arc::new(InitRamFsFile::new(name.to_owned(), alloc_inode_no())));
     root
         .lookup(path)?
@@ -35,7 +36,7 @@ impl<'a> SyscallHandler<'a> {
             }
         }
 
-        let root = get_root().unwrap();
+        let root = current.root_fs.lock();
         let mut opened_files = current.opened_files.lock();
         let path_comp = root.lookup_path(path, true)?;
         if flags.contains(OpenFlags::O_DIRECTORY) && !path_comp.inode.is_dir() {
