@@ -7,7 +7,7 @@ use crate::{
         path::{Path, PathBuf},
     },
     mem::addr::VirtAddr,
-    task::{current_task, get_scheduler, Task, TaskId},
+    task::{current_task, get_scheduler, Task, TaskId, vmem::{MMapProt, MMapFlags}},
     userland::syscall::wait4::WaitOptions,
     util::{ctypes::c_int, errno::Errno, KResult},
 };
@@ -25,6 +25,7 @@ pub mod set_tid_address;
 pub mod wait4;
 pub mod write;
 pub mod writev;
+pub mod mmap;
 
 #[repr(packed)]
 #[derive(Default, Clone, Debug)]
@@ -100,13 +101,15 @@ impl<'a> SyscallHandler<'a> {
             SYS_WAIT4 => self.sys_wait4(
                 TaskId::new(a1),
                 VirtAddr::new(a2),
-                crate::bitflags_from_user!(WaitOptions, a3 as i32)?,
+                crate::bitflags_from_user!(WaitOptions, a3 as i32),
                 VirtAddr::new(a4),
             ),
             SYS_EXECVE => self.sys_execve(&resolve_path(a1)?, VirtAddr::new(a2), VirtAddr::new(a3)),
             SYS_GETTID => self.sys_getpid(), // todo
             SYS_GETPID => self.sys_getpid(),
             SYS_EXIT => self.sys_exit(a1 as c_int),
+            SYS_MMAP => self.sys_mmap(VirtAddr::new(a1), a2, crate::bitflags_from_user!(MMapProt, a3 as u64), crate::bitflags_from_user!(MMapFlags, a4 as u64), a5 as FileDesc, a6),
+            SYS_MPROTECT => self.sys_mprotect(VirtAddr::new(a1), a2, crate::bitflags_from_user!(MMapProt, a3 as u64)),
             _ => Err(errno!(Errno::ENOSYS)),
         };
         // }
@@ -118,13 +121,14 @@ impl<'a> SyscallHandler<'a> {
 macro_rules! bitflags_from_user {
     ($st:tt, $input:expr) => {{
         let bits = $input;
-        $st::from_bits(bits).ok_or_else(|| {
+        $st::from_bits(bits).unwrap_or_else(|| {
             log::warn!(
                 concat!("unsupported bitflags for ", stringify!($st), ": {:x}"),
                 bits
             );
+            $st::from_bits_truncate(bits)
 
-            $crate::errno!($crate::util::errno::Errno::ENOSYS)
+            // $crate::errno!($crate::util::errno::Errno::ENOSYS)
         })
     }};
 }
@@ -485,6 +489,7 @@ const SYS_FSTAT: usize = 5;
 const SYS_LSTAT: usize = 6;
 const SYS_POLL: usize = 7;
 const SYS_MMAP: usize = 9;
+const SYS_MPROTECT: usize = 10;
 const SYS_BRK: usize = 12;
 const SYS_RT_SIGACTION: usize = 13;
 const SYS_RT_SIGPROCMASK: usize = 14;

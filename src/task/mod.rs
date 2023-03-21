@@ -298,6 +298,10 @@ impl Task {
         Ok(self.opened_files.lock().get(fd)?.clone())
     }
 
+    pub fn vmem(&self) -> Arc<SpinLock<Vmem>> {
+        self.vmem.clone()
+    }
+
     pub fn handle_page_fault(
         &self,
         faulted_addr: VirtAddr,

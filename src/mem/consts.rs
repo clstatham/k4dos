@@ -19,7 +19,7 @@ pub const MIN_HIGH_VADDR: usize = 0xffff800000000000;
 
 pub const USER_VALLOC_BASE: usize = 0x0000_000a_0000_0000;
 pub const USER_VALLOC_END: usize = 0x0000_0fff_0000_0000;
-pub const USER_STACK_TOP: usize = MAX_LOW_VADDR;
+pub const USER_STACK_TOP: usize = 0x7fffffffe000;
 pub const USER_STACK_BOTTOM: usize = USER_STACK_TOP - USER_STACK_SIZE;
 
 pub const KERNEL_HEAP_START: usize = 0xFFFF_FE80_0000_0000;

@@ -19,7 +19,7 @@ use crate::{
         allocator::alloc_kernel_frames,
         consts::{KERNEL_STACK_SIZE, PAGE_SIZE, USER_STACK_BOTTOM, USER_STACK_TOP},
     },
-    task::{get_scheduler, signal::Signal, vmem::Vmem},
+    task::{get_scheduler, signal::Signal, vmem::{Vmem, MMapFlags, MMapProt, MMapKind}},
     userland::{
         elf::{self, AuxvType},
         syscall::SyscallFrame,
@@ -401,11 +401,10 @@ impl ArchTask {
 
         userland_entry.vmem.map_area(
             VirtAddr::new(USER_STACK_BOTTOM),
-            VirtAddr::new(USER_STACK_TOP),
-            PageTableFlags::PRESENT
-                | PageTableFlags::WRITABLE
-                | PageTableFlags::USER_ACCESSIBLE
-                | PageTableFlags::NO_EXECUTE,
+            VirtAddr::new(USER_STACK_TOP - 1),
+            MMapFlags::empty(),
+            MMapProt::PROT_READ | MMapProt::PROT_WRITE,
+            MMapKind::Anonymous,
             &mut userland_entry.addr_space.mapper(),
         )?;
 
@@ -530,11 +529,10 @@ impl ArchTask {
         // userland_entry
         vmem.map_area(
             VirtAddr::new(USER_STACK_BOTTOM),
-            VirtAddr::new(USER_STACK_TOP),
-            PageTableFlags::PRESENT
-                | PageTableFlags::WRITABLE
-                | PageTableFlags::USER_ACCESSIBLE
-                | PageTableFlags::NO_EXECUTE,
+            VirtAddr::new(USER_STACK_TOP - 1),
+            MMapFlags::empty(),
+            MMapProt::PROT_READ | MMapProt::PROT_WRITE,
+            MMapKind::Anonymous,
             &mut self.address_space.mapper(),
         )?;
 

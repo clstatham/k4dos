@@ -129,7 +129,7 @@ pub fn arch_main() {
 
     let sched = get_scheduler();
     // sched.enqueue(Task::new_kernel(spawn_init_process, true));
-    let exe = "/bin/kash";
+    let exe = "/bin/sh";
     let file = get_root()
         .unwrap()
         .lookup(Path::new(exe))

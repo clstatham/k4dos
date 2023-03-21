@@ -9,7 +9,8 @@
     asm_const,
     ptr_internals,
     const_refs_to_cell,
-    slice_pattern
+    slice_pattern,
+    is_sorted
 )]
 
 extern crate alloc;

@@ -59,6 +59,7 @@ then
     cd initramfs/busybox_fs
     rm -f ../initramfs_busybox
     cp -r $BUSYBOXDIR/_install/* ./
+    cp -r $BUSYBOXDIR/busybox_unstripped ./bin/busybox
     mkdir -p dev
     find . | cpio -ov --format=newc > ../initramfs
 fi

@@ -7,25 +7,77 @@ use crate::{
     mem::{
         addr::VirtAddr,
         allocator::{alloc_kernel_frames, PageAllocator},
-        consts::PAGE_SIZE,
+        consts::{PAGE_SIZE, MAX_LOW_VADDR, USER_VALLOC_BASE, USER_VALLOC_END, USER_STACK_TOP},
         paging::{
             mapper::Mapper,
             units::{MappedPages, Page, PageRange},
         },
     },
     task::current_task,
-    util::KResult,
+    util::{KResult, errno::Errno, align_up}, fs::{opened_file::FileDesc, FileRef}, errno,
 };
+
+
+bitflags::bitflags! {
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    pub struct MMapProt: u64 {
+        const PROT_READ = 0x1;
+        const PROT_WRITE = 0x2;
+        const PROT_EXEC = 0x4;
+        const PROT_NONE = 0x0;
+    }
+}
+
+bitflags::bitflags! {
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    pub struct MMapFlags: u64 {
+        const MAP_PRIVATE   = 0x02;
+        const MAP_FIXED     = 0x10;
+        const MAP_ANONYMOUS = 0x20;
+    }
+}
+
+
+impl From<MMapProt> for PageTableFlags {
+    fn from(e: MMapProt) -> Self {
+        let mut res = PageTableFlags::empty();
+
+        res.insert(PageTableFlags::PRESENT);
+        res.insert(PageTableFlags::USER_ACCESSIBLE);
+
+        if !e.contains(MMapProt::PROT_EXEC) {
+            res.insert(PageTableFlags::NO_EXECUTE);
+        }
+
+        if e.contains(MMapProt::PROT_WRITE) {
+            res.insert(PageTableFlags::WRITABLE);
+        }
+
+        res
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct VmemAreaId(usize);
+
+#[derive(Clone)]
+pub enum MMapKind {
+    Anonymous,
+    File {
+        file: FileRef,
+        offset: usize,
+        size: usize,
+    }
+}
 
 #[derive(Clone)]
 pub struct VmemArea {
     id: VmemAreaId,
     start_addr: VirtAddr,
     end_addr: VirtAddr,
-    flags: PageTableFlags,
+    flags: MMapFlags,
+    prot: MMapProt,
+    kind: MMapKind,
 }
 
 impl VmemArea {
@@ -33,18 +85,26 @@ impl VmemArea {
         id: VmemAreaId,
         start_addr: VirtAddr,
         end_addr: VirtAddr,
-        flags: PageTableFlags,
+        flags: MMapFlags,
+        prot: MMapProt,
+        kind: MMapKind,
     ) -> Self {
         Self {
             id,
             start_addr,
             end_addr,
             flags,
+            prot,
+            kind,
         }
     }
 
     pub fn contains_addr(&self, addr: VirtAddr) -> bool {
         (self.start_addr..self.end_addr).contains(&addr)
+    }
+
+    pub fn overlaps_range(&self, start: VirtAddr, end: VirtAddr) -> bool {
+        self.contains_addr(start) || self.contains_addr(end)
     }
 
     pub fn start_address(&self) -> VirtAddr {
@@ -57,7 +117,7 @@ impl VmemArea {
 }
 
 pub struct Vmem {
-    areas: BTreeMap<VmemAreaId, VmemArea>,
+    areas: Vec<VmemArea>,
     mp: BTreeMap<VmemAreaId, Vec<MappedPages>>,
     next_id: AtomicUsize,
     page_allocator: PageAllocator,
@@ -69,11 +129,11 @@ impl Vmem {
         unsafe {
             page_allocator.insert_free_region(PageRange::new(
                 Page::containing_address(VirtAddr::new(PAGE_SIZE)),
-                Page::containing_address(VirtAddr::new(usize::MAX).align_down(PAGE_SIZE)) - 1,
+                Page::containing_address(VirtAddr::new(USER_STACK_TOP) - 1),
             ))
         }
         Self {
-            areas: BTreeMap::new(),
+            areas: Vec::new(),
             mp: BTreeMap::new(),
             next_id: AtomicUsize::new(0),
             page_allocator,
@@ -87,84 +147,158 @@ impl Vmem {
         )
     }
 
-    pub fn area_containing(&self, start_addr: VirtAddr, end_addr: VirtAddr) -> Option<VmemAreaId> {
-        for (id, area) in self.areas.iter() {
-            if area.contains_addr(start_addr) || area.contains_addr(end_addr) {
-                return Some(*id);
+    pub fn area_containing(&mut self, start_addr: VirtAddr, end_addr: VirtAddr) -> Option<&mut VmemArea> {
+        for area in self.areas.iter_mut() {
+            if area.contains_addr(start_addr) && area.contains_addr(end_addr) {
+                return Some(area);
             }
         }
         None
     }
 
-    pub fn area(&self, id: VmemAreaId) -> Option<&VmemArea> {
-        self.areas.get(&id)
-    }
+    // pub fn area(&self, id: VmemAreaId) -> Option<&VmemArea> {
+    //     self.areas.get(&id)
+    // }
 
     pub fn add_area(
         &mut self,
         start_addr: VirtAddr,
         end_addr: VirtAddr,
-        flags: PageTableFlags,
-    ) -> VmemAreaId {
-        assert!(
-            self.area_containing(start_addr, end_addr).is_none(),
-            "Cannot add vmem area as it already exists for these addresses"
-        );
+        flags: MMapFlags,
+        prot: MMapProt,
+        kind: MMapKind,
+    ) -> KResult<VmemAreaId> {
+        if self.area_containing(start_addr, end_addr).is_some() {
+            // return Err(errno!(Errno::EAGAIN));
+            self.log();
+            panic!()
+        }
         let id = self.alloc_id();
-        self.areas.insert(
-            id,
+        self.areas.push(
             VmemArea {
                 id,
                 start_addr,
                 end_addr,
                 flags,
+                prot,
+                kind,
             },
         );
+        // self.zero_memory(start_addr, end_addr);
+        self.areas.sort_by_key(|area| area.start_address());
         self.mp.insert(id, Vec::new());
-        id
+        Ok(id)
+    }
+
+    fn zero_memory(&self, mut start_addr: VirtAddr, end_addr: VirtAddr) -> KResult<()> {
+        start_addr.fill(0, end_addr.value() - start_addr.value())?;
+        Ok(())
+    }
+
+    pub fn mprotect(&mut self, start_addr: VirtAddr, size: usize, protection: MMapProt) -> KResult<()> {
+        // let size_aligned = align_up(size, PAGE_SIZE);
+        let area = self.area_containing(start_addr, start_addr + size - 1).ok_or(errno!(Errno::ENOMEM))?;
+        area.prot = protection;
+        Ok(())
+    }
+
+    pub fn mmap(&mut self, start_addr: VirtAddr, size: usize, protection: MMapProt, flags: MMapFlags, fd: FileDesc, offset: usize) -> KResult<VirtAddr> {
+        if size == 0 {
+            return Err(errno!(Errno::EFAULT))
+        }
+        
+        let size_aligned = align_up(size, PAGE_SIZE);
+        if start_addr == VirtAddr::null() {
+            let start = self.find_free_space_above(VirtAddr::new(0x7000_0000_0000), size_aligned);
+            if let Some((start, prev)) = start {
+                if let Some(prev_idx) = prev {
+                    let prev = &mut self.areas[prev_idx];
+                    if prev.end_addr == start && prev.flags == flags && prev.prot == protection && matches!(prev.kind, MMapKind::Anonymous) {
+                        prev.end_addr = start + size_aligned;
+                        self.log();
+                        return Ok(start);
+                    }
+                }
+
+                self.add_area(start, start + size_aligned, flags, protection, MMapKind::Anonymous)?;
+                self.log();
+                return Ok(start)
+            }
+
+            return Err(errno!(Errno::ENOMEM))
+        }
+        // todo!()
+        Err(errno!(Errno::ENOSYS))
+    }
+
+    fn find_free_space_above(&mut self, minimum_start: VirtAddr, size: usize) -> Option<(VirtAddr, Option<usize>)> {
+        if self.areas.is_empty() {
+            return Some((minimum_start, None))
+        }
+
+        assert!(self.areas.is_sorted_by_key(|a| a.start_addr));
+        for i in 0..self.areas.len()-1 {
+            if self.areas[i+1].start_addr >= minimum_start + size {
+                if self.areas[i+1].start_addr.value() - self.areas[i].end_addr.value() >= size {
+                    if self.areas[i].end_addr < minimum_start {
+                        return Some((minimum_start, Some(i)))
+                    } else {
+                        return Some((self.areas[i].end_addr, Some(i)))
+                    }
+                }
+                return None
+            }
+        }
+
+        None
     }
 
     pub fn map_area(
         &mut self,
         start_addr: VirtAddr,
         end_addr: VirtAddr,
-        flags: PageTableFlags,
+        flags: MMapFlags,
+        prot: MMapProt,
+        kind: MMapKind,
         active_mapper: &mut Mapper,
     ) -> KResult<VmemAreaId> {
         let ap = self.page_allocator.allocate_range(PageRange::new(
             Page::containing_address(start_addr),
             Page::containing_address(end_addr - 1),
         ))?;
-        let mp = active_mapper.map(ap, flags)?;
+        let mp = active_mapper.map(ap, prot.into())?;
         let id = self.add_area(
             start_addr.align_down(PAGE_SIZE),
             end_addr.align_up(PAGE_SIZE),
             flags,
-        );
+            prot,
+            kind,
+        )?;
         self.mp.get_mut(&id).unwrap().push(mp);
         Ok(id)
     }
 
-    pub fn unmap_area(&mut self, id: VmemAreaId, active_mapper: &mut Mapper) {
-        for mp in self.mp.get_mut(&id).unwrap().iter_mut() {
+    pub fn unmap_area(&mut self, id: VmemAreaId, active_mapper: &mut Mapper)-> Option<()> {
+        for mp in self.mp.get_mut(&id)?.iter_mut() {
             active_mapper.unmap(mp);
             unsafe {
                 self.page_allocator.insert_free_region(**mp.pages());
             }
         }
-        self.areas.remove(&id);
+        self.areas.retain(|area| area.id != id);
         self.mp.remove(&id);
+        Some(())
     }
 
     pub fn clear(&mut self, active_mapper: &mut Mapper) {
-        for area_id in self.areas.keys().cloned().collect::<Vec<_>>() {
-            self.unmap_area(area_id, active_mapper);
+        for id in 0..self.next_id.load(core::sync::atomic::Ordering::Acquire) {
+            self.unmap_area(VmemAreaId(id), active_mapper);
         }
     }
 
     pub fn log(&self) {
         log::debug!("BEGIN VIRTUAL MEMORY STATE DUMP");
-        for (_, area) in self.areas.iter() {
+        for area in self.areas.iter() {
             log::debug!(
                 "{:>16x?} .. {:>16x?}   | {:?}",
                 area.start_addr,
@@ -203,7 +337,7 @@ impl Vmem {
         }
 
         let mut faulted_area = None;
-        for (_id, area) in self.areas.iter() {
+        for area in self.areas.iter() {
             if area.contains_addr(faulted_addr) {
                 faulted_area = Some(area);
                 break;
@@ -211,18 +345,26 @@ impl Vmem {
         }
 
         if let Some(area) = faulted_area {
-            if active_mapper.translate(faulted_addr).is_none() {
+            let trans = active_mapper.translate(faulted_addr);
+            if trans.is_none() {
                 // allocate and map pages
                 let page = Page::containing_address(faulted_addr);
                 let ap = self.page_allocator.allocate_at(page, 1).unwrap();
-                // let af = alloc_kernel_frames(1).unwrap();
-                let mp = active_mapper.map(ap, area.flags).unwrap();
+                let mp = active_mapper.map(ap, area.prot.into()).unwrap();
+                self.zero_memory(page.start_address(), page.start_address() + PAGE_SIZE).unwrap();
                 self.mp.get_mut(&area.id).unwrap().push(mp);
             } else {
+                let (_frame, mut flags) = trans.unwrap();
                 // set new flags, handle COW
                 // todo: update `self.mp` to reflect these changes - this will cause problems!
-
-                if area.flags.contains(PageTableFlags::WRITABLE)
+                if !reason.contains(PageFaultErrorCode::PROTECTION_VIOLATION) {
+                    // set present
+                    flags |= PageTableFlags::PRESENT;
+                    unsafe {
+                        active_mapper.set_flags_single(Page::containing_address(faulted_addr), flags);
+                    }
+                }
+                if area.prot.contains(MMapProt::PROT_WRITE)
                     && reason.contains(PageFaultErrorCode::CAUSED_BY_WRITE)
                 {
                     // COW
@@ -247,19 +389,19 @@ impl Vmem {
                         .map_to_single(
                             Page::containing_address(faulted_addr),
                             new_frame.start(),
-                            area.flags,
+                            area.prot.into(),
                         )
                         .unwrap();
                 } else {
-                    let mp = self
-                        .mp
-                        .get_mut(&area.id)
-                        .unwrap()
-                        .iter_mut()
-                        .find(|mp| mp.pages().contains(Page::containing_address(faulted_addr)))
-                        .unwrap();
-                    // let orig_flags = mp.flags();
-                    active_mapper.set_flags(mp, area.flags);
+                    unsafe {
+                        active_mapper.set_flags_single(Page::containing_address(faulted_addr), area.prot.into());
+                        // log::debug!("{:>2x?}", core::slice::from_raw_parts::<u8>(faulted_addr.align_down(PAGE_SIZE).as_ptr(), PAGE_SIZE));
+                        // gotta zero out the memory IFF it doesn't belong to a file
+                        if matches!(area.kind, MMapKind::Anonymous) {
+                            self.zero_memory(faulted_addr.align_down(PAGE_SIZE), faulted_addr.align_down(PAGE_SIZE) + PAGE_SIZE).unwrap();
+                        }
+                    }
+                    
                 }
             }
         } else {

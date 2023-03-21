@@ -9,7 +9,7 @@ use crate::{
     errno,
     fs::{opened_file::OpenOptions, FileRef},
     mem::{addr::VirtAddr, addr_space::AddressSpace, consts::PAGE_SIZE},
-    task::vmem::Vmem,
+    task::vmem::{Vmem, MMapFlags, MMapProt, MMapKind},
     userland::buffer::UserBufferMut,
     util::{align_down, align_up, errno::Errno, KError, KResult},
 };
@@ -78,6 +78,7 @@ pub fn load_elf<'a>(file: FileRef) -> KResult<UserlandEntry> {
         vmem: &mut vmem,
         addr_space: &mut addr_space,
         base_addr: usize::MAX,
+        file: file.clone(),
     };
 
     elf.load(&mut loader).unwrap();
@@ -107,6 +108,7 @@ struct KadosElfLoader<'a> {
     vmem: &'a mut Vmem,
     addr_space: &'a mut AddressSpace,
     base_addr: usize,
+    file: FileRef,
 }
 
 impl<'a> ElfLoader for KadosElfLoader<'a> {
@@ -126,18 +128,18 @@ impl<'a> ElfLoader for KadosElfLoader<'a> {
             // let data_size = file_end - start;
             // let aligned_data_size = align_up(data_size, PAGE_SIZE);
             // let file_offset = align_down(header.offset() as usize, PAGE_SIZE);
-            let mut flags = PageTableFlags::PRESENT
-                | PageTableFlags::USER_ACCESSIBLE
-                | PageTableFlags::WRITABLE;
+            let flags = MMapFlags::empty();
+            let mut prot = MMapProt::PROT_WRITE;
             // if header.flags().is_write() {
             //     flags.insert(PageTableFlags::WRITABLE);
             // }
-            if !header.flags().is_execute() {
-                flags.insert(PageTableFlags::NO_EXECUTE);
+            if header.flags().is_execute() {
+                prot.insert(MMapProt::PROT_EXEC);
             }
+            let kind = MMapKind::File { file: self.file.clone(), offset: header.offset() as usize, size: header.file_size() as usize };
             log::debug!("Mapping region {:?} .. {:?}", start, mem_end);
             self.vmem
-                .map_area(start, mem_end, flags, &mut self.addr_space.mapper())
+                .map_area(start, mem_end, flags, prot, kind, &mut self.addr_space.mapper())
                 .unwrap();
         }
 
