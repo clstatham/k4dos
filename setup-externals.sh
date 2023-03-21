@@ -36,6 +36,11 @@ if [[ $@ =~ "menuconfig" ]];
 then
     make menuconfig
 fi
+if [[ $@ =~ "defconfig" ]];
+then
+    make defconfig
+fi
+
 if [[ $@ =~ "allnoconfig" ]];
 then
     make allnoconfig

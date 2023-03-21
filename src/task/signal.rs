@@ -78,7 +78,7 @@ pub const SIG_IGN: usize = 1;
 pub enum SigAction {
     Ignore,
     Terminate,
-    Handler { handler: usize },
+    Handler { handler: usize, sigreturn: usize },
 }
 
 // TODO: Fill correct default actions

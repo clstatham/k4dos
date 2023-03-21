@@ -358,7 +358,6 @@ impl Vmem {
         log::warn!("Reason: {:?}", reason);
         // backtrace::unwind_user_stack_from(stack_frame.frame.rbp as usize).unwrap();
         if faulted_addr.align_down(PAGE_SIZE) == VirtAddr::null() {
-            // todo!("Kill process that accessed null pointer")
             log::error!("User segmentation fault: null pointer access");
             get_scheduler().send_signal_to(current_task(), SIGSEGV);
             get_scheduler().exit_current(1);
@@ -373,21 +372,13 @@ impl Vmem {
         }
 
         if let Some(area) = faulted_area {
-            // let trans = active_mapper.translate(faulted_addr);
             if !reason.contains(PageFaultErrorCode::PROTECTION_VIOLATION) {
-                // set present
-                // flags |= PageTableFlags::PRESENT;
-                // unsafe {
-                //     active_mapper.set_flags_single(Page::containing_address(faulted_addr), flags);
-                // }
-                // if trans.is_none() {
                 // allocate and map pages
                 let page = Page::containing_address(faulted_addr);
-                let ap = self.page_allocator.allocate_at(page, 1).unwrap();
-                let mp = active_mapper.map(ap, area.prot.into()).unwrap();
+                let ap = self.page_allocator.allocate_at(page, 1)?;
+                let mp = active_mapper.map(ap, area.prot.into())?;
                 if !matches!(area.kind, MMapKind::File { .. }) {
-                    self.zero_memory(page.start_address(), page.start_address() + PAGE_SIZE)
-                    .unwrap();
+                    self.zero_memory(page.start_address(), page.start_address() + PAGE_SIZE)?;
                 }
                 self.mp.get_mut(&area.id).unwrap().push(mp);
                 return Ok(())
@@ -398,7 +389,7 @@ impl Vmem {
                     get_scheduler().exit_current(1);
                 }
                 // COW
-                let new_frame = alloc_kernel_frames(1).unwrap();
+                let new_frame = alloc_kernel_frames(1)?;
                 let new_page = unsafe {
                     core::slice::from_raw_parts_mut(
                         new_frame.start_address().as_hhdm_virt().as_mut_ptr::<u8>(),
@@ -420,12 +411,13 @@ impl Vmem {
                         Page::containing_address(faulted_addr),
                         new_frame.start(),
                         area.prot.into(),
-                    )
-                    .unwrap();
+                    )?;
                 return Ok(())
             }
         } else {
-            todo!("Kill process that accessed memory it doesn't own")
+            log::error!("User segmentation fault: illegal access");
+            get_scheduler().send_signal_to(current_task(), SIGSEGV);
+            get_scheduler().exit_current(1);
         }
 
         Err(errno!(Errno::EFAULT))

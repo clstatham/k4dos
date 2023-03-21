@@ -27,6 +27,7 @@ pub mod gdt;
 pub mod idt;
 pub mod syscall;
 pub mod task;
+pub mod signal;
 
 static HHDM: LimineHhdmRequest = LimineHhdmRequest::new(0);
 static MEMMAP: LimineMemmapRequest = LimineMemmapRequest::new(0);

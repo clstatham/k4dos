@@ -9,7 +9,7 @@ use crate::{
     mem::addr::VirtAddr,
     task::{current_task, get_scheduler, Task, TaskId, vmem::{MMapProt, MMapFlags}},
     userland::syscall::wait4::WaitOptions,
-    util::{ctypes::c_int, errno::Errno, KResult},
+    util::{ctypes::{c_int, c_nfds}, errno::Errno, KResult},
 };
 
 use super::buffer::UserCStr;
@@ -30,6 +30,8 @@ pub mod stat;
 pub mod open;
 pub mod fcntl;
 pub mod getcwd;
+pub mod uname;
+pub mod poll;
 
 #[repr(packed)]
 #[derive(Default, Clone, Debug)]
@@ -126,9 +128,16 @@ impl<'a> SyscallHandler<'a> {
             SYS_OPEN => self.sys_open(&resolve_path(a1)?, crate::bitflags_from_user!(OpenFlags, a2 as i32), FileMode::new(a3 as u32)),
             SYS_GETCWD => self.sys_getcwd(VirtAddr::new(a1), a2 as u64),
             SYS_GETDENTS64 => self.sys_getdents64(a1 as FileDesc, VirtAddr::new(a2), a3),
+            SYS_FCNTL => self.sys_fcntl(a1 as FileDesc, a2 as c_int, a3),
+            SYS_UNAME => self.sys_uname(VirtAddr::new(a1)),
+            SYS_CLOSE => self.sys_close(a1 as FileDesc),
+            SYS_POLL => self.sys_poll(VirtAddr::new(a1), a2 as c_nfds, a3 as c_int),
             _ => Err(errno!(Errno::ENOSYS)),
         };
         // }
+        if let Err(err) = get_scheduler().try_delivering_signal(self.frame) {
+            log::error!("Failed to send signal: {:?}", err);
+        }
         res
     }
 }

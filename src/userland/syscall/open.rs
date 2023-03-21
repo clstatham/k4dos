@@ -1,6 +1,6 @@
 use alloc::{sync::Arc, borrow::ToOwned};
 
-use crate::{fs::{path::Path, opened_file::OpenFlags, FileMode, INode, initramfs::{get_root, file::InitRamFsFile}, alloc_inode_no, O_WRONLY, O_RDWR}, util::{KResult, errno::Errno}, errno, task::current_task};
+use crate::{fs::{path::Path, opened_file::{OpenFlags, FileDesc}, FileMode, INode, initramfs::{get_root, file::InitRamFsFile}, alloc_inode_no, O_WRONLY, O_RDWR}, util::{KResult, errno::Errno}, errno, task::current_task};
 
 use super::SyscallHandler;
 
@@ -49,5 +49,12 @@ impl<'a> SyscallHandler<'a> {
         let fd = opened_files.open(path_comp, flags.into())?;
         log::trace!("[{}] Opened {} as {}.", current.pid().as_usize(), path, fd);
         Ok(fd as isize)
+    }
+
+    pub fn sys_close(&mut self, fd: FileDesc) -> KResult<isize> {
+        let current = current_task();
+        current.opened_files.lock().close(fd)?;
+        log::trace!("[{}] Closed {}", current.pid().as_usize(), fd);
+        Ok(0)
     }
 }

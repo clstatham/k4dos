@@ -98,7 +98,7 @@ pub struct Task {
     vmem: Arc<SpinLock<Vmem>>,
 
     pub(crate) signals: Arc<SpinLock<SignalDelivery>>,
-    signaled_frame: AtomicCell<Option<InterruptFrame>>,
+    signaled_frame: AtomicCell<Option<SyscallFrame>>,
     sigset: Arc<SpinLock<SigSet>>,
 }
 
@@ -160,7 +160,7 @@ impl Task {
 
         let console = get_root()
             .unwrap()
-            .lookup_path(Path::new("/dev/tty"), true)
+            .lookup_path(Path::new("/dev/console"), true)
             .unwrap();
 
         let mut files = OpenedFileTable::new();

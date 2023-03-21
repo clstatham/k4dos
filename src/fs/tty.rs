@@ -21,20 +21,20 @@ use crate::{
 
 use super::{
     initramfs::get_root, opened_file::OpenOptions, path::Path, File, FsNode, INode, PollStatus,
-    Stat, S_IFCHR,
+    Stat, S_IFCHR, POLL_WAIT_QUEUE,
 };
 
 pub static TTY: Once<Arc<Tty>> = Once::new();
 
 pub fn init() {
-    TTY.call_once(|| Arc::new(Tty::new("tty")));
+    TTY.call_once(|| Arc::new(Tty::new("console")));
     get_root()
         .unwrap()
         .lookup(Path::new("dev"))
         .unwrap()
         .as_dir()
         .unwrap()
-        .insert("tty", INode::File(TTY.get().unwrap().clone()));
+        .insert("console", INode::File(TTY.get().unwrap().clone()));
 }
 
 bitflags! {
@@ -52,7 +52,21 @@ bitflags! {
     #[repr(C)]
     #[derive(Clone, Copy, Debug)]
     pub struct IFlag: u32 {
-        const ICRNL  = 0o0000400;
+        const IGNBRK	= 0o0000001;
+        const BRKINT	= 0o0000002;
+        const IGNPAR	= 0o0000004;
+        const PARMRK	= 0o0000010;
+        const INPCK	    = 0o0000020;
+        const ISTRIP	= 0o0000040;
+        const INLCR	    = 0o0000100;
+        const IGNCR	    = 0o0000200;
+        const ICRNL	    = 0o0000400;
+        const IUCLC	    = 0o0001000;
+        const IXON	    = 0o0002000;
+        const IXANY	    = 0o0004000;
+        const IXOFF	    = 0o0010000;
+        const IMAXBEL	= 0o0020000;
+        const IUTF8	    = 0o0040000;
     }
 }
 
@@ -173,16 +187,19 @@ impl LineDiscipline {
                     }
                     b'\r' => {
                         if termios.iflag.contains(IFlag::ICRNL) {
+                            // current_line.push(b'\r');
                             current_line.push(b'\n');
+                            // serial1_println!();
                             ringbuf.push_slice(current_line.as_slice());
                             current_line.clear();
                             if termios.lflag.contains(LFlag::ECHO) {
-                                callback(LineControl::Echo(b'\r'));
+                                // callback(LineControl::Echo(b'\r'));
                                 callback(LineControl::Echo(b'\n'));
                             }
                         }
                     }
                     b'\n' => {
+                        // current_line.push(b'\r');
                         current_line.push(b'\n');
                         // vga_print!("\n");
                         // serial1_println!();
@@ -217,18 +234,15 @@ impl LineDiscipline {
         }
 
         if written_len > 0 {
-            // self.wait_queue.wake_all();
             get_scheduler().wake_all(&self.wait_queue);
-            // POLL_WAIT_QUEUE.wake_all();
+            get_scheduler().wake_all(&POLL_WAIT_QUEUE);
         }
         Ok(written_len)
     }
 
     fn read(&self, buf: UserBufferMut) -> KResult<usize> {
-        // let mut parser = ByteParser
         let mut writer = UserBufferWriter::from(buf);
         let read_len = self.wait_queue.sleep_signalable_until(|| {
-            // todo: check for this without relocking the scheduler
             if !self.is_current_foreground() {
                 return Ok(None);
             }
@@ -249,9 +263,8 @@ impl LineDiscipline {
             }
         })?;
         if read_len > 0 {
-            // self.wait_queue.wake_all();
             get_scheduler().wake_all(&self.wait_queue);
-            // POLL_WAIT_QUEUE.wake_all();
+            get_scheduler().wake_all(&POLL_WAIT_QUEUE);
         }
         Ok(read_len)
     }
@@ -264,7 +277,7 @@ pub struct Tty {
 
 impl Default for Tty {
     fn default() -> Self {
-        Self::new("tty")
+        Self::new("console")
     }
 }
 
@@ -318,7 +331,7 @@ impl File for Tty {
             TCSETS => {
                 let arg = VirtAddr::new(arg);
                 let termios = arg.read::<Termios>()?;
-                // debug!("{:?}", termios);
+                log::debug!("{:?}", termios);
                 let mut lock = self.discipline.termios.lock();
                 *lock = *termios;
                 // lock.iflag = termios.iflag;
@@ -329,7 +342,7 @@ impl File for Tty {
                     .foreground_process_group()
                     .ok_or_else(|| errno!(Errno::ENOENT))?;
                 let pgid = group.lock().pgid();
-                let mut arg = VirtAddr::new(arg);
+                let arg = VirtAddr::new(arg);
 
                 arg.write(&pgid)?;
             }

@@ -18,7 +18,7 @@ impl Default for WaitQueue {
 }
 
 impl WaitQueue {
-    pub fn new() -> WaitQueue {
+    pub const fn new() -> WaitQueue {
         WaitQueue {
             queue: SpinLock::new(VecDeque::new()),
         }

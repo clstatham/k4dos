@@ -30,7 +30,7 @@ use crate::{
 use super::{
     cpu_local::get_tss,
     gdt::{KERNEL_CS_IDX, KERNEL_DS_IDX, USER_DS_IDX},
-    idt::InterruptFrame,
+    idt::InterruptFrame, signal::SignalFrame,
 };
 
 fn xsave(fpu: &mut Box<[u8]>) {
@@ -698,17 +698,43 @@ impl ArchTask {
 
     pub fn setup_signal_stack(
         &mut self,
-        frame: &mut InterruptFrame,
+        frame: &mut SyscallFrame,
         signal: Signal,
         handler: VirtAddr,
+        sigreturn: VirtAddr,
     ) -> KResult<()> {
-        todo!("Signal stack")
+        // const TRAMPOLINE: &[u8] = &[
+        //     0xb8, 0x0f, 0x00, 0x00, 0x00, // mov eax, 15
+        //     0x0f, 0x05, // syscall
+        //     0x90, // nop (for alignment)
+        // ];
+
+        // let mut rsp = unsafe { self.context.as_ref().rsp as usize };
+
+        let signal_frame = SignalFrame::from_syscall(true, 0, frame, 0);
+        let mut rsp = frame.rsp;
+        let mut stack = Stack::new(&mut rsp);
+        // red zone
+        stack.skip_by(128);
+
+        unsafe {
+            stack.push(signal_frame);
+            stack.push(sigreturn.value());
+        }
+
+        frame.rip = handler.value();
+        frame.rsp = stack.top();
+        frame.rdi = signal as usize;
+        frame.rsi = 0;
+        frame.rdx = 0;
+
+        Ok(())
     }
 
     pub fn setup_sigreturn_stack(
         &self,
-        current_frame: &mut InterruptFrame,
-        signaled_frame: &InterruptFrame,
+        current_frame: &mut SyscallFrame,
+        signaled_frame: &SyscallFrame,
     ) {
         *current_frame = signaled_frame.clone();
     }

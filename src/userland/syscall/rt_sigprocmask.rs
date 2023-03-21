@@ -31,16 +31,17 @@ impl<'a> SyscallHandler<'a> {
         Ok(0)
     }
 
-    pub fn sys_rt_sigaction(&mut self, signum: c_int, act: VirtAddr, _: VirtAddr) -> KResult<isize> {
-        if act != VirtAddr::null() {
+    pub fn sys_rt_sigaction(&mut self, signum: c_int, act: VirtAddr, sigreturn: VirtAddr) -> KResult<isize> {
+        if act != VirtAddr::null() && sigreturn != VirtAddr::null() {
             let handler = *act.read::<usize>()?;
+            let sigreturn = *sigreturn.read::<usize>()?;
             let new_action = match handler {
                 SIG_IGN => SigAction::Ignore,
                 SIG_DFL => match DEFAULT_ACTIONS.get(signum as usize) {
                     Some(def) => *def,
                     None => return Err(errno!(Errno::EINVAL)),
                 }
-                _ => SigAction::Handler { handler }
+                _ => SigAction::Handler { handler, sigreturn }
             };
 
             current_task().signals.lock().set_action(signum, new_action)?;

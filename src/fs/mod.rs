@@ -6,7 +6,7 @@ use bitflags::bitflags;
 use crate::{
     errno,
     userland::buffer::{UserBuffer, UserBufferMut},
-    util::{ctypes::c_short, errno::Errno, KResult},
+    util::{ctypes::c_short, errno::Errno, KResult}, task::wait_queue::WaitQueue,
 };
 
 use self::{opened_file::OpenOptions, path::PathBuf};
@@ -19,6 +19,8 @@ pub mod tty;
 pub type FileRef = Arc<dyn File + Send + Sync>;
 pub type DirRef = Arc<dyn Directory + Send + Sync>;
 pub type SymlinkRef = Arc<dyn Symlink + Send + Sync>;
+
+pub static POLL_WAIT_QUEUE: WaitQueue = WaitQueue::new();
 
 pub fn alloc_inode_no() -> usize {
     // Inode #1 is reserved for the root dir.

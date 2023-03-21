@@ -12,7 +12,7 @@ use crate::{
     arch::{idt::InterruptFrame, task::arch_context_switch},
     fs::FileRef,
     mem::addr::VirtAddr,
-    util::{ctypes::c_int, KResult, SpinLock},
+    util::{ctypes::c_int, KResult, SpinLock}, userland::syscall::SyscallFrame,
 };
 
 use super::{
@@ -122,13 +122,12 @@ impl Scheduler {
         if old_state == TaskState::Runnable {
             return;
         }
-        if self.run_queue.lock().iter().any(|t| t.pid == task.pid) {
-            panic!();
+        if !self.run_queue.lock().iter().any(|t| t.pid == task.pid) {
+            self.enqueue(task);    
         }
-        self.enqueue(task);
     }
 
-    pub fn try_delivering_signal(&self, frame: &mut InterruptFrame) -> KResult<()> {
+    pub fn try_delivering_signal(&self, frame: &mut SyscallFrame) -> KResult<()> {
         let current = self.current_task();
         if let Some((signal, sigaction)) = current.signals.lock().pop_pending() {
             let set = current.sigset.lock();
@@ -137,10 +136,9 @@ impl Scheduler {
                     SigAction::Ignore => {}
                     SigAction::Terminate => {
                         log::trace!("terminating {:?} by signal {:?}", current.pid, signal);
-                        // self.exit_current(1);
-                        todo!("Exit current process");
+                        self.exit_current(1);
                     }
-                    SigAction::Handler { handler } => {
+                    SigAction::Handler { handler, sigreturn } => {
                         log::trace!("delivering signal {:?} to {:?}", signal, current.pid);
                         current.signaled_frame.store(Some(frame.clone()));
                         // unsafe {
@@ -148,6 +146,7 @@ impl Scheduler {
                             frame,
                             signal,
                             VirtAddr::new(handler),
+                            VirtAddr::new(sigreturn),
                         )?;
                         // }
                     }
@@ -158,7 +157,7 @@ impl Scheduler {
         Ok(())
     }
 
-    pub fn restore_signaled_user_stack(current: &Arc<Task>, current_frame: &mut InterruptFrame) {
+    pub fn restore_signaled_user_stack(current: &Arc<Task>, current_frame: &mut SyscallFrame) {
         if let Some(signaled_frame) = current.signaled_frame.swap(None) {
             current
                 .arch_mut()
