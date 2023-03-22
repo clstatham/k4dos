@@ -712,7 +712,6 @@ impl ArchTask {
         if frame.cs & 0x3 == 0 {
             return Ok(())
         }
-        let signal_frame = SignalFrame::from_syscall(true, syscall_result, frame, 0);
         let mut rsp = frame.rsp;
         let mut stack = Stack::new(&mut rsp);
         // red zone

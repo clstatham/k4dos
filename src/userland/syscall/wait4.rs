@@ -26,8 +26,9 @@ impl<'a> SyscallHandler<'a> {
         let (got_pid, status_val) =
             JOIN_WAIT_QUEUE.get().unwrap().sleep_signalable_until(|| {
                 let current = current_task();
-                for child in current.children.lock().iter() {
-                    if pid.as_usize() > 0 && pid != child.pid() {
+                let children = current.children.lock();
+                for child in children.iter() {
+                    if pid.as_usize() as isize > 0 && pid != child.pid() {
                         continue;
                     }
 
@@ -48,10 +49,10 @@ impl<'a> SyscallHandler<'a> {
             })?;
 
         log::debug!("wait4: status = {status_val}");
-        // current_task()
-        //     .children
-        //     .lock()
-        //     .retain(|p| p.pid() != got_pid);
+        current_task()
+            .children
+            .lock()
+            .retain(|p| p.pid() != got_pid);
 
         // if let Ok(mut status) = status {
         if status.value() != 0 {

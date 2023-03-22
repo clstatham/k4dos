@@ -98,8 +98,9 @@ impl<'a> SyscallHandler<'a> {
         // {
         let enter_pid = current_task().pid();
         log::trace!(
-            "[{}] SYSCALL #{} {}({:#x}, {:#x}, {:#x}, {:#x}, {:#x}, {:#x})",
+            "[{}] [{:#x}] SYSCALL #{} {}({:#x}, {:#x}, {:#x}, {:#x}, {:#x}, {:#x})",
             enter_pid.as_usize(),
+            self.frame.rip as usize,
             n,
             syscall_name_by_number(n),
             a1,
