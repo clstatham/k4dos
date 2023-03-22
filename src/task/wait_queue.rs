@@ -28,18 +28,18 @@ impl WaitQueue {
     where
         F: FnMut() -> KResult<Option<R>>,
     {
-        loop {
-            let current = current_task();
-            // let current = current.as_ref().lock();
-            // let current = current.as_ref().unwrap().clone();
-            let scheduler = get_scheduler();
-            current.set_state(TaskState::Waiting);
-            {
-                let mut q_lock = self.queue.lock();
-                if !q_lock.iter().any(|t| Arc::ptr_eq(t, &current)) {
-                    q_lock.push_back(current.clone());
-                }
+        let current = current_task();
+        // let current = current.as_ref().lock();
+        // let current = current.as_ref().unwrap().clone();
+        let scheduler = get_scheduler();
+        current.set_state(TaskState::Waiting);
+        {
+            let mut q_lock = self.queue.lock();
+            if !q_lock.iter().any(|t| Arc::ptr_eq(t, &current)) {
+                q_lock.push_back(current.clone());
             }
+        }
+        loop {
             // self.queue.lock().push_back(current.clone());
 
             if current.has_pending_signals() {
@@ -49,7 +49,6 @@ impl WaitQueue {
                     .retain(|proc| !Arc::ptr_eq(proc, &current));
                 return Err(errno!(Errno::EINTR));
             }
-            // drop(scheduler);
 
             let ret_value = match sleep_if_none() {
                 Ok(Some(ret_val)) => Some(Ok(ret_val)),
@@ -67,7 +66,7 @@ impl WaitQueue {
             }
             // drop(scheduler);
             // unsafe { get_scheduler().force_unlock() };
-            scheduler.preempt();
+            scheduler.sleep(None)?;
             // switch();
         }
     }

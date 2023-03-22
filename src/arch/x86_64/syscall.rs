@@ -3,7 +3,7 @@ use x86::msr::{rdmsr, wrmsr};
 use x86::segmentation::SegmentSelector;
 use x86::Ring;
 
-use crate::userland::syscall::{SyscallFrame, SyscallHandler};
+use crate::userland::syscall::{SyscallHandler, errno_to_isize};
 
 use super::gdt::{KERNEL_CS_IDX, USER_CS_IDX, USER_DS_IDX};
 use super::idt::InterruptFrame;
@@ -118,7 +118,7 @@ pub unsafe extern "C" fn syscall_entry() {
 }
 
 #[no_mangle]
-unsafe extern "C" fn x64_handle_syscall(ctx: *mut SyscallFrame) -> isize {
+unsafe extern "C" fn x64_handle_syscall(ctx: *mut InterruptFrame) -> isize {
     let context = &*ctx;
     handle_syscall(
         context.rdi as usize,
@@ -141,29 +141,13 @@ fn handle_syscall(
     a5: usize,
     a6: usize,
     n: usize,
-    frame: *mut SyscallFrame,
+    frame: *mut InterruptFrame,
 ) -> isize {
     let mut handler = SyscallHandler {
         frame: unsafe { &mut *frame },
     };
 
-    let retval = match handler.dispatch(a1, a2, a3, a4, a5, a6, n) {
-        Ok(retval) => {
-            // log::trace!("Syscall returned Ok");
-            retval
-        }
-        Err(err) => {
-            // if let Some(msg) = err.msg {
-            log::error!(
-                "Syscall handler returned Err {:?} with msg: {:?}",
-                err.errno(),
-                err.msg()
-            );
-            // }
-            let errno = err.errno().unwrap() as i32;
-            -errno as isize
-        }
-    };
+    let retval = errno_to_isize(&handler.dispatch(a1, a2, a3, a4, a5, a6, n));
     handler.frame.rax = retval as usize;
     retval
 }

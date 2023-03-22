@@ -19,10 +19,9 @@ use crate::{
         allocator::alloc_kernel_frames,
         consts::{KERNEL_STACK_SIZE, PAGE_SIZE, USER_STACK_BOTTOM, USER_STACK_TOP},
     },
-    task::{get_scheduler, signal::Signal, vmem::{Vmem, MMapFlags, MMapProt, MMapKind}},
+    task::{get_scheduler, signal::Signal, vmem::{Vmem, MMapFlags, MMapProt, MMapKind}, current_task},
     userland::{
         elf::{self, AuxvType},
-        syscall::SyscallFrame,
     },
     util::{stack::Stack, KResult},
 };
@@ -47,7 +46,7 @@ fn xrstor(fpu: &Box<[u8]>) {
 
 pub fn arch_context_switch(prev: &mut ArchTask, next: &mut ArchTask) {
     unsafe {
-        prev.fsbase = VirtAddr::new(rdmsr(IA32_FS_BASE) as usize);
+        // prev.fsbase = VirtAddr::new(rdmsr(IA32_FS_BASE) as usize);
         // prev.gsbase = VirtAddr::new(rdmsr(IA32_GS_BASE) as usize);
         wrmsr(IA32_FS_BASE, next.fsbase.value() as u64);
         swapgs();
@@ -360,10 +359,10 @@ impl ArchTask {
 
         let kframe = unsafe { stack.offset::<InterruptFrame>() };
         *kframe = InterruptFrame::default();
-        kframe.ss = (KERNEL_DS_IDX as u64) << 3;
-        kframe.cs = (KERNEL_CS_IDX as u64) << 3;
-        kframe.rip = entry_point.value() as u64;
-        kframe.rsp = task_stack as u64;
+        kframe.ss = (KERNEL_DS_IDX as usize) << 3;
+        kframe.cs = (KERNEL_CS_IDX as usize) << 3;
+        kframe.rip = entry_point.value();
+        kframe.rsp = task_stack as usize;
         kframe.rflags = if enable_interrupts { 0x200 } else { 0 };
 
         unsafe { stack.push(iretq_init as usize) };
@@ -403,7 +402,7 @@ impl ArchTask {
             VirtAddr::new(USER_STACK_BOTTOM),
             VirtAddr::new(USER_STACK_TOP - 1),
             MMapFlags::empty(),
-            MMapProt::PROT_READ | MMapProt::PROT_WRITE,
+            MMapProt::PROT_READ | MMapProt::PROT_WRITE | MMapProt::PROT_EXEC,
             MMapKind::Anonymous,
             &mut userland_entry.addr_space.mapper(),
         )?;
@@ -531,7 +530,7 @@ impl ArchTask {
             VirtAddr::new(USER_STACK_BOTTOM),
             VirtAddr::new(USER_STACK_TOP - 1),
             MMapFlags::empty(),
-            MMapProt::PROT_READ | MMapProt::PROT_WRITE,
+            MMapProt::PROT_READ | MMapProt::PROT_WRITE | MMapProt::PROT_EXEC,
             MMapKind::Anonymous,
             &mut self.address_space.mapper(),
         )?;
@@ -613,7 +612,7 @@ impl ArchTask {
         // Ok(())
     }
 
-    pub fn fork(&self, syscall_frame: &SyscallFrame) -> KResult<Self> {
+    pub fn fork(&self, syscall_frame: &InterruptFrame) -> KResult<Self> {
         assert!(self.user, "Cannot fork a kernel task");
 
         let address_space = AddressSpace::current().fork(true)?;
@@ -631,24 +630,24 @@ impl ArchTask {
             // let old_frame = old_stack.offset::<InterruptFrame>();
             // log::debug!("Old frame: {:#x?}", syscall_frame);
             // *new_frame = *old_frame;
-            new_frame.cs = syscall_frame.cs as u64;
-            new_frame.r10 = syscall_frame.r10 as u64;
-            new_frame.r11 = syscall_frame.r11 as u64;
-            new_frame.r12 = syscall_frame.r12 as u64;
-            new_frame.r13 = syscall_frame.r13 as u64;
-            new_frame.r14 = syscall_frame.r14 as u64;
-            new_frame.r15 = syscall_frame.r15 as u64;
-            new_frame.r8 = syscall_frame.r8 as u64;
-            new_frame.r9 = syscall_frame.r9 as u64;
-            new_frame.rbp = syscall_frame.rbp as u64;
-            new_frame.rbx = syscall_frame.rbx as u64;
-            new_frame.rcx = syscall_frame.rcx as u64;
-            new_frame.rdi = syscall_frame.rdi as u64;
-            new_frame.rsi = syscall_frame.rsi as u64;
-            new_frame.ss = syscall_frame.ss as u64;
-            new_frame.rsp = syscall_frame.rsp as u64;
-            new_frame.rip = syscall_frame.rip as u64;
-            new_frame.rflags = syscall_frame.rflags as u64;
+            new_frame.cs = syscall_frame.cs;
+            new_frame.r10 = syscall_frame.r10;
+            new_frame.r11 = syscall_frame.r11;
+            new_frame.r12 = syscall_frame.r12;
+            new_frame.r13 = syscall_frame.r13;
+            new_frame.r14 = syscall_frame.r14;
+            new_frame.r15 = syscall_frame.r15;
+            new_frame.r8 = syscall_frame.r8;
+            new_frame.r9 = syscall_frame.r9;
+            new_frame.rbp = syscall_frame.rbp;
+            new_frame.rbx = syscall_frame.rbx;
+            new_frame.rcx = syscall_frame.rcx;
+            new_frame.rdi = syscall_frame.rdi;
+            new_frame.rsi = syscall_frame.rsi;
+            new_frame.ss = syscall_frame.ss;
+            new_frame.rsp = syscall_frame.rsp;
+            new_frame.rip = syscall_frame.rip;
+            new_frame.rflags = syscall_frame.rflags;
 
             new_frame.rax = 0x0; // fork return value
 
@@ -697,45 +696,51 @@ impl ArchTask {
     }
 
     pub fn setup_signal_stack(
-        &mut self,
-        frame: &mut SyscallFrame,
+        frame: &mut InterruptFrame,
         signal: Signal,
         handler: VirtAddr,
-        sigreturn: VirtAddr,
+        syscall_result: isize,
+        // sigreturn: VirtAddr,
     ) -> KResult<()> {
-        // const TRAMPOLINE: &[u8] = &[
-        //     0xb8, 0x0f, 0x00, 0x00, 0x00, // mov eax, 15
-        //     0x0f, 0x05, // syscall
-        //     0x90, // nop (for alignment)
-        // ];
+        const TRAMPOLINE: &[u8] = &[
+            0xb8, 0x0f, 0x00, 0x00, 0x00, // mov eax, 15
+            0x0f, 0x05, // syscall
+            0x90, // nop (for alignment)
+        ];
 
         // let mut rsp = unsafe { self.context.as_ref().rsp as usize };
-
-        let signal_frame = SignalFrame::from_syscall(true, 0, frame, 0);
+        if frame.cs & 0x3 == 0 {
+            return Ok(())
+        }
+        let signal_frame = SignalFrame::from_syscall(true, syscall_result, frame, 0);
         let mut rsp = frame.rsp;
         let mut stack = Stack::new(&mut rsp);
         // red zone
         stack.skip_by(128);
-
+        // let tramp_rip = stack.top();
+        // log::debug!("{:#x?}", tramp_rip);
         unsafe {
-            stack.push(signal_frame);
-            stack.push(sigreturn.value());
+            stack.push_bytes(TRAMPOLINE);
+            // stack.push_bytes(TRAMPOLINE);
+            // stack.push(0usize); // todo: sigreturn
+            stack.push(stack.top());
         }
 
         frame.rip = handler.value();
-        frame.rsp = stack.top();
+        frame.rsp = rsp;
         frame.rdi = signal as usize;
-        frame.rsi = 0;
-        frame.rdx = 0;
+        // frame.rsi = 0;
+        // frame.rdx = 0;
 
         Ok(())
     }
 
     pub fn setup_sigreturn_stack(
         &self,
-        current_frame: &mut SyscallFrame,
-        signaled_frame: &SyscallFrame,
+        current_frame: &mut InterruptFrame,
+        signaled_frame: &InterruptFrame,
     ) {
         *current_frame = signaled_frame.clone();
     }
 }
+

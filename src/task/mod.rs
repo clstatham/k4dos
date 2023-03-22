@@ -23,7 +23,6 @@ use crate::{
         FileRef,
     },
     mem::addr::VirtAddr,
-    userland::syscall::SyscallFrame,
     util::{ctypes::c_int, errno::Errno, KResult, SpinLock},
 };
 
@@ -99,7 +98,7 @@ pub struct Task {
     vmem: Arc<SpinLock<Vmem>>,
 
     pub(crate) signals: Arc<SpinLock<SignalDelivery>>,
-    signaled_frame: AtomicCell<Option<SyscallFrame>>,
+    signaled_frame: AtomicCell<Option<InterruptFrame>>,
     sigset: Arc<SpinLock<SigSet>>,
 }
 
@@ -259,11 +258,11 @@ impl Task {
         new.signals.lock().clone_from(&self.signals.lock());
         new.vmem.lock().fork_from(&self.vmem.lock());
         group.lock().add(Arc::downgrade(&new));
-        get_scheduler().enqueue(new.clone());
+        get_scheduler().push_runnable(new.clone());
         new
     }
 
-    pub fn fork(&self, frame: &SyscallFrame) -> Arc<Task> {
+    pub fn fork(&self, frame: &InterruptFrame) -> Arc<Task> {
         let arch = UnsafeCell::new(self.arch_mut().fork(frame).unwrap());
         self.make_child(arch)
     }
@@ -296,7 +295,11 @@ impl Task {
     }
 
     pub fn set_state(&self, state: TaskState) {
-        self.state.store(state)
+        if !matches!(self.get_state(), TaskState::ExitedWith(_)) {
+            self.state.store(state)
+        } else {
+            unreachable!();
+        }
     }
 
     fn set_parent(&self, parent: Weak<Task>) {

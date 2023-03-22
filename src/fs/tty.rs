@@ -186,7 +186,7 @@ impl LineDiscipline {
                         }
                     }
                     b'\r' => {
-                        if termios.iflag.contains(IFlag::ICRNL) {
+                        // if termios.iflag.contains(IFlag::ICRNL) {
                             // current_line.push(b'\r');
                             current_line.push(b'\n');
                             // serial1_println!();
@@ -196,7 +196,7 @@ impl LineDiscipline {
                                 // callback(LineControl::Echo(b'\r'));
                                 callback(LineControl::Echo(b'\n'));
                             }
-                        }
+                        // }
                     }
                     b'\n' => {
                         // current_line.push(b'\r');

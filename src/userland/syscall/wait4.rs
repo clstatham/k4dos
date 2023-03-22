@@ -47,10 +47,11 @@ impl<'a> SyscallHandler<'a> {
                 Ok(None)
             })?;
 
-        current_task()
-            .children
-            .lock()
-            .retain(|p| p.pid() != got_pid);
+        log::debug!("wait4: status = {status_val}");
+        // current_task()
+        //     .children
+        //     .lock()
+        //     .retain(|p| p.pid() != got_pid);
 
         // if let Ok(mut status) = status {
         if status.value() != 0 {

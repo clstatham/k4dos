@@ -106,34 +106,34 @@ lazy_static! {
 #[derive(Copy, Clone, Debug, Default)]
 #[repr(C, packed)]
 pub struct InterruptFrame {
-    pub r15: u64,
-    pub r14: u64,
-    pub r13: u64,
-    pub r12: u64,
-    pub rbp: u64,
-    pub rbx: u64,
+    pub r15: usize,
+    pub r14: usize,
+    pub r13: usize,
+    pub r12: usize,
+    pub rbp: usize,
+    pub rbx: usize,
 
-    pub r11: u64,
-    pub r10: u64,
-    pub r9: u64,
-    pub r8: u64,
-    pub rsi: u64,
-    pub rdi: u64,
-    pub rdx: u64,
-    pub rcx: u64,
-    pub rax: u64,
+    pub r11: usize,
+    pub r10: usize,
+    pub r9: usize,
+    pub r8: usize,
+    pub rsi: usize,
+    pub rdi: usize,
+    pub rdx: usize,
+    pub rcx: usize,
+    pub rax: usize,
 
-    pub rip: u64,
-    pub cs: u64,
-    pub rflags: u64,
-    pub rsp: u64,
-    pub ss: u64,
+    pub rip: usize,
+    pub cs: usize,
+    pub rflags: usize,
+    pub rsp: usize,
+    pub ss: usize,
 }
 
 #[derive(Copy, Clone, Debug, Default)]
 #[repr(C, packed)]
 pub struct InterruptErrorFrame {
-    pub code: u64,
+    pub code: usize,
 
     pub frame: InterruptFrame,
 }
@@ -313,7 +313,7 @@ extern "C" fn x64_handle_interrupt(vector: u8, stack_frame: *mut InterruptErrorF
         PAGE_FAULT_VECTOR => {
             let accessed_address = x86_64::registers::control::Cr2::read_raw();
             let cr3 = x86_64::registers::control::Cr3::read_raw().0;
-            let error_code = PageFaultErrorCode::from_bits_truncate(error_code);
+            let error_code = PageFaultErrorCode::from_bits_truncate(error_code as u64);
             // if error_code.contains(PageFaultErrorCode::USER_MODE) {
                 // unsafe {
                 //     core::arch::asm!("swapgs");

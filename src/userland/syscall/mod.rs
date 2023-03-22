@@ -9,7 +9,7 @@ use crate::{
     mem::addr::VirtAddr,
     task::{current_task, get_scheduler, Task, TaskId, vmem::{MMapProt, MMapFlags}},
     userland::syscall::wait4::WaitOptions,
-    util::{ctypes::{c_int, c_nfds}, errno::Errno, KResult},
+    util::{ctypes::{c_int, c_nfds}, errno::Errno, KResult}, arch::idt::InterruptFrame,
 };
 
 use super::buffer::UserCStr;
@@ -33,37 +33,53 @@ pub mod getcwd;
 pub mod uname;
 pub mod poll;
 
-#[repr(packed)]
-#[derive(Default, Clone, Debug)]
-pub struct SyscallFrame {
-    // preserved registers
-    pub r15: usize,
-    pub r14: usize,
-    pub r13: usize,
-    pub r12: usize,
-    pub rbp: usize,
-    pub rbx: usize,
-
-    // scratch registers
-    pub r11: usize,
-    pub r10: usize,
-    pub r9: usize,
-    pub r8: usize,
-    pub rsi: usize,
-    pub rdi: usize,
-    pub rdx: usize,
-    pub rcx: usize,
-    pub rax: usize,
-    // // iret regs
-    pub rip: usize,
-    pub cs: usize,
-    pub rflags: usize,
-    pub rsp: usize,
-    pub ss: usize,
+pub fn errno_to_isize(res: &KResult<isize>) -> isize {
+    match res {
+        Ok(retval) => {
+            // log::trace!("Syscall returned Ok");
+            *retval
+        }
+        Err(err) => {
+            // if let Some(msg) = err.msg {
+            
+            // }
+            let errno = err.errno().unwrap() as i32;
+            -errno as isize
+        }
+    }
 }
 
+// #[repr(C)]
+// #[derive(Default, Clone, Debug)]
+// pub struct SyscallFrame {
+//     // preserved registers
+//     pub r15: usize,
+//     pub r14: usize,
+//     pub r13: usize,
+//     pub r12: usize,
+//     pub rbp: usize,
+//     pub rbx: usize,
+
+//     // scratch registers
+//     pub r11: usize,
+//     pub r10: usize,
+//     pub r9: usize,
+//     pub r8: usize,
+//     pub rsi: usize,
+//     pub rdi: usize,
+//     pub rdx: usize,
+//     pub rcx: usize,
+//     pub rax: usize,
+//     // // iret regs
+//     pub rip: usize,
+//     pub cs: usize,
+//     pub rflags: usize,
+//     pub rsp: usize,
+//     pub ss: usize,
+// }
+
 pub struct SyscallHandler<'a> {
-    pub frame: &'a mut SyscallFrame,
+    pub frame: &'a mut InterruptFrame,
     // pub frame: &'a u8,
 }
 
@@ -80,9 +96,10 @@ impl<'a> SyscallHandler<'a> {
         n: usize,
     ) -> KResult<isize> {
         // {
+        let enter_pid = current_task().pid();
         log::trace!(
             "[{}] SYSCALL #{} {}({:#x}, {:#x}, {:#x}, {:#x}, {:#x}, {:#x})",
-            current_task().pid().as_usize(),
+            enter_pid.as_usize(),
             n,
             syscall_name_by_number(n),
             a1,
@@ -134,11 +151,25 @@ impl<'a> SyscallHandler<'a> {
             SYS_CLOSE => self.sys_close(a1 as FileDesc),
             SYS_POLL => self.sys_poll(VirtAddr::new(a1), a2 as c_nfds, a3 as c_int),
             SYS_CHDIR => self.sys_chdir(&resolve_path(a1)?),
+            SYS_RT_SIGRETURN => self.sys_rt_sigreturn(),
             _ => Err(errno!(Errno::ENOSYS)),
         };
         // }
-        if let Err(err) = get_scheduler().try_delivering_signal(self.frame) {
-            log::error!("Failed to send signal: {:?}", err);
+        let exit_pid = current_task().pid();
+        if exit_pid == enter_pid {
+            if let Err(err) = get_scheduler().try_delivering_signal(self.frame, errno_to_isize(&res)) {
+                log::error!("Failed to send signal: {:?}", err);
+            }
+        } else {
+            log::warn!("Syscall ended with a different process ({}) than it started with ({})!", exit_pid.as_usize(), enter_pid.as_usize());
+        }
+        if let Err(ref err) = res {
+            log::error!(
+                "[{}] Syscall handler returned Err {:?} with msg: {:?}",
+                current_task().pid().as_usize(),
+                err.errno(),
+                err.msg()
+            );
         }
         res
     }

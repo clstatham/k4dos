@@ -5,6 +5,8 @@ use crate::{
     util::{ctypes::c_int, errno::Errno, error::KResult},
 };
 
+use super::get_scheduler;
+
 pub type Signal = c_int;
 #[allow(unused)]
 pub const SIGHUP: Signal = 1;
@@ -77,31 +79,30 @@ pub const SIG_IGN: usize = 1;
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum SigAction {
     Ignore,
-    Terminate,
-    Handler { handler: usize, sigreturn: usize },
+    Handler { handler: fn() },
 }
 
 // TODO: Fill correct default actions
 pub const DEFAULT_ACTIONS: [SigAction; SIGMAX as usize] = [
     /* (unused) */ SigAction::Ignore,
-    /* SIGHUP */ SigAction::Ignore,
-    /* SIGINT */ SigAction::Terminate,
-    /* SIGQUIT */ SigAction::Ignore,
-    /* SIGILL */ SigAction::Ignore,
+    /* SIGHUP */ SigAction::Handler { handler: terminate },
+    /* SIGINT */ SigAction::Handler { handler: terminate },
+    /* SIGQUIT */ SigAction::Handler { handler: terminate },
+    /* SIGILL */ SigAction::Handler { handler: terminate },
     /* SIGTRAP */ SigAction::Ignore,
-    /* SIGABRT */ SigAction::Ignore,
-    /* SIGBUS */ SigAction::Ignore,
-    /* SIGFPE */ SigAction::Ignore,
-    /* SIGKILL */ SigAction::Ignore,
+    /* SIGABRT */ SigAction::Handler { handler: terminate },
+    /* SIGBUS */ SigAction::Handler { handler: terminate },
+    /* SIGFPE */ SigAction::Handler { handler: terminate },
+    /* SIGKILL */ SigAction::Handler { handler: terminate },
     /* SIGUSR1 */ SigAction::Ignore,
-    /* SIGSEGV */ SigAction::Ignore,
+    /* SIGSEGV */ SigAction::Handler { handler: terminate },
     /* SIGUSR2 */ SigAction::Ignore,
-    /* SIGPIPE */ SigAction::Ignore,
+    /* SIGPIPE */ SigAction::Handler { handler: terminate },
     /* SIGALRM */ SigAction::Ignore,
-    /* SIGTERM */ SigAction::Ignore,
+    /* SIGTERM */ SigAction::Handler { handler: terminate },
     /* SIGSTKFLT */ SigAction::Ignore,
     /* SIGCHLD */ SigAction::Ignore,
-    /* SIGCONT */ SigAction::Ignore,
+    /* SIGCONT */ SigAction::Handler { handler: terminate },
     /* SIGSTOP */ SigAction::Ignore,
     /* SIGTSTP */ SigAction::Ignore,
     /* SIGTTIN */ SigAction::Ignore,
@@ -116,6 +117,11 @@ pub const DEFAULT_ACTIONS: [SigAction; SIGMAX as usize] = [
     /* SIGPWR */ SigAction::Ignore,
     /* SIGSYS */ SigAction::Ignore,
 ];
+
+pub fn terminate() {
+    log::warn!("Terminating current process");
+    get_scheduler().exit_current(1);
+}
 
 #[derive(Clone)]
 pub struct SignalDelivery {

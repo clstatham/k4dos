@@ -145,9 +145,9 @@ pub fn arch_main() {
 
     {
         let task = Task::new_init(file, &sched, &[exe.as_bytes()], &[b"FOO=bar"]).unwrap();
-        sched.enqueue(task);
+        sched.push_runnable(task);
         let task = Task::new_kernel(&sched, poll_serial1, true);
-        sched.enqueue(task);
+        sched.push_runnable(task);
     }
 
     loop {

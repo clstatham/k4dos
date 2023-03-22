@@ -341,7 +341,8 @@ impl Vmem {
             unsafe {
                 self.do_unmap(start_addr, end_addr, active_mapper);
             }
-            todo!();
+            // todo!();
+            self.areas.remove(area_idx);
             assert!(!matches!(area_clone.kind, MMapKind::File { .. })); // todo: handle this
             self.add_area(area_clone.start_addr, start_addr, area_clone.flags, area_clone.prot, area_clone.kind.clone())?;
             self.add_area(end_addr, area_clone.end_addr, area_clone.flags, area_clone.prot, area_clone.kind)?;
