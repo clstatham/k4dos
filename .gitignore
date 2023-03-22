@@ -1,4 +1,5 @@
 /target
 /initramfs
 /extern
+/kados_syscall/target
 *.objdump

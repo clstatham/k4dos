@@ -401,7 +401,7 @@ impl ArchTask {
 
         userland_entry.vmem.map_area(
             VirtAddr::new(USER_STACK_BOTTOM),
-            VirtAddr::new(USER_STACK_TOP - 1),
+            VirtAddr::new(USER_STACK_TOP) + 1,
             MMapFlags::empty(),
             MMapProt::PROT_READ | MMapProt::PROT_WRITE | MMapProt::PROT_EXEC,
             MMapKind::Anonymous,
@@ -530,7 +530,7 @@ impl ArchTask {
         // userland_entry
         vmem.map_area(
             VirtAddr::new(USER_STACK_BOTTOM),
-            VirtAddr::new(USER_STACK_TOP - 1),
+            VirtAddr::new(USER_STACK_TOP) + 1,
             MMapFlags::empty(),
             MMapProt::PROT_READ | MMapProt::PROT_WRITE | MMapProt::PROT_EXEC,
             MMapKind::Anonymous,
@@ -631,25 +631,25 @@ impl ArchTask {
             let new_frame = new_stack.offset::<InterruptFrame>();
             // let old_frame = old_stack.offset::<InterruptFrame>();
             // log::debug!("Old frame: {:#x?}", syscall_frame);
-            // *new_frame = *old_frame;
-            new_frame.cs = syscall_frame.cs;
-            new_frame.r10 = syscall_frame.r10;
-            new_frame.r11 = syscall_frame.r11;
-            new_frame.r12 = syscall_frame.r12;
-            new_frame.r13 = syscall_frame.r13;
-            new_frame.r14 = syscall_frame.r14;
-            new_frame.r15 = syscall_frame.r15;
-            new_frame.r8 = syscall_frame.r8;
-            new_frame.r9 = syscall_frame.r9;
-            new_frame.rbp = syscall_frame.rbp;
-            new_frame.rbx = syscall_frame.rbx;
-            new_frame.rcx = syscall_frame.rcx;
-            new_frame.rdi = syscall_frame.rdi;
-            new_frame.rsi = syscall_frame.rsi;
-            new_frame.ss = syscall_frame.ss;
-            new_frame.rsp = syscall_frame.rsp;
-            new_frame.rip = syscall_frame.rip;
-            new_frame.rflags = syscall_frame.rflags;
+            *new_frame = *syscall_frame;
+            // new_frame.cs = syscall_frame.cs;
+            // new_frame.r10 = syscall_frame.r10;
+            // new_frame.r11 = syscall_frame.r11;
+            // new_frame.r12 = syscall_frame.r12;
+            // new_frame.r13 = syscall_frame.r13;
+            // new_frame.r14 = syscall_frame.r14;
+            // new_frame.r15 = syscall_frame.r15;
+            // new_frame.r8 = syscall_frame.r8;
+            // new_frame.r9 = syscall_frame.r9;
+            // new_frame.rbp = syscall_frame.rbp;
+            // new_frame.rbx = syscall_frame.rbx;
+            // new_frame.rcx = syscall_frame.rcx;
+            // new_frame.rdi = syscall_frame.rdi;
+            // new_frame.rsi = syscall_frame.rsi;
+            // new_frame.ss = syscall_frame.ss;
+            // new_frame.rsp = syscall_frame.rsp;
+            // new_frame.rip = syscall_frame.rip;
+            // new_frame.rflags = syscall_frame.rflags;
 
             new_frame.rax = 0x0; // fork return value
 
@@ -672,6 +672,53 @@ impl ArchTask {
             gsbase: self.gsbase,
             fpu_storage: Some(fpu_storage),
         })
+    }
+
+    pub fn clone_process(&self, entry_point: VirtAddr, user_stack: VirtAddr, args: VirtAddr, r8: usize, r9: usize, syscall_frame: &InterruptFrame) -> KResult<Self> {
+        assert!(self.user, "Cannot clone a kernel task");
+
+        let address_space = AddressSpace::current().fork(true)?;
+        let switch_stack = Self::alloc_switch_stack()?.as_mut_ptr::<u8>();
+
+        let mut new_rsp = switch_stack as usize;
+        let mut new_stack = Stack::new(&mut new_rsp);
+
+        let new_frame = unsafe { new_stack.offset::<InterruptFrame>() };
+        *new_frame = InterruptFrame::default();
+        // *new_frame = *syscall_frame;
+
+        new_frame.cs = syscall_frame.cs;
+        new_frame.ss = syscall_frame.ss;
+
+        new_frame.r8 = r8;
+        new_frame.r9 = r9;
+        new_frame.rdi = args.value();
+
+        new_frame.rip = entry_point.value();
+        new_frame.rsp = user_stack.value();
+        new_frame.rflags = 0x200;
+
+        unsafe { new_stack.push(fork_init as usize) };
+        let kframe_rsp = new_stack.top();
+        let context = unsafe { new_stack.offset::<Context>() };
+        *context = Context::default();
+        // *context = unsafe { self.context.as_ref() }.clone();
+        context.rsp = kframe_rsp;
+        // context.rip = fork_init as usize;
+
+        let mut fpu_storage = Self::alloc_fpu_storage();
+        fpu_storage.copy_from_slice(self.fpu_storage.as_ref().unwrap().as_slice());
+
+        Ok(Self {
+            context: unsafe { core::ptr::Unique::new_unchecked(context) },
+            address_space,
+            user: true,
+            fpu_storage: Some(fpu_storage),
+            gsbase: self.gsbase,
+            fsbase: self.fsbase,
+            kernel_stack: alloc::vec![0u8; KERNEL_STACK_SIZE].into_boxed_slice(),
+        })
+
     }
 
     fn alloc_fpu_storage() -> Box<[u8]> {

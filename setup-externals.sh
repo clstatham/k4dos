@@ -10,6 +10,7 @@ if [[ -z "$@" ]]; then
     echo "clean          Cleans the output directory"
     echo "build          Builds Busybox"
     echo "makeimg        Creates the initramfs image for K4DOS"
+    echo "kash           Builds Kash, the K4DOS shell"
     exit
 fi
 
@@ -54,6 +55,12 @@ then
     time make -j6
     make install
 fi
+if [[ $@ =~ "kash" ]];
+then
+    cd $STARTDIR/userland/kash
+    ./build.sh
+    cd -
+fi
 if [[ $@ =~ "makeimg" ]];
 then
     cd $STARTDIR
@@ -68,6 +75,7 @@ then
     mkdir -p dev
     find . | cpio -ov --format=newc > ../initramfs
 fi
+
 
 cd $STARTDIR
 echo "Done."

@@ -1,206 +1,73 @@
-use alloc::sync::Arc;
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+#[repr(i32)]
+#[allow(unused)]
+#[allow(clippy::upper_case_acronyms)]
+pub enum Errno {
+    EPERM = 1,
+    ENOENT = 2,
+    ESRCH = 3,
+    EINTR = 4,
+    EIO = 5,
+    ENXIO = 6,
+    E2BIG = 7,
+    ENOEXEC = 8,
+    EBADF = 9,
+    ECHILD = 10,
+    EAGAIN = 11,
+    ENOMEM = 12,
+    EACCES = 13,
+    EFAULT = 14,
+    ENOTBLK = 15,
+    EBUSY = 16,
+    EEXIST = 17,
+    EXDEV = 18,
+    ENODEV = 19,
+    ENOTDIR = 20,
+    EISDIR = 21,
+    EINVAL = 22,
+    ENFILE = 23,
+    EMFILE = 24,
+    ENOTTY = 25,
+    ETXTBSY = 26,
+    EFBIG = 27,
+    ENOSPC = 28,
+    ESPIPE = 29,
+    EROFS = 30,
+    EMLINK = 31,
+    EPIPE = 32,
+    EDOM = 33,
+    ERANGE = 34,
 
-use crate::{
-    errno,
-    fs::{
-        opened_file::{FileDesc, OpenFlags},
-        path::{Path, PathBuf}, FileMode,
-    },
-    mem::addr::VirtAddr,
-    task::{current_task, get_scheduler, Task, TaskId, vmem::{MMapProt, MMapFlags}},
-    userland::syscall::wait4::WaitOptions,
-    util::{ctypes::{c_int, c_nfds}, errno::Errno, KResult}, arch::idt::InterruptFrame,
-};
+    ENOSYS = 38,
+    ELOOP = 40,
 
-use super::buffer::UserCStr;
+    EADDRINUSE = 98,
+    EADDRNOTAVAIL = 99,
+    ENETDOWN = 100,
+    ENETUNREACH = 101,
+    ENETRESET = 102,
+    ECONNABORTED = 103,
+    ECONNRESET = 104,
+    ENOBUFS = 105,
+    EISCONN = 106,
+    ENOTCONN = 107,
 
-pub mod arch_prctl;
-pub mod execve;
-pub mod exit;
-pub mod fork;
-pub mod ioctl;
-pub mod read;
-pub mod rt_sigprocmask;
-pub mod set_tid_address;
-pub mod wait4;
-pub mod write;
-pub mod writev;
-pub mod mmap;
-pub mod stat;
-pub mod open;
-pub mod fcntl;
-pub mod getcwd;
-pub mod uname;
-pub mod poll;
-pub mod pipe;
+    /// Temporary errno to use until I get everything POSIX-compatible.
+    ETMP = 255,
+}
 
-pub fn errno_to_isize(res: &KResult<isize>) -> isize {
-    match res {
-        Ok(retval) => {
-            // log::trace!("Syscall returned Ok");
-            *retval
-        }
-        Err(err) => {
-            // if let Some(msg) = err.msg {
-            
-            // }
-            let errno = err.errno().unwrap() as i32;
-            -errno as isize
-        }
+pub type SyscallResult = Result<usize, Errno>;
+
+#[inline]
+pub fn syscall_result(sys_res: isize) -> SyscallResult {
+    if sys_res >= 0 {
+        Ok(sys_res as usize)
+    } else {
+        Err(unsafe { core::mem::transmute((-sys_res) as i32)})
     }
 }
 
-// #[repr(C)]
-// #[derive(Default, Clone, Debug)]
-// pub struct SyscallFrame {
-//     // preserved registers
-//     pub r15: usize,
-//     pub r14: usize,
-//     pub r13: usize,
-//     pub r12: usize,
-//     pub rbp: usize,
-//     pub rbx: usize,
-
-//     // scratch registers
-//     pub r11: usize,
-//     pub r10: usize,
-//     pub r9: usize,
-//     pub r8: usize,
-//     pub rsi: usize,
-//     pub rdi: usize,
-//     pub rdx: usize,
-//     pub rcx: usize,
-//     pub rax: usize,
-//     // // iret regs
-//     pub rip: usize,
-//     pub cs: usize,
-//     pub rflags: usize,
-//     pub rsp: usize,
-//     pub ss: usize,
-// }
-
-pub struct SyscallHandler<'a> {
-    pub frame: &'a mut InterruptFrame,
-    // pub frame: &'a u8,
-}
-
-impl<'a> SyscallHandler<'a> {
-    #[allow(clippy::too_many_arguments)]
-    pub fn dispatch(
-        &mut self,
-        a1: usize,
-        a2: usize,
-        a3: usize,
-        a4: usize,
-        a5: usize,
-        a6: usize,
-        n: usize,
-    ) -> KResult<isize> {
-        // {
-        let enter_pid = current_task().pid();
-        log::trace!(
-            "[{}] [{:#x}] SYSCALL #{} {}({:#x}, {:#x}, {:#x}, {:#x}, {:#x}, {:#x})",
-            enter_pid.as_usize(),
-            self.frame.rip as usize,
-            n,
-            syscall_name_by_number(n),
-            a1,
-            a2,
-            a3,
-            a4,
-            a5,
-            a6
-        );
-
-        let res = match n {
-            SYS_ARCH_PRCTL => self.sys_arch_prctl(a1 as i32, VirtAddr::new(a2)),
-            SYS_SET_TID_ADDRESS => self.sys_set_tid_address(VirtAddr::new(a1)),
-            SYS_WRITE => self.sys_write(a1 as FileDesc, VirtAddr::new(a2), a3),
-            SYS_WRITEV => self.sys_writev(a1 as FileDesc, VirtAddr::new(a2), a3),
-            SYS_READ => self.sys_read(a1 as FileDesc, VirtAddr::new(a2), a3),
-            SYS_IOCTL => self.sys_ioctl(a1 as FileDesc, a2, a3),
-            SYS_RT_SIGPROCMASK => {
-                self.sys_rt_sigprocmask(a1, VirtAddr::new(a2), VirtAddr::new(a3), a4)
-            }
-            SYS_FORK => self.sys_fork(),
-            SYS_WAIT4 => self.sys_wait4(
-                TaskId::new(a1),
-                VirtAddr::new(a2),
-                crate::bitflags_from_user!(WaitOptions, a3 as i32),
-                VirtAddr::new(a4),
-            ),
-            SYS_EXECVE => self.sys_execve(&resolve_path(a1)?, VirtAddr::new(a2), VirtAddr::new(a3)),
-            SYS_GETTID => self.sys_getpid(), // todo
-            SYS_GETPID => self.sys_getpid(),
-            SYS_GETPPID => self.sys_getppid(),
-            SYS_EXIT => self.sys_exit(a1 as c_int),
-            SYS_MMAP => self.sys_mmap(VirtAddr::new(a1), a2, crate::bitflags_from_user!(MMapProt, a3 as u64), crate::bitflags_from_user!(MMapFlags, a4 as u64), a5 as FileDesc, a6),
-            SYS_MPROTECT => self.sys_mprotect(VirtAddr::new(a1), a2, crate::bitflags_from_user!(MMapProt, a3 as u64)),
-            SYS_MUNMAP => self.sys_munmap(VirtAddr::new(a1), a2),
-            SYS_RT_SIGACTION => self.sys_rt_sigaction(a1 as c_int, VirtAddr::new(a2), VirtAddr::new(a3)),
-            SYS_GETUID => Ok(0),    // TODO:
-            SYS_GETEUID => Ok(0),   // TODO:
-            SYS_SETUID => Ok(0),    // TODO:
-            SYS_SETGID => Ok(0),    // TODO:
-            SYS_SETGROUPS => Ok(0), // TODO:
-            SYS_STAT => self.sys_stat(&resolve_path(a1)?, VirtAddr::new(a2)),
-            SYS_FSTAT => self.sys_fstat(a1 as FileDesc, VirtAddr::new(a2)),
-            SYS_OPEN => self.sys_open(&resolve_path(a1)?, crate::bitflags_from_user!(OpenFlags, a2 as i32), FileMode::new(a3 as u32)),
-            SYS_GETCWD => self.sys_getcwd(VirtAddr::new(a1), a2 as u64),
-            SYS_GETDENTS64 => self.sys_getdents64(a1 as FileDesc, VirtAddr::new(a2), a3),
-            SYS_FCNTL => self.sys_fcntl(a1 as FileDesc, a2 as c_int, a3),
-            SYS_UNAME => self.sys_uname(VirtAddr::new(a1)),
-            SYS_CLOSE => self.sys_close(a1 as FileDesc),
-            // SYS_POLL => self.sys_poll(VirtAddr::new(a1), a2 as c_nfds, a3 as c_int),
-            SYS_POLL => Err(errno!(Errno::EINVAL)),
-            SYS_CHDIR => self.sys_chdir(&resolve_path(a1)?),
-            SYS_RT_SIGRETURN => self.sys_rt_sigreturn(),
-            SYS_PIPE => self.sys_pipe(VirtAddr::new(a1)),
-            SYS_CLONE => self.sys_clone(a1, VirtAddr::new(a2), a3, VirtAddr::new(a4), a5, VirtAddr::new(a6)),
-            _ => Err(errno!(Errno::ENOSYS)),
-        };
-        // }
-        let exit_pid = current_task().pid();
-        if exit_pid == enter_pid {
-            if let Err(err) = get_scheduler().try_delivering_signal(self.frame, errno_to_isize(&res)) {
-                log::error!("Failed to send signal: {:?}", err);
-            }
-        } else {
-            log::warn!("Syscall ended with a different process ({}) than it started with ({})!", exit_pid.as_usize(), enter_pid.as_usize());
-        }
-        if let Err(ref err) = res {
-            log::error!(
-                "[{}] Syscall handler returned Err {:?} with msg: {:?}",
-                current_task().pid().as_usize(),
-                err.errno(),
-                err.msg()
-            );
-        }
-        res
-    }
-}
-
-#[macro_export]
-macro_rules! bitflags_from_user {
-    ($st:tt, $input:expr) => {{
-        let bits = $input;
-        $st::from_bits(bits).unwrap_or_else(|| {
-            log::warn!(
-                concat!("unsupported bitflags for ", stringify!($st), ": {:x}"),
-                bits
-            );
-            $st::from_bits_truncate(bits)
-
-            // $crate::errno!($crate::util::errno::Errno::ENOSYS)
-        })
-    }};
-}
-
-fn resolve_path(uaddr: usize) -> KResult<PathBuf> {
-    Ok(Path::new(UserCStr::new(VirtAddr::new(uaddr), 512)?.as_str()).into())
-}
-
-fn syscall_name_by_number(n: usize) -> &'static str {
+pub fn syscall_name_by_number(n: usize) -> &'static str {
     match n {
         0 => "read",
         1 => "write",
@@ -543,71 +410,72 @@ fn syscall_name_by_number(n: usize) -> &'static str {
     }
 }
 
-const SYS_READ: usize = 0;
-const SYS_WRITE: usize = 1;
-const SYS_OPEN: usize = 2;
-const SYS_CLOSE: usize = 3;
-const SYS_STAT: usize = 4;
-const SYS_FSTAT: usize = 5;
-const SYS_LSTAT: usize = 6;
-const SYS_POLL: usize = 7;
-const SYS_MMAP: usize = 9;
-const SYS_MPROTECT: usize = 10;
-const SYS_MUNMAP: usize = 11;
-const SYS_BRK: usize = 12;
-const SYS_RT_SIGACTION: usize = 13;
-const SYS_RT_SIGPROCMASK: usize = 14;
-const SYS_RT_SIGRETURN: usize = 15;
-const SYS_IOCTL: usize = 16;
-const SYS_WRITEV: usize = 20;
-const SYS_PIPE: usize = 22;
-const SYS_SELECT: usize = 23;
-const SYS_DUP2: usize = 33;
-const SYS_GETPID: usize = 39;
-const SYS_SOCKET: usize = 41;
-const SYS_CONNECT: usize = 42;
-const SYS_ACCEPT: usize = 43;
-const SYS_SENDTO: usize = 44;
-const SYS_RECVFROM: usize = 45;
-const SYS_SHUTDOWN: usize = 48;
-const SYS_BIND: usize = 49;
-const SYS_LISTEN: usize = 50;
-const SYS_GETSOCKNAME: usize = 51;
-const SYS_GETPEERNAME: usize = 52;
-const SYS_GETSOCKOPT: usize = 55;
-const SYS_CLONE: usize = 56;
-const SYS_FORK: usize = 57;
-const SYS_EXECVE: usize = 59;
-const SYS_EXIT: usize = 60;
-const SYS_WAIT4: usize = 61;
-const SYS_KILL: usize = 62;
-const SYS_UNAME: usize = 63;
-const SYS_FCNTL: usize = 72;
-const SYS_FSYNC: usize = 74;
-const SYS_GETCWD: usize = 79;
-const SYS_CHDIR: usize = 80;
-const SYS_MKDIR: usize = 83;
-const SYS_LINK: usize = 86;
-const SYS_READLINK: usize = 89;
-const SYS_CHMOD: usize = 90;
-const SYS_CHOWN: usize = 92;
-const SYS_GETUID: usize = 102;
-const SYS_SYSLOG: usize = 103;
-const SYS_SETUID: usize = 105;
-const SYS_SETGID: usize = 106;
-const SYS_GETEUID: usize = 107;
-const SYS_SETPGID: usize = 109;
-const SYS_GETPPID: usize = 110;
-const SYS_GETPGRP: usize = 111;
-const SYS_GETPGID: usize = 121;
-const SYS_SETGROUPS: usize = 116;
-const SYS_ARCH_PRCTL: usize = 158;
-const SYS_REBOOT: usize = 169;
-const SYS_GETTID: usize = 186;
-const SYS_GETDENTS64: usize = 217;
-const SYS_SET_TID_ADDRESS: usize = 218;
-const SYS_CLOCK_GETTIME: usize = 228;
-const SYS_EXIT_GROUP: usize = 231;
-const SYS_UTIMES: usize = 235;
-const SYS_LINKAT: usize = 265;
-const SYS_GETRANDOM: usize = 318;
+pub const SYS_READ: usize = 0;
+pub const SYS_WRITE: usize = 1;
+pub const SYS_OPEN: usize = 2;
+pub const SYS_CLOSE: usize = 3;
+pub const SYS_STAT: usize = 4;
+pub const SYS_FSTAT: usize = 5;
+pub const SYS_LSTAT: usize = 6;
+pub const SYS_POLL: usize = 7;
+pub const SYS_MMAP: usize = 9;
+pub const SYS_MPROTECT: usize = 10;
+pub const SYS_MUNMAP: usize = 11;
+pub const SYS_BRK: usize = 12;
+pub const SYS_RT_SIGACTION: usize = 13;
+pub const SYS_RT_SIGPROCMASK: usize = 14;
+pub const SYS_RT_SIGRETURN: usize = 15;
+pub const SYS_IOCTL: usize = 16;
+pub const SYS_WRITEV: usize = 20;
+pub const SYS_PIPE: usize = 22;
+pub const SYS_SELECT: usize = 23;
+pub const SYS_DUP2: usize = 33;
+pub const SYS_GETPID: usize = 39;
+pub const SYS_SOCKET: usize = 41;
+pub const SYS_CONNECT: usize = 42;
+pub const SYS_ACCEPT: usize = 43;
+pub const SYS_SENDTO: usize = 44;
+pub const SYS_RECVFROM: usize = 45;
+pub const SYS_SHUTDOWN: usize = 48;
+pub const SYS_BIND: usize = 49;
+pub const SYS_LISTEN: usize = 50;
+pub const SYS_GETSOCKNAME: usize = 51;
+pub const SYS_GETPEERNAME: usize = 52;
+pub const SYS_GETSOCKOPT: usize = 55;
+pub const SYS_CLONE: usize = 56;
+pub const SYS_FORK: usize = 57;
+pub const SYS_EXECVE: usize = 59;
+pub const SYS_EXIT: usize = 60;
+pub const SYS_WAIT4: usize = 61;
+pub const SYS_KILL: usize = 62;
+pub const SYS_UNAME: usize = 63;
+pub const SYS_FCNTL: usize = 72;
+pub const SYS_FSYNC: usize = 74;
+pub const SYS_GETCWD: usize = 79;
+pub const SYS_CHDIR: usize = 80;
+pub const SYS_MKDIR: usize = 83;
+pub const SYS_LINK: usize = 86;
+pub const SYS_READLINK: usize = 89;
+pub const SYS_CHMOD: usize = 90;
+pub const SYS_CHOWN: usize = 92;
+pub const SYS_GETUID: usize = 102;
+pub const SYS_SYSLOG: usize = 103;
+pub const SYS_SETUID: usize = 105;
+pub const SYS_SETGID: usize = 106;
+pub const SYS_GETEUID: usize = 107;
+pub const SYS_SETPGID: usize = 109;
+pub const SYS_GETPPID: usize = 110;
+pub const SYS_GETPGRP: usize = 111;
+pub const SYS_GETPGID: usize = 121;
+pub const SYS_SETGROUPS: usize = 116;
+pub const SYS_ARCH_PRCTL: usize = 158;
+pub const SYS_REBOOT: usize = 169;
+pub const SYS_GETTID: usize = 186;
+pub const SYS_GETDENTS64: usize = 217;
+pub const SYS_SET_TID_ADDRESS: usize = 218;
+pub const SYS_CLOCK_GETTIME: usize = 228;
+pub const SYS_EXIT_GROUP: usize = 231;
+pub const SYS_UTIMES: usize = 235;
+pub const SYS_LINKAT: usize = 265;
+pub const SYS_GETRANDOM: usize = 318;
+

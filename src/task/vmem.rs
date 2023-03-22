@@ -130,7 +130,7 @@ impl Vmem {
         unsafe {
             page_allocator.insert_free_region(PageRange::new(
                 Page::containing_address(VirtAddr::new(PAGE_SIZE)),
-                Page::containing_address(VirtAddr::new(USER_STACK_TOP) - 1),
+                Page::containing_address(VirtAddr::new(USER_STACK_TOP)),
             ))
         }
         Self {
@@ -411,6 +411,7 @@ impl Vmem {
     ) -> KResult<()> {
         let dump_and_exit = || {
             log::error!("{:#x?}", stack_frame);
+            self.log();
             get_scheduler().send_signal_to(current_task(), SIGSEGV);
             get_scheduler().exit_current(1);
         };

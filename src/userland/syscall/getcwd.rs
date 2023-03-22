@@ -43,7 +43,7 @@ impl<'a> SyscallHandler<'a> {
                 size_of::<u64>() * 2 + size_of::<u16>() + 1 + entry.name.len() + 1,
                 alignment,
             );
-            if writer.remaining_len() + record_len > len {
+            if writer.written_len() + record_len > len {
                 break;
             }
 

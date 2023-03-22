@@ -267,6 +267,35 @@ impl Task {
         self.make_child(arch)
     }
 
+    pub fn clone_process(&self, entry_point: VirtAddr, user_stack: VirtAddr, args: VirtAddr, r8: usize, r9: usize,  syscall_frame: &InterruptFrame) -> Arc<Task> {
+        let arch = UnsafeCell::new(self.arch_mut().clone_process(entry_point, user_stack, args, r8, r9, syscall_frame).unwrap());
+        let pid = TaskId::allocate();
+
+        let group = self.group.borrow().upgrade().unwrap();
+        let t = Arc::new_cyclic(|sref| Self {
+            sref: sref.clone(),
+            arch,
+            // opened_files: self.opened_files.clone(),
+            opened_files: Arc::new(SpinLock::new(self.opened_files.lock().clone())), // todo: deeper clone
+            state: AtomicCell::new(TaskState::Runnable),
+            pid,
+            root_fs: Arc::new(SpinLock::new(self.root_fs.lock().clone())), // todo: actually fork the root fs
+            children: Arc::new(SpinLock::new(Vec::new())),
+            parent: SpinLock::new(Weak::new()),
+            group: AtomicRefCell::new(Arc::downgrade(&group)),
+            signals: Arc::new(SpinLock::new(self.signals.lock().clone())),
+            signaled_frame: AtomicCell::new(None),
+            sigset: Arc::new(SpinLock::new(SigSet::ZERO)),
+            vmem: self.vmem.clone(), // important: we don't fork_from here
+            // vmem: Arc::new(SpinLock::new(Vmem::new())),
+        });
+        self.add_child(t.clone());
+        // t.vmem.lock().fork_from(&self.vmem.lock());
+        group.lock().add(Arc::downgrade(&t));
+        get_scheduler().push_runnable(t.clone());
+        t
+    }
+
     fn add_child(&self, child: Arc<Task>) {
         let mut children = self.children.lock();
         child.set_parent(self.sref.clone());

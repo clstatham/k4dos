@@ -7,7 +7,7 @@ pub const L2_SHIFT: usize = 21;
 pub const L1_SHIFT: usize = 12;
 
 pub const KERNEL_STACK_SIZE: usize = PAGE_SIZE * 32;
-pub const USER_STACK_SIZE: usize = PAGE_SIZE * 32;
+pub const USER_STACK_SIZE: usize = PAGE_SIZE * 64;
 
 /// The maximum canonical virtual address in low (user) address space.
 /// All user virtual addresses are less than this value.
