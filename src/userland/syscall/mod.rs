@@ -32,6 +32,7 @@ pub mod fcntl;
 pub mod getcwd;
 pub mod uname;
 pub mod poll;
+pub mod pipe;
 
 pub fn errno_to_isize(res: &KResult<isize>) -> isize {
     match res {
@@ -154,6 +155,7 @@ impl<'a> SyscallHandler<'a> {
             SYS_POLL => Err(errno!(Errno::EINVAL)),
             SYS_CHDIR => self.sys_chdir(&resolve_path(a1)?),
             SYS_RT_SIGRETURN => self.sys_rt_sigreturn(),
+            SYS_PIPE => self.sys_pipe(VirtAddr::new(a1)),
             _ => Err(errno!(Errno::ENOSYS)),
         };
         // }

@@ -1,6 +1,6 @@
 use core::borrow::BorrowMut;
 
-use alloc::{sync::Arc, vec::Vec};
+use alloc::{sync::Arc, vec::Vec, collections::BTreeMap};
 use atomic_refcell::AtomicRefCell;
 use bitflags::bitflags;
 use crossbeam_utils::atomic::AtomicCell;
@@ -11,7 +11,7 @@ use crate::{
     util::{ctypes::c_int, errno::Errno, error::KResult},
 };
 
-use super::{path::PathComponent, DirRef, FileRef, INode, PollStatus, DirEntry};
+use super::{path::PathComponent, DirRef, FileRef, INode, PollStatus, DirEntry, pipe::{Pipe, PIPE_FS}, FsNode};
 
 const FD_MAX: c_int = 1024;
 
@@ -309,6 +309,33 @@ impl OpenedFileTable {
         };
 
         self.alloc_fd(gte)
-            .and_then(|fd| self.open_with_fd(fd, file, options).map(|_| fd))
+            .and_then(|fd| {
+                self.open_with_fd(fd, file, options).map(|_| fd)
+            })
+    }
+
+    pub fn open_pipe(&mut self, options: OpenOptions) -> KResult<Arc<Pipe>> {
+        // todo: use `options`
+        let write_fd = self.alloc_fd(None)?;
+        let read_fd = self.alloc_fd(Some(write_fd + 1))?;
+        let pipe = Arc::new(Pipe::new(read_fd, write_fd));
+        // self.files.push(pipe.clone());
+        PIPE_FS.insert(pipe.clone());
+
+        self.files.resize(read_fd as usize + 1, None);
+        // let fd = self.alloc_fd(Some(read_fd + 1))?;
+        self.open_with_fd(write_fd, OpenedFile::new(Arc::new(PathComponent { parent_dir: None, name: pipe.get_name(), inode: INode::Pipe(pipe.clone()) }), options, 0).into(), options)?;
+        self.open_with_fd(read_fd, OpenedFile::new(Arc::new(PathComponent { parent_dir: None, name: pipe.get_name(), inode: INode::Pipe(pipe.clone()) }), options, 0).into(), options)?;
+        
+        // self.files[write_fd as usize] = Some(LocalOpenedFile {
+        //     opened_file: Arc::new(OpenedFileType::Pipe(pipe.clone())),
+        //     close_on_exec: options.close_on_exec,
+        // });
+        // self.files[read_fd as usize] = Some(LocalOpenedFile {
+        //     opened_file: Arc::new(OpenedFileType::Pipe(pipe.clone())),
+        //     close_on_exec: options.close_on_exec,
+        // });
+
+        Ok(pipe)
     }
 }

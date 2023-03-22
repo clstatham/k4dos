@@ -32,6 +32,18 @@ impl Path {
                 .any(|comp| matches!(comp, ".." | "." | ""))
     }
 
+    pub fn is_pipe(&self) -> bool {
+        self.path.starts_with("pipe:")
+    }
+
+    pub fn pipe_name(&self) -> Option<&str> {
+        if self.is_pipe() {
+            Some(&self.path[5..])
+        } else {
+            None
+        }
+    }
+
     pub fn components(&self) -> Components<'_> {
         let path = if self.path.starts_with('/') {
             &self.path[1..]

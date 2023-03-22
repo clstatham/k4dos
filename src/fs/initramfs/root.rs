@@ -4,7 +4,7 @@ use crate::{
     errno,
     fs::{
         path::{Path, PathComponent},
-        DirRef, INode,
+        DirRef, INode, pipe::PIPE_FS,
     },
     util::{errno::Errno, KResult},
 };
@@ -51,6 +51,9 @@ impl RootFs {
     }
 
     pub fn lookup(&self, path: &Path) -> KResult<INode> {
+        if path.is_pipe() {
+            return PIPE_FS.lookup(path).map(|pipe| INode::Pipe(pipe));
+        }
         self.lookup_path(path, true).map(|cmp| cmp.inode.clone())
     }
 
@@ -58,6 +61,7 @@ impl RootFs {
         if path.is_empty() {
             return Err(errno!(Errno::ENOENT));
         }
+        
         let lookup_from = if path.is_absolute() {
             self.root_path.clone()
         } else {
@@ -102,6 +106,7 @@ impl RootFs {
             if components.peek().is_some() {
                 parent = match &path_comp.inode {
                     INode::Dir(_) => path_comp,
+                    INode::Pipe(_) => unreachable!("Pipes should be contained in PipeFs, not RootFs"),
                     INode::Symlink(link) if follow_symlinks => {
                         if symlink_follow_limit == 0 {
                             return Err(errno!(Errno::ELOOP));

@@ -93,6 +93,7 @@ impl Directory for InitRamFsDir {
             .children
             .get(index)
             .map(|entry| match entry {
+                INode::Pipe(_) => unreachable!("Pipes should be in PipeFs"),
                 INode::Dir(dir) => DirEntry {
                     inode_no: dir.stat().unwrap().inode_no,
                     file_type: FileType::Directory,

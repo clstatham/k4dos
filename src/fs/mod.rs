@@ -9,13 +9,14 @@ use crate::{
     util::{ctypes::c_short, errno::Errno, KResult}, task::wait_queue::WaitQueue,
 };
 
-use self::{opened_file::OpenOptions, path::PathBuf};
+use self::{opened_file::OpenOptions, path::PathBuf, pipe::Pipe};
 
 pub mod initramfs;
 pub mod opened_file;
 pub mod path;
 pub mod tty;
 pub mod null;
+pub mod pipe;
 
 pub type FileRef = Arc<dyn File + Send + Sync>;
 pub type DirRef = Arc<dyn Directory + Send + Sync>;
@@ -283,6 +284,7 @@ pub enum INode {
     File(FileRef),
     Dir(DirRef),
     Symlink(SymlinkRef),
+    Pipe(Arc<Pipe>),
 }
 
 impl INode {
@@ -298,6 +300,10 @@ impl INode {
         matches!(self, INode::Symlink(_))
     }
 
+    pub fn is_pipe(&self) -> bool {
+        matches!(self, INode::Pipe(_))
+    }
+
     pub fn as_file(&self) -> KResult<&FileRef> {
         match self {
             INode::File(file) => Ok(file),
@@ -310,6 +316,8 @@ impl INode {
             INode::Dir(d) => d.stat(),
             INode::File(d) => d.stat(),
             INode::Symlink(d) => d.stat(),
+            INode::Pipe(p) => p.stat(),
+            
         }
     }
 
@@ -326,6 +334,13 @@ impl INode {
             _ => Err(errno!(Errno::EINVAL)),
         }
     }
+
+    pub fn as_pipe(&self) -> KResult<&Arc<Pipe>> {
+        match self {
+            INode::Pipe(p) => Ok(p),
+            _ => Err(errno!(Errno::EINVAL)),
+        }
+    }
 }
 
 impl FsNode for INode {
@@ -334,6 +349,7 @@ impl FsNode for INode {
             INode::Dir(d) => d.get_name(),
             INode::File(f) => f.get_name(),
             INode::Symlink(l) => l.get_name(),
+            INode::Pipe(p) => p.get_name(),
         }
     }
 }
