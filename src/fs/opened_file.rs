@@ -139,6 +139,14 @@ impl OpenedFile {
         Ok(())
     }
 
+    pub fn get_flags(&self) -> OpenFlags {
+        if self.options.borrow_mut().close_on_exec {
+            OpenFlags::O_CLOEXEC
+        } else {
+            OpenFlags::empty()
+        }
+    }
+
     pub fn poll(&self) -> KResult<PollStatus> {
         self.as_file()?.poll()
     }

@@ -130,7 +130,7 @@ pub fn arch_main() {
 
     let sched = get_scheduler();
     // sched.enqueue(Task::new_kernel(spawn_init_process, true));
-    let exe = "/bin/sh";
+    let exe = "/bin/kash";
     let file = get_root()
         .unwrap()
         .lookup(Path::new(exe))
@@ -139,7 +139,8 @@ pub fn arch_main() {
         .unwrap()
         .clone();
 
-    tty::init();
+    fs::null::init();
+    fs::tty::init();
 
     log::info!("Welcome to K4DOS!");
 

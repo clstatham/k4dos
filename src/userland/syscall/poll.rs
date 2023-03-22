@@ -19,21 +19,22 @@ impl<'a> SyscallHandler<'a> {
             let mut reader = UserBufferReader::from(UserBuffer::from_vaddr(fds, fds_len));
             for _ in 0..nfds {
                 let fd = reader.read::<FileDesc>()?;
-
+                log::debug!("fd: {:?}", fd);
                 let events = bitflags_from_user!(PollStatus, reader.read::<c_short>()?);
-
+                log::debug!("events: {:?}", events);
                 let revents = if fd < 0 || events.is_empty() {
                     0
                 } else {
                     let status = current_task().opened_files.lock().get(fd)?.poll()?;
-                    // debug!("status: {:?}", status);
+                    log::debug!("status: {:?}", status);
                     let revents = events & status;
                     if !revents.is_empty() {
                         ready_fds += 1;
                     }
+                    log::debug!("revents: {:?}", revents);
                     revents.bits()
                 };
-                // debug!("revents: {:?}", PollStatus::from_bits_truncate(revents));
+                
 
                 fds.add(reader.read_len()).write::<c_short>(revents)?;
 

@@ -9,7 +9,7 @@ use x86::{
     segmentation::SegmentSelector,
     tlb, Ring,
 };
-use x86_64::structures::paging::PageTableFlags;
+use x86_64::{structures::paging::PageTableFlags, instructions::interrupts};
 
 use crate::{
     fs::FileRef,
@@ -388,6 +388,7 @@ impl ArchTask {
 
     // #[allow(unreachable_code)]
     pub fn new_binary(file: FileRef, argv: &[&[u8]], envp: &[&[u8]]) -> KResult<(Self, Vmem)> {
+        interrupts::disable();
         let mut userland_entry = elf::load_elf(file)?;
 
         // let switch_stack = alloc::vec![0u8; KERNEL_STACK_SIZE].into_boxed_slice();
@@ -508,6 +509,7 @@ impl ArchTask {
         argv: &[&[u8]],
         envp: &[&[u8]],
     ) -> KResult<()> {
+        interrupts::disable();
         let userland_entry = elf::load_elf(file)?;
 
         // let switch_stack = alloc::vec![0u8; KERNEL_STACK_SIZE].into_boxed_slice();

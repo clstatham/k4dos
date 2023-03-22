@@ -3,10 +3,10 @@ use crate::{util::{ctypes::c_int, KResult, errno::Errno}, fs::opened_file::{File
 use super::SyscallHandler;
 
 
-const _F_DUPFD: c_int = 0;
-const _F_GETFD: c_int = 1;
+const F_DUPFD: c_int = 0;
+const F_GETFD: c_int = 1;
 const F_SETFD: c_int = 2;
-const _F_GETFL: c_int = 3;
+const F_GETFL: c_int = 3;
 const F_SETFL: c_int = 4;
 
 // Linux-specific commands.
@@ -18,6 +18,10 @@ impl<'a> SyscallHandler<'a> {
         let current = current_task();
         let mut files = current.opened_files.lock();
         match cmd {
+            F_GETFD => {
+                let flags = files.get(fd)?.get_flags();
+                Ok(flags.bits() as isize)
+            }
             F_SETFD => {
                 files.get(fd)?.set_close_on_exec(arg == 1);
                 Ok(0)

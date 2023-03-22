@@ -77,7 +77,7 @@ pub struct VmemArea {
     start_addr: VirtAddr,
     end_addr: VirtAddr,
     flags: MMapFlags,
-    prot: MMapProt,
+    pub(crate) prot: MMapProt,
     kind: MMapKind,
 }
 

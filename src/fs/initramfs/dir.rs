@@ -1,7 +1,7 @@
 use alloc::{
     collections::BTreeMap,
     string::{String, ToString},
-    sync::{Arc, Weak},
+    sync::{Arc, Weak}, vec::Vec,
 };
 
 use crate::{
@@ -13,7 +13,7 @@ use crate::{
 use super::file::InitRamFsFile;
 
 pub struct DirInner {
-    pub children: BTreeMap<String, INode>,
+    pub children: Vec<INode>,
     pub stat: Stat,
     pub name: String,
 }
@@ -29,7 +29,7 @@ impl InitRamFsDir {
             parent: Weak::new(),
             inner: SpinLock::new(DirInner {
                 name,
-                children: BTreeMap::new(),
+                children: Vec::new(),
                 stat: Stat {
                     inode_no,
                     mode: FileMode::new(S_IFDIR | 0o755),
@@ -45,7 +45,7 @@ impl InitRamFsDir {
         self.inner
             .lock()
             .children
-            .insert(name, INode::Dir(dir.clone()));
+            .push(INode::Dir(dir.clone()));
         // });
         dir
     }
@@ -55,7 +55,7 @@ impl InitRamFsDir {
         self.inner
             .lock()
             .children
-            .insert(name, INode::File(file.clone()));
+            .push(INode::File(file.clone()));
         file
     }
 
@@ -65,8 +65,8 @@ impl InitRamFsDir {
 }
 
 impl Directory for InitRamFsDir {
-    fn insert(&self, name: &str, inode: INode) {
-        self.inner.lock().children.insert(name.to_string(), inode);
+    fn insert(&self, inode: INode) {
+        self.inner.lock().children.push(inode);
     }
 
     fn lookup(&self, name: &str) -> KResult<INode> {
@@ -74,7 +74,9 @@ impl Directory for InitRamFsDir {
             .inner
             .lock()
             .children
-            .get(name)
+            .iter()
+            .find(|child| child.get_name() == name.to_string())
+            // .get(name)
             .cloned()
             .ok_or(errno!(Errno::ENOENT))?;
         Ok(inode)
@@ -89,8 +91,7 @@ impl Directory for InitRamFsDir {
             .inner
             .lock()
             .children
-            .values()
-            .nth(index)
+            .get(index)
             .map(|entry| match entry {
                 INode::Dir(dir) => DirEntry {
                     inode_no: dir.stat().unwrap().inode_no,

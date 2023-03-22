@@ -20,7 +20,7 @@ fn create(path: &Path, flags: OpenFlags, mode: FileMode) -> KResult<INode> {
     root
         .lookup(path)?
         .as_dir()?
-        .insert(name, inode.clone());
+        .insert(inode.clone());
     Ok(inode)
 }
 

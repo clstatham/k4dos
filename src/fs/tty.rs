@@ -34,7 +34,7 @@ pub fn init() {
         .unwrap()
         .as_dir()
         .unwrap()
-        .insert("tty", INode::File(TTY.get().unwrap().clone()));
+        .insert(INode::File(TTY.get().unwrap().clone()));
 }
 
 bitflags! {
@@ -189,8 +189,9 @@ impl LineDiscipline {
                         // if termios.iflag.contains(IFlag::ICRNL) {
                             // current_line.push(b'\r');
                             current_line.push(b'\n');
+                            ringbuf.push(b'\n').ok();
                             // serial1_println!();
-                            ringbuf.push_slice(current_line.as_slice());
+                            // ringbuf.push_slice(current_line.as_slice());
                             current_line.clear();
                             if termios.lflag.contains(LFlag::ECHO) {
                                 // callback(LineControl::Echo(b'\r'));
@@ -203,7 +204,8 @@ impl LineDiscipline {
                         current_line.push(b'\n');
                         // vga_print!("\n");
                         // serial1_println!();
-                        ringbuf.push_slice(current_line.as_slice());
+                        ringbuf.push(b'\n').ok();
+                        // ringbuf.push_slice(current_line.as_slice());
                         current_line.clear();
                         if termios.lflag.contains(LFlag::ECHO) {
                             // callback(LineControl::Echo(b'\r'));
@@ -220,6 +222,7 @@ impl LineDiscipline {
                     }
                     ch if 0x20 <= *ch && *ch <= 0x7f && termios.is_cooked() => {
                         current_line.push(*ch);
+                        ringbuf.push(*ch).ok();
                         if termios.lflag.contains(LFlag::ECHO) {
                             callback(LineControl::Echo(*ch));
                         }
@@ -367,6 +370,7 @@ impl File for Tty {
 
     fn poll(&self) -> KResult<PollStatus> {
         let mut status = PollStatus::POLLIN;
+        // let mut status = PollStatus::empty();
         // if !self.discipline.current_line.lock().is_empty() {
         //     status |= PollStatus::POLLIN;
         // }

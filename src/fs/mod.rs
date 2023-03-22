@@ -15,6 +15,7 @@ pub mod initramfs;
 pub mod opened_file;
 pub mod path;
 pub mod tty;
+pub mod null;
 
 pub type FileRef = Arc<dyn File + Send + Sync>;
 pub type DirRef = Arc<dyn Directory + Send + Sync>;
@@ -30,6 +31,7 @@ pub fn alloc_inode_no() -> usize {
 }
 
 bitflags! {
+    #[derive(Debug)]
     pub struct PollStatus: c_short {
         const POLLIN     = 0x001;
         const POLLPRI    = 0x002;
@@ -257,7 +259,7 @@ pub trait Symlink: FsNode {
 // }
 
 pub trait Directory: FsNode {
-    fn insert(&self, name: &str, inode: INode);
+    fn insert(&self, inode: INode);
 
     /// Looks for an existing file.
     fn lookup(&self, name: &str) -> KResult<INode>;

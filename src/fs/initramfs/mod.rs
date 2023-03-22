@@ -3,7 +3,7 @@ use core::iter::Peekable;
 use alloc::{
     collections::BTreeMap,
     string::{String, ToString},
-    sync::{Arc, Weak},
+    sync::{Arc, Weak}, vec::Vec,
 };
 use spin::Once;
 
@@ -213,12 +213,12 @@ impl InitRamFs {
                     },
                 }));
                 // parent_dir.with_write(|d| d.insert(&filename, inode));
-                parent_dir.insert(&filename, inode);
+                parent_dir.insert(inode);
             } else if mode.is_directory() {
                 let inode = INode::Dir(Arc::new(InitRamFsDir {
                     parent: Weak::new(),
                     inner: SpinLock::new(DirInner {
-                        children: BTreeMap::new(),
+                        children: Vec::new(),
                         stat: Stat {
                             inode_no: ino,
                             mode,
@@ -227,7 +227,7 @@ impl InitRamFs {
                         name: filename.clone(),
                     }),
                 }));
-                parent_dir.insert(&filename, inode);
+                parent_dir.insert(inode);
             } else if mode.is_regular_file() {
                 let file = InitRamFsFile {
                     name: SpinLock::new(filename.clone()),
@@ -241,7 +241,7 @@ impl InitRamFs {
                 };
                 // file.write(0, UserBuffer::from_slice(data), OpenOptions::empty())?;
                 // parent_dir.with_write(|d| d.insert(&filename, INode::File(Arc::new(file))));
-                parent_dir.insert(&filename, INode::File(Arc::new(file)));
+                parent_dir.insert(INode::File(Arc::new(file)));
             }
 
             image.skip_until_alignment(4)?;
