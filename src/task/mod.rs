@@ -161,7 +161,7 @@ impl Task {
 
         let console = get_root()
             .unwrap()
-            .lookup_path(Path::new("/dev/tty"), true)
+            .lookup_path(Path::new("/dev/console"), true)
             .unwrap();
 
         let mut files = OpenedFileTable::new();

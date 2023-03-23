@@ -27,7 +27,7 @@ use super::{
 pub static TTY: Once<Arc<Tty>> = Once::new();
 
 pub fn init() {
-    TTY.call_once(|| Arc::new(Tty::new("tty")));
+    TTY.call_once(|| Arc::new(Tty::new("console")));
     get_root()
         .unwrap()
         .lookup(Path::new("dev"), true)
@@ -44,6 +44,12 @@ bitflags! {
     pub struct LFlag: u32 {
         const ICANON = 0o0000002;
         const ECHO   = 0o0000010;
+    }
+}
+
+impl Default for LFlag {
+    fn default() -> Self {
+        Self::all()
     }
 }
 
@@ -67,6 +73,12 @@ bitflags! {
         const IXOFF	    = 0o0010000;
         const IMAXBEL	= 0o0020000;
         const IUTF8	    = 0o0040000;
+    }
+}
+
+impl Default for IFlag {
+    fn default() -> Self {
+        Self::ICRNL
     }
 }
 
@@ -185,13 +197,18 @@ impl LineDiscipline {
                             }
                         }
                     }
-                    b'\r' => {
+                    b'\r' | b'\n' => {
                         // if termios.iflag.contains(IFlag::ICRNL) {
                             // current_line.push(b'\r');
                             current_line.push(b'\n');
-                            ringbuf.push(b'\n').ok();
+                            
+                            if termios.is_cooked() {
+                                ringbuf.push_slice(current_line.as_slice());
+                            } else {
+                                ringbuf.push(b'\n').ok();
+                            }
+                            
                             // serial1_println!();
-                            // ringbuf.push_slice(current_line.as_slice());
                             current_line.clear();
                             if termios.lflag.contains(LFlag::ECHO) {
                                 // callback(LineControl::Echo(b'\r'));
@@ -199,19 +216,19 @@ impl LineDiscipline {
                             }
                         // }
                     }
-                    b'\n' => {
-                        // current_line.push(b'\r');
-                        current_line.push(b'\n');
-                        // vga_print!("\n");
-                        // serial1_println!();
-                        ringbuf.push(b'\n').ok();
-                        // ringbuf.push_slice(current_line.as_slice());
-                        current_line.clear();
-                        if termios.lflag.contains(LFlag::ECHO) {
-                            // callback(LineControl::Echo(b'\r'));
-                            callback(LineControl::Echo(b'\n'));
-                        }
-                    }
+                    // b'\n' => {
+                    //     // current_line.push(b'\r');
+                    //     current_line.push(b'\n');
+                    //     // vga_print!("\n");
+                    //     // serial1_println!();
+                    //     ringbuf.push(b'\n').ok();
+                    //     // ringbuf.push_slice(current_line.as_slice());
+                    //     current_line.clear();
+                    //     if termios.lflag.contains(LFlag::ECHO) {
+                    //         // callback(LineControl::Echo(b'\r'));
+                    //         callback(LineControl::Echo(b'\n'));
+                    //     }
+                    // }
                     // backspace
                     0x7f | 0x08 if termios.is_cooked() => {
                         if !current_line.is_empty() {
@@ -222,7 +239,7 @@ impl LineDiscipline {
                     }
                     ch if 0x20 <= *ch && *ch <= 0x7f && termios.is_cooked() => {
                         current_line.push(*ch);
-                        ringbuf.push(*ch).ok();
+                        // ringbuf.push(*ch).ok();
                         if termios.lflag.contains(LFlag::ECHO) {
                             callback(LineControl::Echo(*ch));
                         }
@@ -280,7 +297,7 @@ pub struct Tty {
 
 impl Default for Tty {
     fn default() -> Self {
-        Self::new("tty")
+        Self::new("console")
     }
 }
 
@@ -326,17 +343,17 @@ impl File for Tty {
             TCGETS => {
                 let arg = VirtAddr::new(arg);
                 arg.write(&Termios {
-                    lflag: LFlag::all(),
-                    iflag: IFlag::all(),
+                    lflag: LFlag::default(),
+                    iflag: IFlag::default(),
                     ..Default::default()
                 })?;
             }
             TCSETS => {
                 let arg = VirtAddr::new(arg);
                 let termios = arg.read::<Termios>()?;
+                log::debug!("{:?}", termios);
                 let mut lock = self.discipline.termios.lock();
                 *lock = *termios;
-                // lock.iflag = termios.iflag;
             }
             TIOCGPGRP => {
                 let group = self

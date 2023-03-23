@@ -66,7 +66,7 @@ impl WaitQueue {
                     .retain(|t| t.pid != current.pid);
                 return ret_val;
             }
-            scheduler.sleep(None)?;
+            scheduler.sleep(timeout)?;
         }
     }
 }

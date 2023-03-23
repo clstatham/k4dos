@@ -101,7 +101,7 @@ impl Scheduler {
             log::debug!("Pushing {} as waiting with duration {} ms", task.pid.as_usize(), duration);
             queue.push_back((task, deadline));
         } else {
-            log::warn!("Attempted to push {} as awaiting, but it was already awaiting", task.pid.as_usize());
+            log::warn!("Attempted to push {} as awaiting with duration {} ms, but it was already awaiting", task.pid.as_usize(), duration);
         }
     }
 
@@ -165,12 +165,14 @@ impl Scheduler {
             if parent_signals.get_action(SIGCHLD) == SigAction::Ignore {
                 parent.children.lock().retain(|p| p.pid != current.pid);
             } else {
+                log::debug!("Sending SIGCHLD to {}", parent.pid.as_usize());
                 parent_signals.signal(SIGCHLD);
             }
         }
 
         current.opened_files.lock().close_all();
         self.run_queue.lock().retain(|t| t.pid != current.pid);
+        self.tasks.lock().remove(&current.pid);
         self.exited_tasks.lock().push(current);
         self.wake_all(&JOIN_WAIT_QUEUE);
         // drop(current);
