@@ -130,7 +130,7 @@ pub fn arch_main() {
     let exe = "/bin/sh";
     let file = get_root()
         .unwrap()
-        .lookup(Path::new(exe))
+        .lookup(Path::new(exe), true)
         .unwrap()
         .as_file()
         .unwrap()

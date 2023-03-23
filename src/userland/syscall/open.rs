@@ -18,7 +18,7 @@ fn create(path: &Path, flags: OpenFlags, _mode: FileMode) -> KResult<INode> {
     let root = current.root_fs.lock();
     let inode = INode::File(Arc::new(InitRamFsFile::new(name.to_owned(), alloc_inode_no())));
     root
-        .lookup(path)?
+        .lookup(path, true)?
         .as_dir()?
         .insert(inode.clone());
     Ok(inode)

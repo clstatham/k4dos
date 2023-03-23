@@ -155,7 +155,7 @@ impl<'a> ElfLoader for KadosElfLoader<'a> {
                     .map_area(start, mem_end, flags, prot, kind, &mut self.addr_space.mapper())
                     .unwrap();
             } else if header.get_type().unwrap() == Type::Interp {
-                let ld = get_root().unwrap().lookup(&Path::new("/usr/lib/ld.so")).unwrap().as_file().unwrap().clone();
+                let ld = get_root().unwrap().lookup(&Path::new("/usr/lib/ld.so"), true).unwrap().as_file().unwrap().clone();
                 let res = load_elf(ld).unwrap();
                 self.entry_point = res.entry_point;
             }

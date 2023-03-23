@@ -28,11 +28,8 @@ impl WaitQueue {
     where
         F: FnMut() -> KResult<Option<R>>,
     {
-        
         loop {
             let current = current_task();
-            // let current = current.as_ref().lock();
-            // let current = current.as_ref().unwrap().clone();
             let scheduler = get_scheduler();
             current.set_state(TaskState::Waiting);
             {
@@ -41,7 +38,6 @@ impl WaitQueue {
                     q_lock.push_back(current.clone());
                 }
             }
-            // self.queue.lock().push_back(current.clone());
 
             if current.has_pending_signals() {
                 scheduler.resume_task(current.clone());
@@ -57,7 +53,6 @@ impl WaitQueue {
                 Err(err) => Some(Err(err)),
             };
 
-            // let scheduler = get_scheduler();
             if let Some(ret_val) = ret_value {
                 scheduler.resume_task(current.clone());
                 self.queue
@@ -65,10 +60,7 @@ impl WaitQueue {
                     .retain(|proc| !Arc::ptr_eq(proc, &current));
                 return ret_val;
             }
-            // drop(scheduler);
-            // unsafe { get_scheduler().force_unlock() };
             scheduler.sleep(None)?;
-            // switch();
         }
     }
 }

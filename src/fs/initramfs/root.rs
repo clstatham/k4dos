@@ -50,11 +50,11 @@ impl RootFs {
         Ok(())
     }
 
-    pub fn lookup(&self, path: &Path) -> KResult<INode> {
+    pub fn lookup(&self, path: &Path, follow_symlinks: bool) -> KResult<INode> {
         if path.is_pipe() {
             return PIPE_FS.lookup(path).map(|pipe| INode::Pipe(pipe));
         }
-        self.lookup_path(path, true).map(|cmp| cmp.inode.clone())
+        self.lookup_path(path, follow_symlinks).map(|cmp| cmp.inode.clone())
     }
 
     pub fn lookup_path(&self, path: &Path, follow_symlinks: bool) -> KResult<Arc<PathComponent>> {

@@ -9,7 +9,7 @@ use crate::{
     mem::addr::VirtAddr,
     task::{current_task, get_scheduler, TaskId, vmem::{MMapProt, MMapFlags}},
     userland::syscall::wait4::WaitOptions,
-    util::{ctypes::{c_int}, errno::Errno, KResult}, arch::idt::InterruptFrame,
+    util::{ctypes::{c_int, c_nfds}, errno::Errno, KResult}, arch::idt::InterruptFrame,
 };
 
 use super::buffer::UserCStr;
@@ -144,6 +144,7 @@ impl<'a> SyscallHandler<'a> {
             SYS_SETGID => Ok(0),    // TODO:
             SYS_SETGROUPS => Ok(0), // TODO:
             SYS_STAT => self.sys_stat(&resolve_path(a1)?, VirtAddr::new(a2)),
+            SYS_LSTAT => self.sys_lstat(&resolve_path(a1)?, VirtAddr::new(a2)),
             SYS_FSTAT => self.sys_fstat(a1 as FileDesc, VirtAddr::new(a2)),
             SYS_OPEN => self.sys_open(&resolve_path(a1)?, crate::bitflags_from_user!(OpenFlags, a2 as i32), FileMode::new(a3 as u32)),
             SYS_GETCWD => self.sys_getcwd(VirtAddr::new(a1), a2 as u64),
@@ -151,8 +152,8 @@ impl<'a> SyscallHandler<'a> {
             SYS_FCNTL => self.sys_fcntl(a1 as FileDesc, a2 as c_int, a3),
             SYS_UNAME => self.sys_uname(VirtAddr::new(a1)),
             SYS_CLOSE => self.sys_close(a1 as FileDesc),
-            // SYS_POLL => self.sys_poll(VirtAddr::new(a1), a2 as c_nfds, a3 as c_int),
-            SYS_POLL => Err(errno!(Errno::EINVAL)),
+            SYS_POLL => self.sys_poll(VirtAddr::new(a1), a2 as c_nfds, a3 as c_int),
+            // SYS_POLL => Err(errno!(Errno::EINVAL)),
             SYS_CHDIR => self.sys_chdir(&resolve_path(a1)?),
             SYS_RT_SIGRETURN => self.sys_rt_sigreturn(),
             SYS_PIPE => self.sys_pipe(VirtAddr::new(a1)),

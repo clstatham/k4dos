@@ -30,7 +30,7 @@ pub fn init() {
     TTY.call_once(|| Arc::new(Tty::new("tty")));
     get_root()
         .unwrap()
-        .lookup(Path::new("dev"))
+        .lookup(Path::new("dev"), true)
         .unwrap()
         .as_dir()
         .unwrap()
