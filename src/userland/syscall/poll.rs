@@ -8,7 +8,7 @@ use super::SyscallHandler;
 impl<'a> SyscallHandler<'a> {
     pub fn sys_poll(&mut self, fds: VirtAddr, nfds: c_nfds, timeout: c_int) -> KResult<isize> {
         if timeout > 0 {
-            log::debug!("Ignoring timeout of {} ms.", timeout);
+            log::warn!("Ignoring timeout of {} ms.", timeout);
         }
 
         POLL_WAIT_QUEUE.sleep_signalable_until(|| {
@@ -19,19 +19,19 @@ impl<'a> SyscallHandler<'a> {
             let mut reader = UserBufferReader::from(UserBuffer::from_vaddr(fds, fds_len));
             for _ in 0..nfds {
                 let fd = reader.read::<FileDesc>()?;
-                log::debug!("fd: {:?}", fd);
+                // log::debug!("fd: {:?}", fd);
                 let events = bitflags_from_user!(PollStatus, reader.read::<c_short>()?);
-                log::debug!("events: {:?}", events);
+                // log::debug!("events: {:?}", events);
                 let revents = if fd < 0 || events.is_empty() {
                     0
                 } else {
                     let status = current_task().opened_files.lock().get(fd)?.poll()?;
-                    log::debug!("status: {:?}", status);
+                    // log::debug!("status: {:?}", status);
                     let revents = events & status;
                     if !revents.is_empty() {
                         ready_fds += 1;
                     }
-                    log::debug!("revents: {:?}", revents);
+                    // log::debug!("revents: {:?}", revents);
                     revents.bits()
                 };
                 

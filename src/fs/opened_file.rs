@@ -18,17 +18,37 @@ const FD_MAX: c_int = 1024;
 bitflags! {
     #[derive(Clone, Copy)]
     pub struct OpenFlags: i32 {
-        const O_RDONLY = 0;
-        const O_WRONLY = 1;
-        const O_RDWR = 2;
-        const O_CREAT = 100;
-        const O_EXCL = 200;
-        const O_NOCTTY = 400;
-        const O_TRUNC = 1000;
-        const O_APPEND = 2000;
-        const O_NONBLOCK = 4000;
-        const O_DIRECTORY = 200000;
-        const O_CLOEXEC  = 2000000;
+        const O_RDONLY   =      0o0;
+        const O_WRONLY   =      0o1;
+        const O_RDWR     =      0o2;
+        const O_CREAT    =      0o0100;
+        const O_EXCL     =      0o0200;
+        const O_NOCTTY   =      0o0400;
+        const O_TRUNC    =      0o01000;
+        const O_APPEND   =      0o02000;
+        const O_NONBLOCK =      0o04000;
+        const O_DSYNC    =      0o010000;
+        const O_SYNC     =      0o04010000;
+        const O_RSYNC    =      0o04010000;
+        const O_DIRECTORY=      0o0200000;
+        const O_NOFOLLOW =      0o0400000;
+        const O_CLOEXEC  =      0o02000000;
+        const O_ASYNC    =      0o020000;
+        const O_DIRECT   =      0o040000;
+        const O_LARGEFILE=      0o0100000;
+        const O_NOATIME  =      0o01000000;
+        const O_PATH    =       0o010000000;
+        const O_TMPFILE =       0o020200000;
+        
+        // const O_CREAT = 0x100;
+        // const O_EXCL = 0x200;
+        // const O_NOCTTY = 0x400;
+        // const O_TRUNC = 0x1000;
+        // const O_APPEND = 0x2000;
+        // const O_NONBLOCK = 0x4000;
+        // const O_CLOEXEC = 0x80000;
+        // const O_DIRECTORY = 0x200000;
+        // const O_CLOEXEC  = 0x2000000;
     }
 }
 

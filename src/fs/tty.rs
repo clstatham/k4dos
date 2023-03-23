@@ -334,7 +334,6 @@ impl File for Tty {
             TCSETS => {
                 let arg = VirtAddr::new(arg);
                 let termios = arg.read::<Termios>()?;
-                log::debug!("{:?}", termios);
                 let mut lock = self.discipline.termios.lock();
                 *lock = *termios;
                 // lock.iflag = termios.iflag;

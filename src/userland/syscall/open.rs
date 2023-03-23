@@ -27,7 +27,7 @@ fn create(path: &Path, flags: OpenFlags, _mode: FileMode) -> KResult<INode> {
 impl<'a> SyscallHandler<'a> {
     pub fn sys_open(&mut self, path: &Path, flags: OpenFlags, mode: FileMode) -> KResult<isize> {
         let current = current_task();
-        log::trace!("[{}] Attempting to open {}", current.pid().as_usize(), path);
+        log::trace!("Attempting to open {}", path);
         if flags.contains(OpenFlags::O_CREAT) {
             match create(path, flags, mode) {
                 Ok(_) => {},
@@ -48,14 +48,14 @@ impl<'a> SyscallHandler<'a> {
         }
 
         let fd = opened_files.open(path_comp, flags.into())?;
-        log::trace!("[{}] Opened {} as {}.", current.pid().as_usize(), path, fd);
+        log::trace!("Opened {} as {}.", path, fd);
         Ok(fd as isize)
     }
 
     pub fn sys_close(&mut self, fd: FileDesc) -> KResult<isize> {
         let current = current_task();
         current.opened_files.lock().close(fd)?;
-        log::trace!("[{}] Closed {}", current.pid().as_usize(), fd);
+        log::trace!("Closed {}", fd);
         Ok(0)
     }
 }

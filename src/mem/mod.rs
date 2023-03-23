@@ -24,7 +24,6 @@ pub fn remap_kernel() -> KResult<AddressSpace> {
     log::info!("Active page table at {:?}", active.cr3());
     let mut active_p4 = active.mapper();
     let active_p4 = active_p4.p4();
-    log::debug!("{:?}", active_p4);
     let mut new_space = AddressSpace::new()?;
     let mut new_p4 = new_space.mapper();
     let new_p4 = new_p4.p4();
@@ -34,7 +33,6 @@ pub fn remap_kernel() -> KResult<AddressSpace> {
 
     new_space.switch();
     log::info!("Switched to new page table at {:?}", new_space.cr3());
-    log::debug!("{:?}", new_space.mapper().p4());
     Ok(new_space)
 }
 

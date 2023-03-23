@@ -98,8 +98,7 @@ impl<'a> SyscallHandler<'a> {
         // {
         let enter_pid = current_task().pid();
         log::trace!(
-            "[{}] [{:#x}] SYSCALL #{} {}({:#x}, {:#x}, {:#x}, {:#x}, {:#x}, {:#x})",
-            enter_pid.as_usize(),
+            "[{:#x}] SYSCALL #{} {}({:#x}, {:#x}, {:#x}, {:#x}, {:#x}, {:#x})",
             self.frame.rip as usize,
             n,
             syscall_name_by_number(n),
@@ -188,12 +187,12 @@ macro_rules! bitflags_from_user {
                 Some(flags) => Ok(flags)?,
                 None => {
                 log::warn!(
-                    concat!("unsupported bitflags for ", stringify!($st), ": {:x}"),
+                    concat!("unsupported bitflags for ", stringify!($st), ": {:#x}"),
                     bits
                 );
                 // $st::from_bits_truncate(bits)
 
-                Err($crate::errno!($crate::util::errno::Errno::ENOSYS))?
+                Err($crate::errno!($crate::util::errno::Errno::ENOSYS, "bitflags_from_user(): unsupported bitflags"))?
             }
         }
     }};

@@ -360,8 +360,8 @@ impl Vmem {
             // self.add_area(area.start_addr, end_addr, area.flags, area.prot, area.kind)?;
             self.areas[area_idx].end_addr = end_addr;
         } else {
-            log::debug!("Area:  {:?} .. {:?}", area_clone.start_addr, area_clone.end_addr);
-            log::debug!("Unmap: {:?} .. {:?}", start_addr, end_addr);
+            // log::debug!("Area:  {:?} .. {:?}", area_clone.start_addr, area_clone.end_addr);
+            // log::debug!("Unmap: {:?} .. {:?}", start_addr, end_addr);
             unreachable!()
         }
         Ok(())

@@ -22,15 +22,15 @@ pub fn unwind_user_stack_from(mut rbp: usize) -> KResult<()> {
     let pt = addr_space.mapper();
 
     if rbp == 0 {
-        log::trace!("<empty backtrace>");
+        serial0_println!("<empty backtrace>");
         return Ok(());
     }
 
-    log::trace!("---BEGIN BACKTRACE---");
+    serial0_println!("---BEGIN BACKTRACE---");
     for depth in 0..16 {
         if let Some(rip_rbp) = rbp.checked_add(size_of::<usize>()) {
             if pt.translate(VirtAddr::new(rip_rbp)).is_none() {
-                log::trace!("{:>2}: <guard page>", depth);
+                serial0_println!("{:>2}: <guard page>", depth);
                 break;
             }
 
@@ -54,7 +54,7 @@ pub fn unwind_user_stack_from(mut rbp: usize) -> KResult<()> {
             //     }
             // }
 
-            log::trace!("{:>2}: 0x{:016x} - <unknown>", depth, rip);
+            serial0_println!("{:>2}: 0x{:016x} - <unknown>", depth, rip);
         } else {
             break;
         }
@@ -92,15 +92,15 @@ pub fn unwind_stack() -> KResult<()> {
     }
 
     if rbp == 0 {
-        log::trace!("<empty backtrace>");
+        serial0_println!("<empty backtrace>");
         return Ok(());
     }
 
-    log::trace!("---BEGIN BACKTRACE---");
+    serial0_println!("---BEGIN BACKTRACE---");
     for depth in 0..16 {
         if let Some(rip_rbp) = rbp.checked_add(size_of::<usize>()) {
             if pt.translate(VirtAddr::new(rip_rbp)).is_none() {
-                log::trace!("{:>2}: <guard page>", depth);
+                serial0_println!("{:>2}: <guard page>", depth);
                 break;
             }
 
@@ -125,9 +125,9 @@ pub fn unwind_stack() -> KResult<()> {
             }
 
             if let Some(name) = name {
-                log::trace!("{:>2}: 0x{:016x} - {}", depth, rip, name);
+                serial0_println!("{:>2}: 0x{:016x} - {}", depth, rip, name);
             } else {
-                log::trace!("{:>2}: 0x{:016x} - <unknown>", depth, rip);
+                serial0_println!("{:>2}: 0x{:016x} - <unknown>", depth, rip);
             }
         } else {
             break;
@@ -143,17 +143,17 @@ extern "C" fn rust_panic(info: &PanicInfo) -> ! {
     let default_panic = &format_args!("");
     let panic_msg = info.message().unwrap_or(default_panic);
 
-    log::error!("Panicked at '{}'", panic_msg);
+    serial0_println!("Panicked at '{}'", panic_msg);
     serial1_println!("Panicked at '{}'", panic_msg);
     if let Some(panic_location) = info.location() {
-        log::error!("{}", panic_location);
+        serial0_println!("{}", panic_location);
         serial1_println!("{}", panic_location);
     }
 
-    log::error!("");
+    serial0_println!("");
     match unwind_stack() {
         Ok(()) => {}
-        Err(e) => log::error!("Error unwinding stack: {:?}", e.msg()),
+        Err(e) => serial0_println!("Error unwinding stack: {:?}", e.msg()),
     }
 
     crate::hcf();
@@ -162,13 +162,13 @@ extern "C" fn rust_panic(info: &PanicInfo) -> ! {
 #[allow(non_snake_case)]
 #[no_mangle]
 extern "C" fn _Unwind_Resume(unwind_context_ptr: usize) -> ! {
-    log::debug!("{:#x}", unwind_context_ptr);
+    serial0_println!("{:#x}", unwind_context_ptr);
     crate::hcf();
 }
 
 #[lang = "eh_personality"]
 #[no_mangle]
 extern "C" fn rust_eh_personality() -> ! {
-    log::error!("Poisoned function `rust_eh_personality` was called.");
+    serial0_println!("Poisoned function `rust_eh_personality` was called.");
     crate::hcf()
 }

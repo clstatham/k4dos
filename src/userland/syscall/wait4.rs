@@ -48,7 +48,7 @@ impl<'a> SyscallHandler<'a> {
                 Ok(None)
             })?;
 
-        log::debug!("wait4: status = {status_val}");
+        // log::debug!("wait4: status = {status_val}");
         current_task()
             .children
             .lock()

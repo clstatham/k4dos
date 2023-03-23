@@ -40,7 +40,7 @@ pub mod signal;
 pub mod vmem;
 pub mod wait_queue;
 
-static SCHEDULER: Once<Arc<Scheduler>> = Once::new();
+pub static SCHEDULER: Once<Arc<Scheduler>> = Once::new();
 pub static JOIN_WAIT_QUEUE: Once<WaitQueue> = Once::new();
 pub fn init() {
     SCHEDULER.call_once(|| Scheduler::new());

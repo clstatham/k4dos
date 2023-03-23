@@ -71,6 +71,13 @@ impl Scheduler {
         }
     }
 
+    pub fn current_task_opt(&self) -> Option<Arc<Task>> {
+        let current = self.current_task.read();
+        let clone = current.as_ref().cloned();
+        drop(current);
+        clone
+    }
+
     pub fn current_task(&self) -> Arc<Task> {
         let current = self.current_task.read();
         let clone = current.as_ref().unwrap().clone();
