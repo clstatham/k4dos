@@ -3,12 +3,9 @@ use pc_keyboard::{layouts::Us104Key, DecodedKey, HandleControl, Keyboard, Scanco
 
 use pic8259::ChainedPics;
 use spin::Mutex;
-use x2apic::lapic::{xapic_base, LocalApic, LocalApicBuilder};
+
 use x86::{
-    current::segmentation::swapgs,
     io::outb,
-    msr::{rdmsr, IA32_GS_BASE},
-    segmentation::ss,
 };
 use x86_64::{
     instructions::port::Port,
@@ -17,12 +14,12 @@ use x86_64::{
 };
 
 use crate::{
-    mem::{addr::VirtAddr, consts::MAX_LOW_VADDR},
+    mem::{addr::VirtAddr},
     task::{current_task, get_scheduler},
-    util::SpinLock,
+    util::IrqMutex,
 };
 
-use super::cpu_local::get_kpcr;
+
 
 pub const PIC_1_OFFSET: u8 = 32;
 pub const PIC_2_OFFSET: u8 = PIC_1_OFFSET + 8;
@@ -442,7 +439,7 @@ extern "x86-interrupt" fn lapic_spurious_handler(_stack_frame: InterruptStackFra
 
 extern "x86-interrupt" fn keyboard_handler(_stack_frame: InterruptStackFrame) {
     lazy_static! {
-        static ref KEYBOARD: SpinLock<Keyboard<Us104Key, ScancodeSet1>> = SpinLock::new(
+        static ref KEYBOARD: IrqMutex<Keyboard<Us104Key, ScancodeSet1>> = IrqMutex::new(
             Keyboard::new(ScancodeSet1::new(), Us104Key, HandleControl::Ignore)
         );
     }

@@ -16,7 +16,7 @@ use crate::{
     mem::addr::VirtAddr,
     task::{current_task, get_scheduler, group::TaskGroup, signal::SIGINT, wait_queue::WaitQueue},
     userland::buffer::{UserBuffer, UserBufferMut, UserBufferReader, UserBufferWriter},
-    util::{ctypes::c_int, errno::Errno, error::KResult, lock::SpinLock, ringbuffer::RingBuffer},
+    util::{ctypes::c_int, errno::Errno, error::KResult, lock::IrqMutex, ringbuffer::RingBuffer},
 };
 
 use super::{
@@ -120,11 +120,11 @@ pub enum LineControl {
 }
 
 pub struct LineDiscipline {
-    termios: SpinLock<Termios>,
+    termios: IrqMutex<Termios>,
     wait_queue: WaitQueue,
-    current_line: SpinLock<Vec<u8>>,
-    buf: SpinLock<RingBuffer<u8, 4096>>,
-    foreground_process_group: SpinLock<Weak<SpinLock<TaskGroup>>>,
+    current_line: IrqMutex<Vec<u8>>,
+    buf: IrqMutex<RingBuffer<u8, 4096>>,
+    foreground_process_group: IrqMutex<Weak<IrqMutex<TaskGroup>>>,
 }
 
 impl Default for LineDiscipline {
@@ -136,11 +136,11 @@ impl Default for LineDiscipline {
 impl LineDiscipline {
     pub fn new() -> LineDiscipline {
         LineDiscipline {
-            termios: SpinLock::new(Termios::default()),
-            foreground_process_group: SpinLock::new(Weak::new()),
+            termios: IrqMutex::new(Termios::default()),
+            foreground_process_group: IrqMutex::new(Weak::new()),
             wait_queue: WaitQueue::new(),
-            buf: SpinLock::new(RingBuffer::new()),
-            current_line: SpinLock::new(Vec::new()),
+            buf: IrqMutex::new(RingBuffer::new()),
+            current_line: IrqMutex::new(Vec::new()),
         }
     }
 
@@ -152,11 +152,11 @@ impl LineDiscipline {
         self.buf.lock().is_writable()
     }
 
-    pub fn foreground_process_group(&self) -> Option<Arc<SpinLock<TaskGroup>>> {
+    pub fn foreground_process_group(&self) -> Option<Arc<IrqMutex<TaskGroup>>> {
         self.foreground_process_group.lock().upgrade()
     }
 
-    pub fn set_foreground_process_group(&self, pg: Weak<SpinLock<TaskGroup>>) {
+    pub fn set_foreground_process_group(&self, pg: Weak<IrqMutex<TaskGroup>>) {
         *self.foreground_process_group.lock() = pg;
     }
 
@@ -307,7 +307,7 @@ impl Tty {
             .ok();
     }
 
-    pub fn set_foreground_process_group(&self, pg: Weak<SpinLock<TaskGroup>>) {
+    pub fn set_foreground_process_group(&self, pg: Weak<IrqMutex<TaskGroup>>) {
         self.discipline.set_foreground_process_group(pg);
     }
 }

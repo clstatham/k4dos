@@ -12,10 +12,10 @@ use super::paging::units::{
     AllocatedFrames, AllocatedPages, Frame, FrameRange, Page, PageIndex, PageRange,
 };
 use crate::kerrmsg;
-use crate::util::{align_down, KResult, SpinLock};
+use crate::util::{align_down, KResult, IrqMutex};
 
-pub static KERNEL_FRAME_ALLOCATOR: Once<SpinLock<FrameAllocator>> = Once::new();
-pub static KERNEL_PAGE_ALLOCATOR: Once<SpinLock<PageAllocator>> = Once::new();
+pub static KERNEL_FRAME_ALLOCATOR: Once<IrqMutex<FrameAllocator>> = Once::new();
+pub static KERNEL_PAGE_ALLOCATOR: Once<IrqMutex<PageAllocator>> = Once::new();
 
 #[global_allocator]
 pub static GLOBAL_ALLOC: LockedHeap<32> = LockedHeap::new();
@@ -90,7 +90,7 @@ pub fn init(memmap: &mut [NonNullPtr<LimineMemmapEntry>]) -> KResult<()> {
             unsafe { frame_alloc.insert_free_region(frames) };
         }
     }
-    KERNEL_FRAME_ALLOCATOR.call_once(|| SpinLock::new(frame_alloc));
+    KERNEL_FRAME_ALLOCATOR.call_once(|| IrqMutex::new(frame_alloc));
 
     let mut page_alloc = PageAllocator::new_static();
     let pages = PageRange::new(
@@ -103,7 +103,7 @@ pub fn init(memmap: &mut [NonNullPtr<LimineMemmapEntry>]) -> KResult<()> {
         Page::containing_address(VirtAddr::new(align_down(usize::MAX, PAGE_SIZE))),
     );
     unsafe { page_alloc.insert_free_region(pages) };
-    KERNEL_PAGE_ALLOCATOR.call_once(|| SpinLock::new(page_alloc));
+    KERNEL_PAGE_ALLOCATOR.call_once(|| IrqMutex::new(page_alloc));
 
     Ok(())
 }

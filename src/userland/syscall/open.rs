@@ -1,11 +1,11 @@
 use alloc::{sync::Arc, borrow::ToOwned};
 
-use crate::{fs::{path::Path, opened_file::{OpenFlags, FileDesc}, FileMode, INode, initramfs::{get_root, file::InitRamFsFile}, alloc_inode_no, O_WRONLY, O_RDWR}, util::{KResult, errno::Errno}, errno, task::current_task};
+use crate::{fs::{path::Path, opened_file::{OpenFlags, FileDesc}, FileMode, INode, initramfs::{file::InitRamFsFile}, alloc_inode_no, O_WRONLY, O_RDWR}, util::{KResult, errno::Errno}, errno, task::current_task};
 
 use super::SyscallHandler;
 
 
-fn create(path: &Path, flags: OpenFlags, mode: FileMode) -> KResult<INode> {
+fn create(path: &Path, flags: OpenFlags, _mode: FileMode) -> KResult<INode> {
     if flags.contains(OpenFlags::O_DIRECTORY) {
         return Err(errno!(Errno::EINVAL));
     }

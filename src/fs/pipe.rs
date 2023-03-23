@@ -1,7 +1,7 @@
-use alloc::{collections::BTreeMap, sync::Arc, string::String, format, vec::Vec, borrow::ToOwned};
-use spin::Once;
+use alloc::{sync::Arc, format, vec::Vec};
 
-use crate::{util::{ringbuffer::RingBuffer, SpinLock, KResult, errno::Errno}, userland::buffer::{UserBufferMut, UserBufferWriter, UserBuffer, UserBufferReader}, task::{wait_queue::WaitQueue, TaskId, Task}, errno};
+
+use crate::{util::{ringbuffer::RingBuffer, IrqMutex, KResult, errno::Errno}, userland::buffer::{UserBufferMut, UserBufferWriter, UserBuffer, UserBufferReader}, task::{wait_queue::WaitQueue}, errno};
 
 use super::{opened_file::FileDesc, FsNode, File, path::Path};
 
@@ -9,14 +9,14 @@ pub static PIPE_FS: PipeFs = PipeFs::new();
 
 pub struct Pipe {
     wait_queue: WaitQueue,
-    ringbuffer: Arc<SpinLock<RingBuffer<u8, 65536>>>,
+    ringbuffer: Arc<IrqMutex<RingBuffer<u8, 65536>>>,
     read_fd: FileDesc,
     write_fd: FileDesc,
 }
 
 impl Pipe {
     pub fn new(read_fd: FileDesc, write_fd: FileDesc) -> Self {
-        Self { wait_queue: WaitQueue::new(), ringbuffer: Arc::new(SpinLock::new(RingBuffer::new())), read_fd, write_fd }
+        Self { wait_queue: WaitQueue::new(), ringbuffer: Arc::new(IrqMutex::new(RingBuffer::new())), read_fd, write_fd }
     }
 
     pub fn read_pipe(&self, buf: UserBufferMut<'_>) -> KResult<usize> {
@@ -96,12 +96,12 @@ impl File for Pipe {
 }
 
 pub struct PipeFs {
-    pipes: SpinLock<Vec<Arc<Pipe>>>,
+    pipes: IrqMutex<Vec<Arc<Pipe>>>,
 }
 
 impl PipeFs {
     pub const fn new() -> Self {
-        Self { pipes: SpinLock::new(Vec::new()) }
+        Self { pipes: IrqMutex::new(Vec::new()) }
     }
 
     // pub fn pipe(&mut self, reader: Arc<Task>, writer: Arc<Task>) -> KResult<Arc<Pipe>> {

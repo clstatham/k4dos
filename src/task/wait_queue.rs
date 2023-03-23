@@ -2,13 +2,13 @@ use alloc::{collections::VecDeque, sync::Arc};
 
 use crate::{
     errno,
-    util::{errno::Errno, KResult, SpinLock},
+    util::{errno::Errno, KResult, IrqMutex},
 };
 
-use super::{current_task, get_scheduler, scheduler::switch, Task, TaskState};
+use super::{current_task, get_scheduler, Task, TaskState};
 
 pub struct WaitQueue {
-    pub(super) queue: SpinLock<VecDeque<Arc<Task>>>,
+    pub(super) queue: IrqMutex<VecDeque<Arc<Task>>>,
 }
 
 impl Default for WaitQueue {
@@ -20,7 +20,7 @@ impl Default for WaitQueue {
 impl WaitQueue {
     pub const fn new() -> WaitQueue {
         WaitQueue {
-            queue: SpinLock::new(VecDeque::new()),
+            queue: IrqMutex::new(VecDeque::new()),
         }
     }
 

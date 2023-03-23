@@ -6,13 +6,13 @@ use x86_64::{
 use crate::util::KResult;
 
 use super::{
-    addr::{PhysAddr, VirtAddr},
+    addr::{PhysAddr},
     allocator::alloc_kernel_frames,
     consts::PAGE_TABLE_ENTRIES,
     paging::{
         mapper::Mapper,
         table::{active_table, PageTable},
-        units::{AllocatedFrames, Frame, FrameRange, Page},
+        units::{AllocatedFrames, Frame, FrameRange},
     },
 };
 
@@ -39,17 +39,6 @@ impl AddressSpace {
             for i in 256..512 {
                 page_table[i] = active_table[i];
             }
-
-            // let mut mapper = Mapper::new(page_table);
-            // mapper.map_to_single(Page::containing_address(VirtAddr::new(0x29000)), Frame::containing_address(PhysAddr::new(0x29000)), PageTableFlags::PRESENT | PageTableFlags::WRITABLE).unwrap();
-            // mapper.map_to_single(Page::containing_address(VirtAddr::new(0x3b000)), Frame::containing_address(PhysAddr::new(0x3b000)), PageTableFlags::PRESENT | PageTableFlags::WRITABLE).unwrap();
-            // mapper.map_to_single(Page::containing_address(VirtAddr::new(0x35000)), Frame::containing_address(PhysAddr::new(0x35000)), PageTableFlags::PRESENT | PageTableFlags::WRITABLE).unwrap();
-            // mapper.map_to_single(Page::containing_address(VirtAddr::new(0x3ef95000)), Frame::containing_address(PhysAddr::new(0x3ef95000)), PageTableFlags::PRESENT | PageTableFlags::WRITABLE).unwrap();
-            // mapper.map_to_single(Page::containing_address(VirtAddr::new(0x3ef94000)), Frame::containing_address(PhysAddr::new(0x3ef94000)), PageTableFlags::PRESENT | PageTableFlags::WRITABLE).unwrap();
-            // mapper.map_to_single(Page::containing_address(VirtAddr::new(0x3ef93000)), Frame::containing_address(PhysAddr::new(0x3ef93000)), PageTableFlags::PRESENT | PageTableFlags::WRITABLE).unwrap();
-            // mapper.map_to_single(Page::containing_address(VirtAddr::new(0x3ef92000)), Frame::containing_address(PhysAddr::new(0x3ef92000)), PageTableFlags::PRESENT | PageTableFlags::WRITABLE).unwrap();
-
-            // page_table[0] = active_table[0];
 
             frame
         };

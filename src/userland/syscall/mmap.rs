@@ -1,4 +1,4 @@
-use crate::{mem::addr::VirtAddr, fs::opened_file::FileDesc, util::KResult, task::{current_task, vmem::{MMapProt, MMapFlags}}, errno};
+use crate::{mem::addr::VirtAddr, fs::opened_file::FileDesc, util::KResult, task::{current_task, vmem::{MMapProt, MMapFlags}}};
 
 use super::SyscallHandler;
 

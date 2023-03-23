@@ -1,15 +1,14 @@
 use alloc::{
     collections::{BTreeMap, VecDeque},
-    sync::{Arc, Weak},
+    sync::{Arc},
     vec::Vec,
 };
 use spin::RwLock;
 
 use crate::{
     arch::{idt::InterruptFrame, task::{arch_context_switch, ArchTask}},
-    fs::FileRef,
     mem::addr::VirtAddr,
-    util::{ctypes::c_int, KResult, SpinLock, errno::Errno}, errno, task::{JOIN_WAIT_QUEUE, signal::SignalMask},
+    util::{ctypes::c_int, KResult, IrqMutex, errno::Errno}, errno, task::{JOIN_WAIT_QUEUE},
 };
 
 use super::{
@@ -17,29 +16,29 @@ use super::{
     group::{PgId, TaskGroup},
     signal::{SigAction, Signal, SIGCHLD},
     wait_queue::WaitQueue,
-    Task, TaskId, TaskState,
+    Task, TaskState,
 };
 
 pub struct Scheduler {
-    run_queue: Arc<SpinLock<VecDeque<Arc<Task>>>>,
-    awaiting_queue: Arc<SpinLock<VecDeque<Arc<Task>>>>,
+    run_queue: Arc<IrqMutex<VecDeque<Arc<Task>>>>,
+    awaiting_queue: Arc<IrqMutex<VecDeque<Arc<Task>>>>,
     idle_thread: Option<Arc<Task>>,
     preempt_task: Option<Arc<Task>>,
     current_task: Arc<RwLock<Option<Arc<Task>>>>,
-    exited_tasks: Arc<SpinLock<Vec<Arc<Task>>>>,
-    pub(super) task_groups: SpinLock<BTreeMap<PgId, Arc<SpinLock<TaskGroup>>>>,
+    exited_tasks: Arc<IrqMutex<Vec<Arc<Task>>>>,
+    pub(super) task_groups: IrqMutex<BTreeMap<PgId, Arc<IrqMutex<TaskGroup>>>>,
 }
 
 impl Scheduler {
     pub fn new() -> Arc<Self> {
         let mut s = Self {
-            run_queue: Arc::new(SpinLock::new(VecDeque::new())),
-            awaiting_queue: Arc::new(SpinLock::new(VecDeque::new())),
+            run_queue: Arc::new(IrqMutex::new(VecDeque::new())),
+            awaiting_queue: Arc::new(IrqMutex::new(VecDeque::new())),
             idle_thread: None,
             preempt_task: None,
             current_task: Arc::new(RwLock::new(None)),
-            task_groups: SpinLock::new(BTreeMap::new()),
-            exited_tasks: Arc::new(SpinLock::new(Vec::new())),
+            task_groups: IrqMutex::new(BTreeMap::new()),
+            exited_tasks: Arc::new(IrqMutex::new(Vec::new())),
         };
         let idle_thread = Task::new_idle(&mut s);
         let preempt_task = Task::new_kernel(&s, preempt, false);
@@ -79,11 +78,11 @@ impl Scheduler {
         clone
     }
 
-    pub fn find_group(&self, pgid: PgId) -> Option<Arc<SpinLock<TaskGroup>>> {
+    pub fn find_group(&self, pgid: PgId) -> Option<Arc<IrqMutex<TaskGroup>>> {
         self.task_groups.lock().get(&pgid).cloned()
     }
 
-    pub fn find_or_create_group(&self, pgid: PgId) -> Arc<SpinLock<TaskGroup>> {
+    pub fn find_or_create_group(&self, pgid: PgId) -> Arc<IrqMutex<TaskGroup>> {
         self.find_group(pgid).unwrap_or_else(|| {
             let g = TaskGroup::new(pgid);
             self.task_groups.lock().insert(pgid, g.clone());
@@ -205,7 +204,7 @@ impl Scheduler {
         }
     }
 
-    pub fn sleep(&self, duration: Option<usize>) -> KResult<()> {
+    pub fn sleep(&self, _duration: Option<usize>) -> KResult<()> {
         let current = self.current_task();
         // let awaiting_queue = self.awaiting_queue.lock();
 

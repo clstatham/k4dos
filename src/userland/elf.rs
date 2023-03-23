@@ -1,10 +1,10 @@
-use core::ops::Add;
 
-use alloc::collections::BTreeMap;
+
+
 use elfloader::{ElfBinary, ElfLoader, Entry};
 use x86::random::rdrand_slice;
-use x86_64::structures::paging::PageTableFlags;
-use xmas_elf::{header::HeaderPt2, program::Type, sections::SectionHeader};
+
+use xmas_elf::{program::Type};
 
 use crate::{
     errno,
@@ -12,7 +12,7 @@ use crate::{
     mem::{addr::VirtAddr, addr_space::AddressSpace, consts::PAGE_SIZE},
     task::vmem::{Vmem, MMapFlags, MMapProt, MMapKind},
     userland::buffer::UserBufferMut,
-    util::{align_down, align_up, errno::Errno, KError, KResult},
+    util::{errno::Errno, KResult},
 };
 
 pub fn gen_stack_canary() -> [u8; 16] {
@@ -45,7 +45,7 @@ pub fn load_elf<'a>(file: FileRef) -> KResult<UserlandEntry> {
     let ubuf = UserBufferMut::from_slice(&mut buf);
     file.read(0, ubuf, &OpenOptions::empty())?;
 
-    let elf = ElfBinary::new(&buf).map_err(|e| errno!(Errno::EBADF))?;
+    let elf = ElfBinary::new(&buf).map_err(|_e| errno!(Errno::EBADF))?;
 
     let mut start_of_image = usize::MAX;
     let mut end_of_image = 0;

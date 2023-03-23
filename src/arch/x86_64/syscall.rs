@@ -1,11 +1,11 @@
-use bit_field::BitField;
+
 use x86::msr::{rdmsr, wrmsr};
-use x86::segmentation::SegmentSelector;
-use x86::Ring;
+
+
 
 use crate::userland::syscall::{SyscallHandler, errno_to_isize};
 
-use super::gdt::{KERNEL_CS_IDX, USER_CS_IDX, USER_DS_IDX};
+use super::gdt::{KERNEL_CS_IDX, USER_DS_IDX};
 use super::idt::InterruptFrame;
 
 #[macro_export]

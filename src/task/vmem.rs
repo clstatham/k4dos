@@ -1,19 +1,18 @@
 use core::sync::atomic::AtomicUsize;
 
-use alloc::{collections::BTreeMap, vec::Vec};
+use alloc::{vec::Vec};
 use x86_64::structures::{idt::PageFaultErrorCode, paging::PageTableFlags};
 
 use crate::{
-    arch::idt::InterruptErrorFrame,
-    backtrace, errno,
+    arch::idt::InterruptErrorFrame, errno,
     fs::{opened_file::FileDesc, FileRef},
     mem::{
         addr::VirtAddr,
         allocator::{alloc_kernel_frames, PageAllocator},
-        consts::{MAX_LOW_VADDR, PAGE_SIZE, USER_STACK_TOP, USER_VALLOC_BASE, USER_VALLOC_END},
+        consts::{PAGE_SIZE, USER_STACK_TOP},
         paging::{
             mapper::Mapper,
-            units::{MappedPages, Page, PageRange},
+            units::{Page, PageRange},
         },
     },
     task::{current_task, get_scheduler, signal::SIGSEGV},
@@ -212,8 +211,8 @@ impl Vmem {
         size: usize,
         protection: MMapProt,
         flags: MMapFlags,
-        fd: FileDesc,
-        offset: usize,
+        _fd: FileDesc,
+        _offset: usize,
     ) -> KResult<VirtAddr> {
         if size == 0 {
             return Err(errno!(Errno::EFAULT));
@@ -292,7 +291,7 @@ impl Vmem {
             Page::containing_address(start_addr),
             Page::containing_address(end_addr - 1),
         ))?;
-        let mp = active_mapper.map(ap, prot.into())?;
+        let _mp = active_mapper.map(ap, prot.into())?;
         let id = self.add_area(
             start_addr.align_down(PAGE_SIZE),
             end_addr.align_up(PAGE_SIZE),
@@ -327,7 +326,7 @@ impl Vmem {
     }
 
     pub fn munmap(&mut self, active_mapper: &mut Mapper, start_addr: VirtAddr, end_addr: VirtAddr) -> KResult<()> {
-        let area_idx = self.areas.iter_mut().enumerate().find(|(idx, area)| area.contains_addr(start_addr)).map(|(idx, area)| idx).unwrap();
+        let area_idx = self.areas.iter_mut().enumerate().find(|(_idx, area)| area.contains_addr(start_addr)).map(|(idx, _area)| idx).unwrap();
         let area_clone = self.areas[area_idx].clone();
         if start_addr <= area_clone.start_addr && end_addr >= area_clone.end_addr {
             // remove the whole area and continue recursively unmapping until the whole range is unmapped
@@ -369,10 +368,10 @@ impl Vmem {
         Ok(())
     }
 
-    pub fn clear(&mut self, active_mapper: &mut Mapper) {
+    pub fn clear(&mut self, _active_mapper: &mut Mapper) {
         for id in 0..self.next_id.load(core::sync::atomic::Ordering::Acquire) {
             // self.unmap_area(VmemAreaId(id), active_mapper);
-            if let Some(area) = self.areas.get(id) {
+            if let Some(_area) = self.areas.get(id) {
 
             }
         }

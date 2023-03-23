@@ -1,6 +1,6 @@
 use core::mem::size_of;
 
-use crate::{mem::addr::VirtAddr, util::{KResult, errno::Errno}, errno, task::current_task, fs::{opened_file::{OpenOptions, FileDesc}, pipe::Pipe}, userland::buffer::UserBufferWriter};
+use crate::{mem::addr::VirtAddr, util::{KResult, errno::Errno}, errno, task::current_task, fs::{opened_file::{OpenOptions, FileDesc}}, userland::buffer::UserBufferWriter};
 
 use super::SyscallHandler;
 

@@ -1,7 +1,6 @@
 use core::iter::Peekable;
 
 use alloc::{
-    collections::BTreeMap,
     string::{String, ToString},
     sync::{Arc, Weak}, vec::Vec,
 };
@@ -18,7 +17,7 @@ use crate::{
         path::{Components, Path, PathBuf},
         DirRef, FileMode, FileSize, FsNode, INode, Stat,
     },
-    util::{align_up, errno::Errno, KResult, SpinLock},
+    util::{align_up, errno::Errno, KResult, IrqMutex},
 };
 
 use self::root::RootFs;
@@ -217,7 +216,7 @@ impl InitRamFs {
             } else if mode.is_directory() {
                 let inode = INode::Dir(Arc::new(InitRamFsDir {
                     parent: Weak::new(),
-                    inner: SpinLock::new(DirInner {
+                    inner: IrqMutex::new(DirInner {
                         children: Vec::new(),
                         stat: Stat {
                             inode_no: ino,
@@ -230,9 +229,9 @@ impl InitRamFs {
                 parent_dir.insert(inode);
             } else if mode.is_regular_file() {
                 let file = InitRamFsFile {
-                    name: SpinLock::new(filename.clone()),
-                    data: SpinLock::new(data.to_vec()),
-                    stat: SpinLock::new(Stat {
+                    name: IrqMutex::new(filename.clone()),
+                    data: IrqMutex::new(data.to_vec()),
+                    stat: IrqMutex::new(Stat {
                         inode_no: ino,
                         mode,
                         size: FileSize(filesize as isize),

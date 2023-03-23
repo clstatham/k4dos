@@ -3,7 +3,7 @@ use core::{mem::size_of, ops::Add};
 use alloc::vec::Vec;
 
 use crate::{
-    fs::{initramfs::get_root, path::Path},
+    fs::{path::Path},
     mem::addr::VirtAddr,
     task::current_task,
     userland::buffer::UserCStr,

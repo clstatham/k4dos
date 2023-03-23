@@ -2,7 +2,7 @@ use core::mem::size_of;
 
 use alloc::string::String;
 
-use crate::{mem::addr::VirtAddr, util::{KResult, errno::Errno, align_up}, fs::{initramfs::get_root, opened_file::{OpenOptions, FileDesc}, path::Path}, errno, userland::buffer::{UserBufferMut, UserBufferWriter}, task::current_task};
+use crate::{mem::addr::VirtAddr, util::{KResult, errno::Errno, align_up}, fs::{opened_file::{OpenOptions, FileDesc}, path::Path}, errno, userland::buffer::{UserBufferMut, UserBufferWriter}, task::current_task};
 
 use super::SyscallHandler;
 

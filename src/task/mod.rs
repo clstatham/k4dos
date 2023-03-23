@@ -9,7 +9,7 @@ use alloc::{
 };
 use atomic_refcell::AtomicRefCell;
 use crossbeam_utils::atomic::AtomicCell;
-use spin::{Once, RwLock};
+use spin::{Once};
 use x86_64::structures::idt::PageFaultErrorCode;
 
 use crate::{
@@ -18,16 +18,16 @@ use crate::{
     fs::{
         initramfs::{get_root, root::RootFs},
         opened_file::{FileDesc, OpenFlags, OpenOptions, OpenedFile, OpenedFileTable},
-        path::{Path, PathComponent},
+        path::{Path},
         tty::TTY,
         FileRef,
     },
     mem::addr::VirtAddr,
-    util::{ctypes::c_int, errno::Errno, KResult, SpinLock},
+    util::{ctypes::c_int, errno::Errno, KResult, IrqMutex},
 };
 
 use self::{
-    group::{PgId, TaskGroup},
+    group::{TaskGroup},
     scheduler::Scheduler,
     signal::{SigSet, SignalDelivery, SignalMask},
     vmem::Vmem,
@@ -88,18 +88,18 @@ pub struct Task {
 
     pid: TaskId,
 
-    pub(crate) root_fs: Arc<SpinLock<RootFs>>,
-    pub(crate) opened_files: Arc<SpinLock<OpenedFileTable>>,
+    pub(crate) root_fs: Arc<IrqMutex<RootFs>>,
+    pub(crate) opened_files: Arc<IrqMutex<OpenedFileTable>>,
 
-    parent: SpinLock<Weak<Task>>,
-    pub(crate) children: Arc<SpinLock<Vec<Arc<Task>>>>,
-    group: AtomicRefCell<Weak<SpinLock<TaskGroup>>>,
+    parent: IrqMutex<Weak<Task>>,
+    pub(crate) children: Arc<IrqMutex<Vec<Arc<Task>>>>,
+    group: AtomicRefCell<Weak<IrqMutex<TaskGroup>>>,
 
-    vmem: Arc<SpinLock<Vmem>>,
+    vmem: Arc<IrqMutex<Vmem>>,
 
-    pub(crate) signals: Arc<SpinLock<SignalDelivery>>,
+    pub(crate) signals: Arc<IrqMutex<SignalDelivery>>,
     signaled_frame: AtomicCell<Option<InterruptFrame>>,
-    sigset: Arc<SpinLock<SigSet>>,
+    sigset: Arc<IrqMutex<SigSet>>,
 }
 
 unsafe impl Sync for Task {}
@@ -113,14 +113,14 @@ impl Task {
             arch: UnsafeCell::new(ArchTask::new_idle()),
             state: AtomicCell::new(TaskState::Runnable),
             pid,
-            parent: SpinLock::new(Weak::new()),
-            children: Arc::new(SpinLock::new(Vec::new())),
-            root_fs: Arc::new(SpinLock::new(get_root().unwrap().clone())),
-            opened_files: Arc::new(SpinLock::new(OpenedFileTable::new())),
-            vmem: Arc::new(SpinLock::new(Vmem::new())),
+            parent: IrqMutex::new(Weak::new()),
+            children: Arc::new(IrqMutex::new(Vec::new())),
+            root_fs: Arc::new(IrqMutex::new(get_root().unwrap().clone())),
+            opened_files: Arc::new(IrqMutex::new(OpenedFileTable::new())),
+            vmem: Arc::new(IrqMutex::new(Vmem::new())),
             signaled_frame: AtomicCell::new(None),
-            signals: Arc::new(SpinLock::new(SignalDelivery::new())),
-            sigset: Arc::new(SpinLock::new(SigSet::ZERO)),
+            signals: Arc::new(IrqMutex::new(SignalDelivery::new())),
+            sigset: Arc::new(IrqMutex::new(SigSet::ZERO)),
             group: AtomicRefCell::new(Arc::downgrade(&group)),
         });
         group.lock().add(Arc::downgrade(&t));
@@ -139,14 +139,14 @@ impl Task {
             group: AtomicRefCell::new(Arc::downgrade(&group)),
             state: AtomicCell::new(TaskState::Runnable),
             pid,
-            parent: SpinLock::new(Weak::new()),
-            children: Arc::new(SpinLock::new(Vec::new())),
-            root_fs: Arc::new(SpinLock::new(get_root().unwrap().clone())),
-            opened_files: Arc::new(SpinLock::new(OpenedFileTable::new())),
-            vmem: Arc::new(SpinLock::new(Vmem::new())),
+            parent: IrqMutex::new(Weak::new()),
+            children: Arc::new(IrqMutex::new(Vec::new())),
+            root_fs: Arc::new(IrqMutex::new(get_root().unwrap().clone())),
+            opened_files: Arc::new(IrqMutex::new(OpenedFileTable::new())),
+            vmem: Arc::new(IrqMutex::new(Vmem::new())),
             signaled_frame: AtomicCell::new(None),
-            signals: Arc::new(SpinLock::new(SignalDelivery::new())),
-            sigset: Arc::new(SpinLock::new(SigSet::ZERO)),
+            signals: Arc::new(IrqMutex::new(SignalDelivery::new())),
+            sigset: Arc::new(IrqMutex::new(SigSet::ZERO)),
         });
         group.lock().add(Arc::downgrade(&t));
         t
@@ -203,15 +203,15 @@ impl Task {
             arch: UnsafeCell::new(arch),
             state: AtomicCell::new(TaskState::Runnable),
             pid,
-            parent: SpinLock::new(Weak::new()),
+            parent: IrqMutex::new(Weak::new()),
             group: AtomicRefCell::new(Arc::downgrade(&group)),
-            children: Arc::new(SpinLock::new(Vec::new())),
-            root_fs: Arc::new(SpinLock::new(get_root().unwrap().clone())),
-            opened_files: Arc::new(SpinLock::new(files)),
-            vmem: Arc::new(SpinLock::new(vmem)),
+            children: Arc::new(IrqMutex::new(Vec::new())),
+            root_fs: Arc::new(IrqMutex::new(get_root().unwrap().clone())),
+            opened_files: Arc::new(IrqMutex::new(files)),
+            vmem: Arc::new(IrqMutex::new(vmem)),
             signaled_frame: AtomicCell::new(None),
-            signals: Arc::new(SpinLock::new(SignalDelivery::new())),
-            sigset: Arc::new(SpinLock::new(SigSet::ZERO)),
+            signals: Arc::new(IrqMutex::new(SignalDelivery::new())),
+            sigset: Arc::new(IrqMutex::new(SigSet::ZERO)),
         });
         group.lock().add(Arc::downgrade(&t));
         TTY.get()
@@ -242,17 +242,17 @@ impl Task {
         let new = Arc::new_cyclic(|sref| Self {
             sref: sref.clone(),
             arch,
-            root_fs: Arc::new(SpinLock::new(self.root_fs.lock().clone())),
-            opened_files: Arc::new(SpinLock::new(self.opened_files.lock().clone())), // todo: deeper clone
-            children: Arc::new(SpinLock::new(Vec::new())),
-            parent: SpinLock::new(Weak::new()),
+            root_fs: Arc::new(IrqMutex::new(self.root_fs.lock().clone())),
+            opened_files: Arc::new(IrqMutex::new(self.opened_files.lock().clone())), // todo: deeper clone
+            children: Arc::new(IrqMutex::new(Vec::new())),
+            parent: IrqMutex::new(Weak::new()),
             group: AtomicRefCell::new(Arc::downgrade(&group)),
             state: AtomicCell::new(TaskState::Runnable),
             pid,
-            vmem: Arc::new(SpinLock::new(Vmem::new())),
-            signals: Arc::new(SpinLock::new(SignalDelivery::new())),
+            vmem: Arc::new(IrqMutex::new(Vmem::new())),
+            signals: Arc::new(IrqMutex::new(SignalDelivery::new())),
             signaled_frame: AtomicCell::new(None),
-            sigset: Arc::new(SpinLock::new(SigSet::ZERO)),
+            sigset: Arc::new(IrqMutex::new(SigSet::ZERO)),
         });
         self.add_child(new.clone());
         new.signals.lock().clone_from(&self.signals.lock());
@@ -276,16 +276,16 @@ impl Task {
             sref: sref.clone(),
             arch,
             // opened_files: self.opened_files.clone(),
-            opened_files: Arc::new(SpinLock::new(self.opened_files.lock().clone())), // todo: deeper clone
+            opened_files: Arc::new(IrqMutex::new(self.opened_files.lock().clone())), // todo: deeper clone
             state: AtomicCell::new(TaskState::Runnable),
             pid,
-            root_fs: Arc::new(SpinLock::new(self.root_fs.lock().clone())), // todo: actually fork the root fs
-            children: Arc::new(SpinLock::new(Vec::new())),
-            parent: SpinLock::new(Weak::new()),
+            root_fs: Arc::new(IrqMutex::new(self.root_fs.lock().clone())), // todo: actually fork the root fs
+            children: Arc::new(IrqMutex::new(Vec::new())),
+            parent: IrqMutex::new(Weak::new()),
             group: AtomicRefCell::new(Arc::downgrade(&group)),
-            signals: Arc::new(SpinLock::new(self.signals.lock().clone())),
+            signals: Arc::new(IrqMutex::new(self.signals.lock().clone())),
             signaled_frame: AtomicCell::new(None),
-            sigset: Arc::new(SpinLock::new(SigSet::ZERO)),
+            sigset: Arc::new(IrqMutex::new(SigSet::ZERO)),
             vmem: self.vmem.clone(), // important: we don't fork_from here
             // vmem: Arc::new(SpinLock::new(Vmem::new())),
         });
@@ -335,7 +335,7 @@ impl Task {
         *self.parent.lock() = parent;
     }
 
-    pub fn belongs_to_group(&self, pg: &Weak<SpinLock<TaskGroup>>) -> bool {
+    pub fn belongs_to_group(&self, pg: &Weak<IrqMutex<TaskGroup>>) -> bool {
         Weak::ptr_eq(&self.group.borrow(), pg)
     }
 
@@ -343,7 +343,7 @@ impl Task {
         Ok(self.opened_files.lock().get(fd)?.clone())
     }
 
-    pub fn vmem(&self) -> Arc<SpinLock<Vmem>> {
+    pub fn vmem(&self) -> Arc<IrqMutex<Vmem>> {
         self.vmem.clone()
     }
 

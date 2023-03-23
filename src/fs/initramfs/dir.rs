@@ -1,5 +1,4 @@
 use alloc::{
-    collections::BTreeMap,
     string::{String, ToString},
     sync::{Arc, Weak}, vec::Vec,
 };
@@ -7,7 +6,7 @@ use alloc::{
 use crate::{
     errno,
     fs::{alloc_inode_no, Directory, FileMode, FsNode, INode, Stat, S_IFDIR, DirEntry, FileType},
-    util::{errno::Errno, lock::SpinLock, KResult},
+    util::{errno::Errno, lock::IrqMutex, KResult},
 };
 
 use super::file::InitRamFsFile;
@@ -20,14 +19,14 @@ pub struct DirInner {
 
 pub struct InitRamFsDir {
     pub(super) parent: Weak<InitRamFsDir>,
-    pub(super) inner: SpinLock<DirInner>,
+    pub(super) inner: IrqMutex<DirInner>,
 }
 
 impl InitRamFsDir {
     pub fn new(name: String, inode_no: usize) -> InitRamFsDir {
         InitRamFsDir {
             parent: Weak::new(),
-            inner: SpinLock::new(DirInner {
+            inner: IrqMutex::new(DirInner {
                 name,
                 children: Vec::new(),
                 stat: Stat {

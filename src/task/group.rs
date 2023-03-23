@@ -3,9 +3,9 @@ use alloc::{
     vec::Vec,
 };
 
-use crate::util::SpinLock;
+use crate::util::IrqMutex;
 
-use super::{get_scheduler, scheduler::Scheduler, signal::Signal, Task};
+use super::{get_scheduler, signal::Signal, Task};
 
 pub type PgId = i32;
 
@@ -15,8 +15,8 @@ pub struct TaskGroup {
 }
 
 impl TaskGroup {
-    pub(super) fn new(pgid: PgId) -> Arc<SpinLock<TaskGroup>> {
-        let pg = Arc::new(SpinLock::new(TaskGroup {
+    pub(super) fn new(pgid: PgId) -> Arc<IrqMutex<TaskGroup>> {
+        let pg = Arc::new(IrqMutex::new(TaskGroup {
             pgid,
             tasks: Vec::new(),
         }));

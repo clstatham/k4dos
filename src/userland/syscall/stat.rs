@@ -1,4 +1,4 @@
-use crate::{fs::{path::Path, initramfs::get_root, opened_file::FileDesc}, mem::addr::VirtAddr, util::KResult, task::current_task};
+use crate::{fs::{path::Path, opened_file::FileDesc}, mem::addr::VirtAddr, util::KResult, task::current_task};
 
 use super::SyscallHandler;
 

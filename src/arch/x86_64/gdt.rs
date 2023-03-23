@@ -60,13 +60,11 @@ pub fn init() {
         get_kpcr().cpu_local = &mut *tls_ptr;
     }
 
-    // let mut tss = TaskStateSegment::new();
     let mut tss = get_tss();
     *tss = TaskStateSegment::new();
     tss.privilege_stack_table[0] =
         x86_64::VirtAddr::new(unsafe { STACK.as_ptr() } as u64 + KERNEL_STACK_SIZE as u64);
 
-    // let mut gdt = GlobalDescriptorTable::new();
     let gdt = &mut get_kpcr().cpu_local.gdt;
     *gdt = GlobalDescriptorTable::new();
     // kernel code

@@ -3,21 +3,21 @@ use alloc::{string::String, vec::Vec};
 use crate::{
     fs::{opened_file::OpenOptions, File, FileMode, FsNode, Stat, S_IFREG},
     userland::buffer::{UserBuffer, UserBufferMut, UserBufferReader, UserBufferWriter},
-    util::{lock::SpinLock, KResult},
+    util::{lock::IrqMutex, KResult},
 };
 
 pub struct InitRamFsFile {
-    pub name: SpinLock<String>,
-    pub(super) data: SpinLock<Vec<u8>>,
-    pub(super) stat: SpinLock<Stat>,
+    pub name: IrqMutex<String>,
+    pub(super) data: IrqMutex<Vec<u8>>,
+    pub(super) stat: IrqMutex<Stat>,
 }
 
 impl InitRamFsFile {
     pub fn new(name: String, inode_no: usize) -> InitRamFsFile {
         InitRamFsFile {
-            name: SpinLock::new(name),
-            data: SpinLock::new(Vec::new()),
-            stat: SpinLock::new(Stat {
+            name: IrqMutex::new(name),
+            data: IrqMutex::new(Vec::new()),
+            stat: IrqMutex::new(Stat {
                 inode_no,
                 mode: FileMode::new(S_IFREG | 0o644),
                 ..Stat::zeroed()

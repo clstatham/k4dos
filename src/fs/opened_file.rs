@@ -1,6 +1,6 @@
 use core::borrow::BorrowMut;
 
-use alloc::{sync::Arc, vec::Vec, collections::BTreeMap};
+use alloc::{sync::Arc, vec::Vec};
 use atomic_refcell::AtomicRefCell;
 use bitflags::bitflags;
 use crossbeam_utils::atomic::AtomicCell;

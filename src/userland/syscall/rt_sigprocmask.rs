@@ -1,7 +1,7 @@
 use crate::{
     errno,
     mem::addr::VirtAddr,
-    task::{current_task, signal::{SignalMask, SIG_IGN, SigAction, SIG_DFL, DEFAULT_ACTIONS, terminate}, get_scheduler},
+    task::{current_task, signal::{SignalMask, SIG_IGN, SigAction, SIG_DFL, DEFAULT_ACTIONS}, get_scheduler},
     util::{errno::Errno, error::KResult, ctypes::c_int},
 };
 

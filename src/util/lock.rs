@@ -4,9 +4,11 @@ use core::ops::{Deref, DerefMut};
 
 use spin::mutex::{SpinMutex, SpinMutexGuard};
 use x86::current::rflags::{self, RFlags};
+use x86_64::instructions::interrupts;
 
+use crate::task::wait_queue::WaitQueue;
 // use crate::interrupts::SavedInterruptStatus;
-use crate::{backtrace, kerrmsg, terminal_println};
+use crate::{backtrace, kerrmsg};
 
 use super::error::KResult;
 
@@ -28,35 +30,124 @@ impl Drop for SavedInterruptStatus {
     }
 }
 
-pub struct SpinLock<T: ?Sized> {
+pub struct BlockingMutex<T: ?Sized> {
+    queue: WaitQueue,
+    inner: IrqMutex<T>,
+}
+
+impl<T> BlockingMutex<T> {
+    pub const fn new(value: T) -> BlockingMutex<T> {
+        BlockingMutex {
+            queue: WaitQueue::new(),
+            inner: IrqMutex::new(value),
+        }
+    }
+}
+
+
+impl<T: ?Sized> BlockingMutex<T> {
+    pub fn get_mut(&mut self) -> &mut T {
+        self.inner.get_mut()
+    }
+
+    pub fn try_lock(&self) -> KResult<BlockingMutexGuard<'_, T>> {
+        if self.inner.is_locked() {
+            Err(kerrmsg!("Cannot relock IrqMutex")) // todo: more verbose error message
+        } else {
+            self.lock()
+        }
+    }
+
+    pub fn lock(&self) -> KResult<BlockingMutexGuard<'_, T>> {
+        // if self.inner.is_locked() {
+        //     serial0_println!(
+        //         "WARNING: Tried to relock IrqMutex of {}",
+        //         core::any::type_name::<T>()
+        //     );
+        //     // backtrace::backtrace();
+        //     backtrace::unwind_stack().unwrap();
+        // }
+        let guard = self.queue.sleep_signalable_until(|| {
+            if let Ok(guard) = self.inner.try_lock() {
+                Ok(Some(BlockingMutexGuard {
+                    inner: ManuallyDrop::new(guard),
+                }))
+            } else {
+                Ok(None)
+            }
+        })?;
+        Ok(guard)
+    }
+
+    pub fn is_locked(&self) -> bool {
+        self.inner.is_locked()
+    }
+
+    /// # Safety
+    /// See `spin::SpinMutex::force_unlock()`
+    pub unsafe fn force_unlock(&self) {
+        self.inner.force_unlock();
+    }
+}
+
+unsafe impl<T: ?Sized + Send> Sync for BlockingMutex<T> {}
+unsafe impl<T: ?Sized + Send> Send for BlockingMutex<T> {}
+
+
+pub struct BlockingMutexGuard<'a, T: ?Sized> {
+    inner: ManuallyDrop<IrqMutexGuard<'a, T>>,
+}
+
+impl<'a, T: ?Sized> Drop for BlockingMutexGuard<'a, T> {
+    fn drop(&mut self) {
+        unsafe {
+            ManuallyDrop::drop(&mut self.inner);
+        }
+    }
+}
+
+impl<'a, T: ?Sized> Deref for BlockingMutexGuard<'a, T> {
+    type Target = T;
+    fn deref(&self) -> &T {
+        &self.inner
+    }
+}
+
+impl<'a, T: ?Sized> DerefMut for BlockingMutexGuard<'a, T> {
+    fn deref_mut(&mut self) -> &mut T {
+        &mut self.inner
+    }
+}
+
+pub struct IrqMutex<T: ?Sized> {
     inner: SpinMutex<T>,
 }
 
-impl<T> SpinLock<T> {
-    pub const fn new(value: T) -> SpinLock<T> {
-        SpinLock {
+impl<T> IrqMutex<T> {
+    pub const fn new(value: T) -> IrqMutex<T> {
+        IrqMutex {
             inner: SpinMutex::new(value),
         }
     }
 }
 
-impl<T: ?Sized> SpinLock<T> {
+impl<T: ?Sized> IrqMutex<T> {
     pub fn get_mut(&mut self) -> &mut T {
         self.inner.get_mut()
     }
 
-    pub fn try_lock(&self) -> KResult<SpinLockGuard<'_, T>> {
+    pub fn try_lock(&self) -> KResult<IrqMutexGuard<'_, T>> {
         if self.inner.is_locked() {
-            Err(kerrmsg!("Cannot relock SpinLock")) // todo: more verbose error message
+            Err(kerrmsg!("Cannot relock IrqMutex")) // todo: more verbose error message
         } else {
             Ok(self.lock())
         }
     }
 
-    pub fn lock(&self) -> SpinLockGuard<'_, T> {
+    pub fn lock(&self) -> IrqMutexGuard<'_, T> {
         if self.inner.is_locked() {
             serial0_println!(
-                "WARNING: Tried to relock SpinLock of {}",
+                "WARNING: Tried to relock IrqMutex of {}",
                 core::any::type_name::<T>()
             );
             // backtrace::backtrace();
@@ -64,13 +155,11 @@ impl<T: ?Sized> SpinLock<T> {
         }
 
         let saved_intr_status = SavedInterruptStatus::save();
-        unsafe {
-            asm!("cli");
-        }
+        interrupts::disable();
 
         let guard = self.inner.lock();
 
-        SpinLockGuard {
+        IrqMutexGuard {
             inner: ManuallyDrop::new(guard),
             saved_intr_status: ManuallyDrop::new(saved_intr_status),
         }
@@ -87,15 +176,15 @@ impl<T: ?Sized> SpinLock<T> {
     }
 }
 
-unsafe impl<T: ?Sized + Send> Sync for SpinLock<T> {}
-unsafe impl<T: ?Sized + Send> Send for SpinLock<T> {}
+unsafe impl<T: ?Sized + Send> Sync for IrqMutex<T> {}
+unsafe impl<T: ?Sized + Send> Send for IrqMutex<T> {}
 
-pub struct SpinLockGuard<'a, T: ?Sized> {
+pub struct IrqMutexGuard<'a, T: ?Sized> {
     inner: ManuallyDrop<SpinMutexGuard<'a, T>>,
     saved_intr_status: ManuallyDrop<SavedInterruptStatus>,
 }
 
-impl<'a, T: ?Sized> Drop for SpinLockGuard<'a, T> {
+impl<'a, T: ?Sized> Drop for IrqMutexGuard<'a, T> {
     fn drop(&mut self) {
         unsafe {
             ManuallyDrop::drop(&mut self.inner);
@@ -107,14 +196,14 @@ impl<'a, T: ?Sized> Drop for SpinLockGuard<'a, T> {
     }
 }
 
-impl<'a, T: ?Sized> Deref for SpinLockGuard<'a, T> {
+impl<'a, T: ?Sized> Deref for IrqMutexGuard<'a, T> {
     type Target = T;
     fn deref(&self) -> &T {
         &self.inner
     }
 }
 
-impl<'a, T: ?Sized> DerefMut for SpinLockGuard<'a, T> {
+impl<'a, T: ?Sized> DerefMut for IrqMutexGuard<'a, T> {
     fn deref_mut(&mut self) -> &mut T {
         &mut self.inner
     }

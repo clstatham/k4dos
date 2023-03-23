@@ -2,14 +2,12 @@ use core::{alloc::Layout, slice::SlicePattern};
 
 use alloc::{alloc::alloc_zeroed, boxed::Box, vec::Vec};
 use x86::{
-    controlregs,
     cpuid::CpuId,
     current::segmentation::swapgs,
     msr::{rdmsr, wrmsr, IA32_FS_BASE, IA32_GS_BASE},
-    segmentation::SegmentSelector,
-    tlb, Ring,
+    tlb,
 };
-use x86_64::{structures::paging::PageTableFlags, instructions::interrupts};
+use x86_64::{instructions::interrupts};
 
 use crate::{
     fs::FileRef,
@@ -19,7 +17,7 @@ use crate::{
         allocator::alloc_kernel_frames,
         consts::{KERNEL_STACK_SIZE, PAGE_SIZE, USER_STACK_BOTTOM, USER_STACK_TOP},
     },
-    task::{get_scheduler, signal::Signal, vmem::{Vmem, MMapFlags, MMapProt, MMapKind}, current_task},
+    task::{signal::Signal, vmem::{Vmem, MMapFlags, MMapProt, MMapKind}},
     userland::{
         elf::{self, AuxvType},
     },
@@ -29,7 +27,7 @@ use crate::{
 use super::{
     cpu_local::get_tss,
     gdt::{KERNEL_CS_IDX, KERNEL_DS_IDX, USER_DS_IDX},
-    idt::InterruptFrame, signal::SignalFrame,
+    idt::InterruptFrame,
 };
 
 fn xsave(fpu: &mut Box<[u8]>) {
@@ -748,7 +746,7 @@ impl ArchTask {
         frame: &mut InterruptFrame,
         signal: Signal,
         handler: VirtAddr,
-        syscall_result: isize,
+        _syscall_result: isize,
         // sigreturn: VirtAddr,
     ) -> KResult<()> {
         const TRAMPOLINE: &[u8] = &[

@@ -11,15 +11,14 @@ use crate::{
         self,
         initramfs::get_root,
         path::Path,
-        tty::{self, TTY},
+        tty::{TTY},
     },
     mem::{
         self,
         allocator::{KERNEL_FRAME_ALLOCATOR, KERNEL_PAGE_ALLOCATOR},
     },
     serial::serial1_recv,
-    task::{get_scheduler, scheduler::switch, Task},
-    terminal_println,
+    task::{get_scheduler, Task},
 };
 
 pub mod cpu_local;
@@ -50,8 +49,6 @@ pub fn arch_main() {
 
     crate::logging::init();
     log::info!("Logger initialized.");
-
-    // terminal_println!("");
 
     let kernel_file = KERNEL_FILE.get_response().get().unwrap();
     let kernel_file = kernel_file.kernel_file.get().unwrap();
@@ -129,8 +126,8 @@ pub fn arch_main() {
     log::info!("Starting init process.");
 
     let sched = get_scheduler();
-    // sched.enqueue(Task::new_kernel(spawn_init_process, true));
-    let exe = "/bin/kash";
+
+    let exe = "/bin/sh";
     let file = get_root()
         .unwrap()
         .lookup(Path::new(exe))
@@ -153,11 +150,6 @@ pub fn arch_main() {
 
     loop {
         interrupts::enable_and_hlt();
-        // interrupts::disable();
-        // // switch();
-        // let sched = get_scheduler();
-        // let sched_lock = sched.lock();
-        // sched_lock.preempt();
     }
 }
 

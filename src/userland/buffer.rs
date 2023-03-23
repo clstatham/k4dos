@@ -161,7 +161,7 @@ impl<'a> UserBufferMut<'a> {
     }
 }
 
-unsafe extern "C" fn user_strncpy(dst: *mut u8, src: *const u8, max_len: usize) -> usize {
+unsafe extern "C" fn user_strncpy(_dst: *mut u8, _src: *const u8, _max_len: usize) -> usize {
     let out: usize;
     core::arch::asm!("
         mov rcx, rdx

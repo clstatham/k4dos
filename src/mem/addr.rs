@@ -1,11 +1,11 @@
 use bit_field::BitField;
 
-use core::fmt::{self, *};
+use core::fmt::{self};
 use core::mem::align_of;
 use core::ops::*;
 
 use crate::util::errno::Errno;
-use crate::{kerrmsg, errno};
+use crate::{errno};
 use crate::util::{align_down, align_up, KResult};
 
 use super::consts::PAGE_SIZE;

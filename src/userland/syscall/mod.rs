@@ -1,4 +1,4 @@
-use alloc::sync::Arc;
+
 
 use crate::{
     errno,
@@ -7,9 +7,9 @@ use crate::{
         path::{Path, PathBuf}, FileMode,
     },
     mem::addr::VirtAddr,
-    task::{current_task, get_scheduler, Task, TaskId, vmem::{MMapProt, MMapFlags}},
+    task::{current_task, get_scheduler, TaskId, vmem::{MMapProt, MMapFlags}},
     userland::syscall::wait4::WaitOptions,
-    util::{ctypes::{c_int, c_nfds}, errno::Errno, KResult}, arch::idt::InterruptFrame,
+    util::{ctypes::{c_int}, errno::Errno, KResult}, arch::idt::InterruptFrame,
 };
 
 use super::buffer::UserCStr;
@@ -543,71 +543,71 @@ fn syscall_name_by_number(n: usize) -> &'static str {
     }
 }
 
-const SYS_READ: usize = 0;
-const SYS_WRITE: usize = 1;
-const SYS_OPEN: usize = 2;
-const SYS_CLOSE: usize = 3;
-const SYS_STAT: usize = 4;
-const SYS_FSTAT: usize = 5;
-const SYS_LSTAT: usize = 6;
-const SYS_POLL: usize = 7;
-const SYS_MMAP: usize = 9;
-const SYS_MPROTECT: usize = 10;
-const SYS_MUNMAP: usize = 11;
-const SYS_BRK: usize = 12;
-const SYS_RT_SIGACTION: usize = 13;
-const SYS_RT_SIGPROCMASK: usize = 14;
-const SYS_RT_SIGRETURN: usize = 15;
-const SYS_IOCTL: usize = 16;
-const SYS_WRITEV: usize = 20;
-const SYS_PIPE: usize = 22;
-const SYS_SELECT: usize = 23;
-const SYS_DUP2: usize = 33;
-const SYS_GETPID: usize = 39;
-const SYS_SOCKET: usize = 41;
-const SYS_CONNECT: usize = 42;
-const SYS_ACCEPT: usize = 43;
-const SYS_SENDTO: usize = 44;
-const SYS_RECVFROM: usize = 45;
-const SYS_SHUTDOWN: usize = 48;
-const SYS_BIND: usize = 49;
-const SYS_LISTEN: usize = 50;
-const SYS_GETSOCKNAME: usize = 51;
-const SYS_GETPEERNAME: usize = 52;
-const SYS_GETSOCKOPT: usize = 55;
-const SYS_CLONE: usize = 56;
-const SYS_FORK: usize = 57;
-const SYS_EXECVE: usize = 59;
-const SYS_EXIT: usize = 60;
-const SYS_WAIT4: usize = 61;
-const SYS_KILL: usize = 62;
-const SYS_UNAME: usize = 63;
-const SYS_FCNTL: usize = 72;
-const SYS_FSYNC: usize = 74;
-const SYS_GETCWD: usize = 79;
-const SYS_CHDIR: usize = 80;
-const SYS_MKDIR: usize = 83;
-const SYS_LINK: usize = 86;
-const SYS_READLINK: usize = 89;
-const SYS_CHMOD: usize = 90;
-const SYS_CHOWN: usize = 92;
-const SYS_GETUID: usize = 102;
-const SYS_SYSLOG: usize = 103;
-const SYS_SETUID: usize = 105;
-const SYS_SETGID: usize = 106;
-const SYS_GETEUID: usize = 107;
-const SYS_SETPGID: usize = 109;
-const SYS_GETPPID: usize = 110;
-const SYS_GETPGRP: usize = 111;
-const SYS_GETPGID: usize = 121;
-const SYS_SETGROUPS: usize = 116;
-const SYS_ARCH_PRCTL: usize = 158;
-const SYS_REBOOT: usize = 169;
-const SYS_GETTID: usize = 186;
-const SYS_GETDENTS64: usize = 217;
-const SYS_SET_TID_ADDRESS: usize = 218;
-const SYS_CLOCK_GETTIME: usize = 228;
-const SYS_EXIT_GROUP: usize = 231;
-const SYS_UTIMES: usize = 235;
-const SYS_LINKAT: usize = 265;
-const SYS_GETRANDOM: usize = 318;
+pub const SYS_READ: usize = 0;
+pub const SYS_WRITE: usize = 1;
+pub const SYS_OPEN: usize = 2;
+pub const SYS_CLOSE: usize = 3;
+pub const SYS_STAT: usize = 4;
+pub const SYS_FSTAT: usize = 5;
+pub const SYS_LSTAT: usize = 6;
+pub const SYS_POLL: usize = 7;
+pub const SYS_MMAP: usize = 9;
+pub const SYS_MPROTECT: usize = 10;
+pub const SYS_MUNMAP: usize = 11;
+pub const SYS_BRK: usize = 12;
+pub const SYS_RT_SIGACTION: usize = 13;
+pub const SYS_RT_SIGPROCMASK: usize = 14;
+pub const SYS_RT_SIGRETURN: usize = 15;
+pub const SYS_IOCTL: usize = 16;
+pub const SYS_WRITEV: usize = 20;
+pub const SYS_PIPE: usize = 22;
+pub const SYS_SELECT: usize = 23;
+pub const SYS_DUP2: usize = 33;
+pub const SYS_GETPID: usize = 39;
+pub const SYS_SOCKET: usize = 41;
+pub const SYS_CONNECT: usize = 42;
+pub const SYS_ACCEPT: usize = 43;
+pub const SYS_SENDTO: usize = 44;
+pub const SYS_RECVFROM: usize = 45;
+pub const SYS_SHUTDOWN: usize = 48;
+pub const SYS_BIND: usize = 49;
+pub const SYS_LISTEN: usize = 50;
+pub const SYS_GETSOCKNAME: usize = 51;
+pub const SYS_GETPEERNAME: usize = 52;
+pub const SYS_GETSOCKOPT: usize = 55;
+pub const SYS_CLONE: usize = 56;
+pub const SYS_FORK: usize = 57;
+pub const SYS_EXECVE: usize = 59;
+pub const SYS_EXIT: usize = 60;
+pub const SYS_WAIT4: usize = 61;
+pub const SYS_KILL: usize = 62;
+pub const SYS_UNAME: usize = 63;
+pub const SYS_FCNTL: usize = 72;
+pub const SYS_FSYNC: usize = 74;
+pub const SYS_GETCWD: usize = 79;
+pub const SYS_CHDIR: usize = 80;
+pub const SYS_MKDIR: usize = 83;
+pub const SYS_LINK: usize = 86;
+pub const SYS_READLINK: usize = 89;
+pub const SYS_CHMOD: usize = 90;
+pub const SYS_CHOWN: usize = 92;
+pub const SYS_GETUID: usize = 102;
+pub const SYS_SYSLOG: usize = 103;
+pub const SYS_SETUID: usize = 105;
+pub const SYS_SETGID: usize = 106;
+pub const SYS_GETEUID: usize = 107;
+pub const SYS_SETPGID: usize = 109;
+pub const SYS_GETPPID: usize = 110;
+pub const SYS_GETPGRP: usize = 111;
+pub const SYS_GETPGID: usize = 121;
+pub const SYS_SETGROUPS: usize = 116;
+pub const SYS_ARCH_PRCTL: usize = 158;
+pub const SYS_REBOOT: usize = 169;
+pub const SYS_GETTID: usize = 186;
+pub const SYS_GETDENTS64: usize = 217;
+pub const SYS_SET_TID_ADDRESS: usize = 218;
+pub const SYS_CLOCK_GETTIME: usize = 228;
+pub const SYS_EXIT_GROUP: usize = 231;
+pub const SYS_UTIMES: usize = 235;
+pub const SYS_LINKAT: usize = 265;
+pub const SYS_GETRANDOM: usize = 318;

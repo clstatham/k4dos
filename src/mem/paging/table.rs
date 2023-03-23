@@ -12,7 +12,7 @@ use crate::{
         allocator::alloc_kernel_frames,
         consts::{PAGE_SIZE, PAGE_TABLE_ENTRIES},
     },
-    util::{KError, KResult},
+    util::{KResult},
 };
 
 use super::units::Frame;
@@ -131,7 +131,7 @@ impl PageTable {
                     entry.set_frame(frame.start(), insert_flags);
                     created = true;
                 }
-                Err(e) => {
+                Err(_e) => {
                     return Err(kerrmsg!("Failed to allocate frame for new page table"));
                 }
             }

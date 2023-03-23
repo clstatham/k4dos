@@ -4,25 +4,25 @@ use uart_16550::SerialPort;
 use x86::io::inb;
 use x86::io::outb;
 
-use crate::util::lock::SpinLock;
+use crate::util::lock::IrqMutex;
 
 pub const SERIAL0_IOPORT: u16 = 0x3f8;
 pub const SERIAL1_IOPORT: u16 = 0x2f8;
 
 lazy_static! {
-    pub static ref SERIAL0: SpinLock<SerialPort> = {
+    pub static ref SERIAL0: IrqMutex<SerialPort> = {
         let mut serial_port = unsafe { SerialPort::new(SERIAL0_IOPORT) };
         serial_port.init();
 
-        SpinLock::new(serial_port)
+        IrqMutex::new(serial_port)
     };
-    pub static ref SERIAL1: SpinLock<SerialPort> = {
+    pub static ref SERIAL1: IrqMutex<SerialPort> = {
         let mut serial_port = unsafe { SerialPort::new(SERIAL1_IOPORT) };
         serial_port.init();
         unsafe {
             outb(SERIAL1_IOPORT + 1, 0b101);
         }
-        SpinLock::new(serial_port)
+        IrqMutex::new(serial_port)
     };
 }
 
