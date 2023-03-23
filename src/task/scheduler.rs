@@ -119,7 +119,6 @@ impl Scheduler {
     pub fn wake_all(&self, queue: &WaitQueue) {
         let mut q = queue.queue.lock();
         while let Some(proc) = q.pop_front() {
-            
             self.resume_task(proc)
         }
     }
