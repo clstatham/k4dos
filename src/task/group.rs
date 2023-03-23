@@ -20,7 +20,6 @@ impl TaskGroup {
             pgid,
             tasks: Vec::new(),
         }));
-        // sched.task_groups.lock().insert(pgid, pg.clone());
         pg
     }
 

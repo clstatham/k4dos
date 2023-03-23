@@ -41,10 +41,9 @@ pub mod vmem;
 pub mod wait_queue;
 
 pub static SCHEDULER: Once<Arc<Scheduler>> = Once::new();
-pub static JOIN_WAIT_QUEUE: Once<WaitQueue> = Once::new();
+pub static JOIN_WAIT_QUEUE: WaitQueue = WaitQueue::new();
 pub fn init() {
     SCHEDULER.call_once(|| Scheduler::new());
-    JOIN_WAIT_QUEUE.call_once(|| WaitQueue::new());
 }
 
 pub fn get_scheduler() -> &'static Arc<Scheduler> {
@@ -52,7 +51,7 @@ pub fn get_scheduler() -> &'static Arc<Scheduler> {
 }
 
 pub fn current_task() -> Arc<Task> {
-    get_scheduler().current_task().clone()
+    get_scheduler().current_task()
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]

@@ -21,7 +21,7 @@ impl Pipe {
 
     pub fn read_pipe(&self, buf: UserBufferMut<'_>) -> KResult<usize> {
         let mut writer = UserBufferWriter::from(buf);
-        let mut ringbuffer = self.wait_queue.sleep_signalable_until(|| {
+        let mut ringbuffer = self.wait_queue.sleep_signalable_until(None, || {
             let ringbuffer = self.ringbuffer.try_lock();
             if let Ok(ringbuffer) = ringbuffer {
                 if ringbuffer.is_readable() {
@@ -41,7 +41,7 @@ impl Pipe {
 
     pub fn write_pipe(&self, buf: UserBuffer<'_>) -> KResult<usize> {
         let mut reader = UserBufferReader::from(buf);
-        let mut ringbuffer = self.wait_queue.sleep_signalable_until(|| {
+        let mut ringbuffer = self.wait_queue.sleep_signalable_until(None, || {
             let ringbuffer = self.ringbuffer.try_lock();
             if let Ok(ringbuffer) = ringbuffer {
                 if ringbuffer.is_writable() {

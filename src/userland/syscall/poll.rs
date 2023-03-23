@@ -7,11 +7,12 @@ use super::SyscallHandler;
 
 impl<'a> SyscallHandler<'a> {
     pub fn sys_poll(&mut self, fds: VirtAddr, nfds: c_nfds, timeout: c_int) -> KResult<isize> {
-        if timeout > 0 {
-            log::warn!("Ignoring timeout of {} ms.", timeout);
-        }
+        // if timeout > 0 {
+        //     log::warn!("Ignoring timeout of {} ms.", timeout);
+        // }
+        let timeout = if timeout > 0 { Some(timeout as usize) } else { None };
 
-        POLL_WAIT_QUEUE.sleep_signalable_until(|| {
+        POLL_WAIT_QUEUE.sleep_signalable_until(timeout, || {
             // todo: check timeout
 
             let mut ready_fds = 0;

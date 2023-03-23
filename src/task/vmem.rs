@@ -16,7 +16,7 @@ use crate::{
         },
     },
     task::{current_task, get_scheduler, signal::SIGSEGV},
-    util::{align_up, errno::Errno, KResult},
+    util::{align_up, errno::Errno, KResult}, backtrace,
 };
 
 bitflags::bitflags! {
@@ -410,6 +410,7 @@ impl Vmem {
         let dump_and_exit = || {
             log::error!("{:#x?}", stack_frame);
             self.log();
+            backtrace::unwind_stack().unwrap();
             get_scheduler().send_signal_to(current_task(), SIGSEGV);
             get_scheduler().exit_current(1)
         };

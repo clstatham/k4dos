@@ -24,7 +24,7 @@ impl<'a> SyscallHandler<'a> {
         _rusage: VirtAddr, // could be null
     ) -> KResult<isize> {
         let (got_pid, status_val) =
-            JOIN_WAIT_QUEUE.get().unwrap().sleep_signalable_until(|| {
+            JOIN_WAIT_QUEUE.sleep_signalable_until(None, || {
                 let current = current_task();
                 let children = current.children.lock();
                 for child in children.iter() {

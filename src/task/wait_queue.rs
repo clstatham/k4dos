@@ -2,7 +2,7 @@ use alloc::{collections::VecDeque, sync::Arc};
 
 use crate::{
     errno,
-    util::{errno::Errno, KResult, IrqMutex},
+    util::{errno::Errno, KResult, IrqMutex}, arch,
 };
 
 use super::{current_task, get_scheduler, Task, TaskState};
@@ -24,17 +24,23 @@ impl WaitQueue {
         }
     }
 
-    pub fn sleep_signalable_until<F, R>(&self, mut sleep_if_none: F) -> KResult<R>
+    pub fn sleep_signalable_until<F, R>(&self, timeout: Option<usize>, mut sleep_if_none: F) -> KResult<R>
     where
         F: FnMut() -> KResult<Option<R>>,
     {
+        let start_time = arch::time::get_uptime_ticks();
         loop {
+            if let Some(timeout) = timeout {
+                if arch::time::get_uptime_ticks() >= start_time + timeout {
+                    return Err(errno!(Errno::EINTR, "sleep_signalable_until(): timeout reached"))
+                }
+            }
             let current = current_task();
             let scheduler = get_scheduler();
             current.set_state(TaskState::Waiting);
             {
                 let mut q_lock = self.queue.lock();
-                if !q_lock.iter().any(|t| Arc::ptr_eq(t, &current)) {
+                if !q_lock.iter().any(|t| t.pid == current.pid) {
                     q_lock.push_back(current.clone());
                 }
             }
@@ -43,7 +49,7 @@ impl WaitQueue {
                 scheduler.resume_task(current.clone());
                 self.queue
                     .lock()
-                    .retain(|proc| !Arc::ptr_eq(proc, &current));
+                    .retain(|t| t.pid != current.pid);
                 return Err(errno!(Errno::EINTR, "sleep_signalable_until(): interrupted by pending signals"));
             }
 
@@ -57,7 +63,7 @@ impl WaitQueue {
                 scheduler.resume_task(current.clone());
                 self.queue
                     .lock()
-                    .retain(|proc| !Arc::ptr_eq(proc, &current));
+                    .retain(|t| t.pid != current.pid);
                 return ret_val;
             }
             scheduler.sleep(None)?;

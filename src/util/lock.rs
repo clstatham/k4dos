@@ -66,7 +66,7 @@ impl<T: ?Sized> BlockingMutex<T> {
         //     // backtrace::backtrace();
         //     backtrace::unwind_stack().unwrap();
         // }
-        let guard = self.queue.sleep_signalable_until(|| {
+        let guard = self.queue.sleep_signalable_until(None, || {
             if let Ok(guard) = self.inner.try_lock() {
                 Ok(Some(BlockingMutexGuard {
                     inner: ManuallyDrop::new(guard),

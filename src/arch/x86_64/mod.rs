@@ -3,7 +3,7 @@ use x86::{
     controlregs::{self, Cr0, Cr4, Xcr0},
     cpuid::CpuId,
 };
-use x86_64::instructions::interrupts;
+use x86_64::instructions::{interrupts, hlt};
 use xmas_elf::ElfFile;
 
 use crate::{
@@ -130,7 +130,7 @@ pub fn arch_main() {
 
     let sched = get_scheduler();
 
-    let exe = "/bin/kash";
+    let exe = "/bin/sh";
     let file = get_root()
         .unwrap()
         .lookup(Path::new(exe), true)
@@ -162,5 +162,6 @@ fn poll_serial1() {
         if let Some(c) = c {
             TTY.get().unwrap().input_char(c);
         }
+        hlt();
     }
 }

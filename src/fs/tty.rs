@@ -245,7 +245,7 @@ impl LineDiscipline {
 
     fn read(&self, buf: UserBufferMut) -> KResult<usize> {
         let mut writer = UserBufferWriter::from(buf);
-        let read_len = self.wait_queue.sleep_signalable_until(|| {
+        let read_len = self.wait_queue.sleep_signalable_until(None, || {
             if !self.is_current_foreground() {
                 return Ok(None);
             }

@@ -189,9 +189,10 @@ impl UserCStr {
     pub fn new(vaddr: VirtAddr, max_len: usize) -> KResult<UserCStr> {
         let mut tmp = alloc::vec![0; max_len];
         // vaddr.access_ok(max_len as isize)?;
+        vaddr.read_ok::<u8>()?;
         // SAFE: we've validated the length of the string, and confirmed that it won't run into kernel memory
         let read_len =
-            unsafe { user_strncpy(tmp.as_mut_ptr(), vaddr.value() as *const u8, max_len) };
+            unsafe { user_strncpy(tmp.as_mut_ptr(), vaddr.as_ptr(), max_len) };
         let string = core::str::from_utf8(&tmp[..read_len])
             .map_err(|_| errno!(Errno::EINVAL, "UserCStr: UTF-8 parsing error"))?
             .to_string();

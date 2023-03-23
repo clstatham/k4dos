@@ -1,14 +1,17 @@
+use core::borrow::BorrowMut;
+
 use alloc::{
     collections::{BTreeMap, VecDeque},
     sync::{Arc},
     vec::Vec,
 };
 use spin::RwLock;
+use x86_64::instructions::hlt;
 
 use crate::{
-    arch::{idt::InterruptFrame, task::{arch_context_switch, ArchTask}},
+    arch::{idt::InterruptFrame, task::{arch_context_switch, ArchTask}, self},
     mem::addr::VirtAddr,
-    util::{ctypes::c_int, KResult, IrqMutex, errno::Errno}, errno, task::{JOIN_WAIT_QUEUE},
+    util::{ctypes::c_int, KResult, IrqMutex, errno::Errno}, errno, task::{JOIN_WAIT_QUEUE}, fs::POLL_WAIT_QUEUE,
 };
 
 use super::{
@@ -21,12 +24,17 @@ use super::{
 
 pub struct Scheduler {
     tasks: Arc<IrqMutex<BTreeMap<TaskId, Arc<Task>>>>,
+
     run_queue: Arc<IrqMutex<VecDeque<Arc<Task>>>>,
     awaiting_queue: Arc<IrqMutex<VecDeque<Arc<Task>>>>,
+    deadline_awaiting_queue: Arc<IrqMutex<VecDeque<(Arc<Task>, usize)>>>,
+
     idle_thread: Option<Arc<Task>>,
     preempt_task: Option<Arc<Task>>,
+
     current_task: Arc<RwLock<Option<Arc<Task>>>>,
     exited_tasks: Arc<IrqMutex<Vec<Arc<Task>>>>,
+
     pub(super) task_groups: IrqMutex<BTreeMap<PgId, Arc<IrqMutex<TaskGroup>>>>,
 }
 
@@ -36,6 +44,7 @@ impl Scheduler {
             tasks: Arc::new(IrqMutex::new(BTreeMap::new())),
             run_queue: Arc::new(IrqMutex::new(VecDeque::new())),
             awaiting_queue: Arc::new(IrqMutex::new(VecDeque::new())),
+            deadline_awaiting_queue: Arc::new(IrqMutex::new(VecDeque::new())),
             idle_thread: None,
             preempt_task: None,
             current_task: Arc::new(RwLock::new(None)),
@@ -55,11 +64,13 @@ impl Scheduler {
         task.state.store(TaskState::Runnable);
         let mut queue = self.run_queue.lock();
         self.tasks.lock().try_insert(task.pid, task.clone()).ok();
-        self.awaiting_queue.lock().retain(|t| !Arc::ptr_eq(t, &task));
-        let already_in_queue = queue.iter().any(|t| Arc::ptr_eq(t, &task));
+        self.awaiting_queue.lock().retain(|t| t.pid != task.pid);
+        let already_in_queue = queue.iter().any(|t| t.pid == task.pid);
         if !already_in_queue {
             log::debug!("Pushing {} as runnable", task.pid.as_usize());
             queue.push_back(task);
+        } else {
+            log::warn!("Attempted to push {} as runnable, but it was already runnable", task.pid.as_usize());
         }
     }
 
@@ -67,16 +78,53 @@ impl Scheduler {
         task.state.store(TaskState::Waiting);
         let mut queue = self.awaiting_queue.lock();
         self.tasks.lock().try_insert(task.pid, task.clone()).ok();
-        self.run_queue.lock().retain(|t| !Arc::ptr_eq(t, &task));
-        let already_in_queue = queue.iter().any(|t| Arc::ptr_eq(t, &task));
+        self.run_queue.lock().retain(|t| t.pid != task.pid);
+        self.deadline_awaiting_queue.lock().retain(|(t, _)| t.pid != task.pid);
+        let already_in_queue = queue.iter().any(|t| t.pid == task.pid);
         if !already_in_queue {
             log::debug!("Pushing {} as waiting", task.pid.as_usize());
             queue.push_back(task);
+        } else {
+            log::warn!("Attempted to push {} as awaiting, but it was already awaiting", task.pid.as_usize());
+        }
+    }
+
+    pub fn push_deadline_awaiting(&self, task: Arc<Task>, duration: usize) {
+        task.state.store(TaskState::Waiting);
+        let mut queue = self.deadline_awaiting_queue.lock();
+        self.tasks.lock().try_insert(task.pid, task.clone()).ok();
+        self.run_queue.lock().retain(|t| t.pid != task.pid);
+        self.awaiting_queue.lock().retain(|t| t.pid != task.pid);
+        let already_in_queue = queue.iter().any(|(t, _)| t.pid == task.pid);
+        if !already_in_queue {
+            let deadline = arch::time::get_uptime_ticks() + duration;
+            log::debug!("Pushing {} as waiting with duration {} ms", task.pid.as_usize(), duration);
+            queue.push_back((task, deadline));
+        } else {
+            log::warn!("Attempted to push {} as awaiting, but it was already awaiting", task.pid.as_usize());
+        }
+    }
+
+    fn check_deadline(&self) {
+        let time = arch::time::get_uptime_ticks();
+        let mut queue = self.deadline_awaiting_queue.lock();
+        for _ in 0..queue.len() {
+            if let Some((task, deadline)) = queue.pop_front() {
+                if deadline <= time {
+                    // time's up!
+                    log::debug!("Deadline of {} ms reached for PID {}.", deadline, task.pid.as_usize());
+                    drop(queue);
+                    self.push_runnable(task);
+                    queue = self.deadline_awaiting_queue.lock();
+                } else {
+                    queue.push_back((task, deadline));
+                }
+            }
         }
     }
 
     pub fn current_task_opt(&self) -> Option<Arc<Task>> {
-        let current = self.current_task.read();
+        let current = self.current_task.try_read()?;
         let clone = current.as_ref().cloned();
         drop(current);
         clone
@@ -116,7 +164,6 @@ impl Scheduler {
             let mut parent_signals = parent.signals.lock();
             if parent_signals.get_action(SIGCHLD) == SigAction::Ignore {
                 parent.children.lock().retain(|p| p.pid != current.pid);
-                // self.exited_tasks.lock().push(current.clone());
             } else {
                 parent_signals.signal(SIGCHLD);
             }
@@ -125,7 +172,7 @@ impl Scheduler {
         current.opened_files.lock().close_all();
         self.run_queue.lock().retain(|t| t.pid != current.pid);
         self.exited_tasks.lock().push(current);
-        self.wake_all(&JOIN_WAIT_QUEUE.get().unwrap());
+        self.wake_all(&JOIN_WAIT_QUEUE);
         // drop(current);
         self.preempt();
     }
@@ -143,13 +190,7 @@ impl Scheduler {
     }
 
     pub fn resume_task(&self, task: Arc<Task>) {
-        // let _old_state = task.state.swap(TaskState::Runnable);
-        // if old_state == TaskState::Runnable {
-        //     return;
-        // }
-        // if !self.run_queue.lock().iter().any(|t| t.pid == task.pid) {
-        self.push_runnable(task);    
-        // }
+        self.push_runnable(task);
     }
 
     pub fn try_delivering_signal(&self, frame: &mut InterruptFrame, syscall_result: isize) -> KResult<()> {
@@ -172,7 +213,6 @@ impl Scheduler {
                             signal,
                             VirtAddr::new(handler as usize),
                             syscall_result,
-                            // VirtAddr::new(sigreturn),
                         )?;
                     }
                 }
@@ -194,14 +234,31 @@ impl Scheduler {
     }
 
     pub fn reap_dead(&self) {
-        // todo
-    }
+        let mut exited = self.exited_tasks.lock();
+        
+        for task in exited.iter() {
+            self.tasks.lock().remove(&task.pid);
+            self.run_queue.lock().retain(|t| t.pid != task.pid);
+            self.awaiting_queue.lock().retain(|t| t.pid != task.pid);
+            JOIN_WAIT_QUEUE.queue.lock().retain(|t| t.pid != task.pid);
+            POLL_WAIT_QUEUE.queue.lock().retain(|t| t.pid != task.pid);
+            if let Some(parent) = task.parent.lock().upgrade() {
+                parent.children.lock().retain(|t| t.pid != task.pid);
+            }
+            if let Some(group) = task.group.borrow_mut().upgrade() {
+                group.lock().gc_dropped_processes();
+            }
+            // assert_eq!(Arc::strong_count(task), 1, "PID {} has dangling references", task.pid.as_usize());
+        }
+        exited.clear();
+    }   
 
     pub fn preempt(&self) {
         let current = self.current_task.read();
         if let Some(current_task) = current.as_ref().cloned() {
             // log::debug!("Switching from PID {:?} to preempt task", current_task.pid);
             drop(current);
+            // unsafe { Arc::decrement_strong_count(Arc::into_raw(current_task))};
             arch_context_switch(
                 current_task.arch_mut(),
                 self.preempt_task.as_ref().unwrap().arch_mut(),
@@ -216,11 +273,15 @@ impl Scheduler {
         }
     }
 
-    pub fn sleep(&self, _duration: Option<usize>) -> KResult<()> {
+    pub fn sleep(&self, duration: Option<usize>) -> KResult<()> {
         let current = self.current_task();
         // let awaiting_queue = self.awaiting_queue.lock();
 
-        self.push_awaiting(current);
+        if let Some(duration) = duration {
+            self.push_deadline_awaiting(current, duration);
+        } else {
+            self.push_awaiting(current);
+        }
         self.preempt();
 
         let current = self.current_task();
@@ -235,11 +296,9 @@ impl Scheduler {
 
 pub fn switch() {
     let sched = get_scheduler();
+    sched.check_deadline();
     let mut queue = sched.run_queue.lock();
-    if sched.current_task.reader_count() > 0 {
-        panic!("{}", sched.current_task.reader_count());
-    }
-    let mut current = sched.current_task.write();
+    let mut current = sched.current_task.try_write().expect("switch(): couldn't lock the current task for switching");
     let mut task = None;
     loop {
         let t = queue.pop_front();
@@ -248,7 +307,8 @@ pub fn switch() {
                 task = Some(t);
                 break;
             } else {
-                queue.push_back(t);
+                // we'll take the opportunity to purge the run queue of sleeping/dead tasks
+                // log::warn!("PID {} was in run queue but not runnable", t.pid.as_usize());
             }
         } else {
             break;
@@ -265,6 +325,8 @@ pub fn switch() {
         // log::debug!("Switching from preempt task to PID {:?}", task.pid);
         drop(queue);
         drop(current);
+        // assert!(Arc::strong_count(&task) > 1);
+        // unsafe { Arc::decrement_strong_count(&task) };
         arch_context_switch(
             sched.preempt_task.as_ref().unwrap().arch_mut(),
             task.arch_mut(),
@@ -277,6 +339,8 @@ pub fn switch() {
                 drop(current);
                 drop(queue);
                 // core::mem::forget(current);
+                // assert!(Arc::strong_count(&current_task) > 1);
+                // unsafe { Arc::decrement_strong_count(&current_task) };
                 arch_context_switch(
                     sched.preempt_task.as_ref().unwrap().arch_mut(),
                     current_task.arch_mut(),
@@ -300,6 +364,7 @@ fn reap() {
     let scheduler = get_scheduler();
     loop {
         scheduler.reap_dead();
+        hlt();
     }
 }
 
