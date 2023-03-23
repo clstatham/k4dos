@@ -79,30 +79,31 @@ pub const SIG_IGN: usize = 1;
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum SigAction {
     Ignore,
+    Terminate,
     Handler { handler: fn() },
 }
 
 // TODO: Fill correct default actions
 pub const DEFAULT_ACTIONS: [SigAction; SIGMAX as usize] = [
     /* (unused) */ SigAction::Ignore,
-    /* SIGHUP */ SigAction::Handler { handler: terminate },
-    /* SIGINT */ SigAction::Handler { handler: terminate },
-    /* SIGQUIT */ SigAction::Handler { handler: terminate },
-    /* SIGILL */ SigAction::Handler { handler: terminate },
+    /* SIGHUP */ SigAction::Terminate,
+    /* SIGINT */ SigAction::Terminate,
+    /* SIGQUIT */ SigAction::Terminate,
+    /* SIGILL */ SigAction::Terminate,
     /* SIGTRAP */ SigAction::Ignore,
-    /* SIGABRT */ SigAction::Handler { handler: terminate },
-    /* SIGBUS */ SigAction::Handler { handler: terminate },
-    /* SIGFPE */ SigAction::Handler { handler: terminate },
-    /* SIGKILL */ SigAction::Handler { handler: terminate },
+    /* SIGABRT */ SigAction::Terminate,
+    /* SIGBUS */ SigAction::Terminate,
+    /* SIGFPE */ SigAction::Terminate,
+    /* SIGKILL */ SigAction::Terminate,
     /* SIGUSR1 */ SigAction::Ignore,
-    /* SIGSEGV */ SigAction::Handler { handler: terminate },
+    /* SIGSEGV */ SigAction::Terminate,
     /* SIGUSR2 */ SigAction::Ignore,
-    /* SIGPIPE */ SigAction::Handler { handler: terminate },
+    /* SIGPIPE */ SigAction::Terminate,
     /* SIGALRM */ SigAction::Ignore,
-    /* SIGTERM */ SigAction::Handler { handler: terminate },
+    /* SIGTERM */ SigAction::Terminate,
     /* SIGSTKFLT */ SigAction::Ignore,
     /* SIGCHLD */ SigAction::Ignore,
-    /* SIGCONT */ SigAction::Handler { handler: terminate },
+    /* SIGCONT */ SigAction::Terminate,
     /* SIGSTOP */ SigAction::Ignore,
     /* SIGTSTP */ SigAction::Ignore,
     /* SIGTTIN */ SigAction::Ignore,
@@ -117,11 +118,6 @@ pub const DEFAULT_ACTIONS: [SigAction; SIGMAX as usize] = [
     /* SIGPWR */ SigAction::Ignore,
     /* SIGSYS */ SigAction::Ignore,
 ];
-
-pub fn terminate() {
-    log::warn!("Terminating current process");
-    get_scheduler().exit_current(1);
-}
 
 #[derive(Clone)]
 pub struct SignalDelivery {

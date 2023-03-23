@@ -218,6 +218,8 @@ interrupt_handler!(com2_handler, 35, no_error!());
 
 use x86::irq::*;
 
+use super::time;
+
 #[no_mangle]
 extern "C" fn x64_handle_interrupt(vector: u8, stack_frame: *mut InterruptErrorFrame) {
     let stack_frame = unsafe { &mut *stack_frame };
@@ -226,6 +228,7 @@ extern "C" fn x64_handle_interrupt(vector: u8, stack_frame: *mut InterruptErrorF
     match vector {
         TIMER_IRQ => {
             // log::info!("tick");
+            time::pit_irq();
             let sched = get_scheduler();
             notify_eoi(TIMER_IRQ);
             sched.preempt();
@@ -419,12 +422,7 @@ pub fn init() {
         // lock.enable();
         PICS.lock().initialize();
     }
-    log::info!("enabling PIT (i8254) timer: divisor={}", DIVISOR);
-    unsafe {
-        outb(0x43, 0x35);
-        outb(0x40, (DIVISOR & 0xff) as u8);
-        outb(0x40, (DIVISOR >> 8) as u8);
-    }
+    
     unmask_irq(TIMER_IRQ);
     unmask_irq(COM2_IRQ);
 }

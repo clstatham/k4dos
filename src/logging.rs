@@ -24,7 +24,7 @@ impl Log for KaDOSLogger {
         if let Some(sched) = SCHEDULER.get() {
             if let Some(current) = sched.current_task_opt() {
                 serial0_print!(
-                    "[{}] [{}] - {}",
+                    "[{}]\t[{}] - {}",
                     // record.file().unwrap_or("(no file)"),
                     // record.line().unwrap_or(0),
                     record.level(),
@@ -33,7 +33,7 @@ impl Log for KaDOSLogger {
                 );
             } else {
                 serial0_print!(
-                    "[{}] {}",
+                    "[{}]\t{}",
                     // record.file().unwrap_or("(no file)"),
                     // record.line().unwrap_or(0),
                     record.level(),
@@ -42,7 +42,7 @@ impl Log for KaDOSLogger {
             }
         } else {
             serial0_print!(
-                "[{}] {}",
+                "[{}]\t{}",
                 // record.file().unwrap_or("(no file)"),
                 // record.line().unwrap_or(0),
                 record.level(),

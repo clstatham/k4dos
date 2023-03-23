@@ -1,7 +1,7 @@
 
 use core::{mem::size_of, ops::Add};
 
-use crate::{mem::addr::VirtAddr, util::{ctypes::{c_nfds, c_int, c_short}, KResult}, fs::{POLL_WAIT_QUEUE, opened_file::FileDesc, PollStatus}, userland::buffer::{UserBufferReader, UserBuffer}, bitflags_from_user, task::current_task};
+use crate::{mem::addr::VirtAddr, util::{ctypes::{c_nfds, c_int, c_short}, KResult, errno::Errno}, fs::{POLL_WAIT_QUEUE, opened_file::FileDesc, PollStatus}, userland::buffer::{UserBufferReader, UserBuffer}, bitflags_from_user, task::current_task, errno};
 
 use super::SyscallHandler;
 
@@ -22,8 +22,8 @@ impl<'a> SyscallHandler<'a> {
                 // log::debug!("fd: {:?}", fd);
                 let events = bitflags_from_user!(PollStatus, reader.read::<c_short>()?);
                 // log::debug!("events: {:?}", events);
-                let revents = if fd < 0 || events.is_empty() {
-                    0
+                if fd < 0 || events.is_empty() {
+                    return Err(errno!(Errno::EINVAL))
                 } else {
                     let status = current_task().opened_files.lock().get(fd)?.poll()?;
                     // log::debug!("status: {:?}", status);
@@ -32,13 +32,11 @@ impl<'a> SyscallHandler<'a> {
                         ready_fds += 1;
                     }
                     // log::debug!("revents: {:?}", revents);
-                    revents.bits()
+
+                    fds.add(reader.read_len()).write::<c_short>(revents.bits())?;
+
+                    reader.skip(size_of::<c_short>())?;
                 };
-                
-
-                fds.add(reader.read_len()).write::<c_short>(revents)?;
-
-                reader.skip(size_of::<c_short>())?;
             }
 
             if ready_fds > 0 {

@@ -16,10 +16,11 @@ use super::{
     group::{PgId, TaskGroup},
     signal::{SigAction, Signal, SIGCHLD},
     wait_queue::WaitQueue,
-    Task, TaskState,
+    Task, TaskState, TaskId,
 };
 
 pub struct Scheduler {
+    tasks: Arc<IrqMutex<BTreeMap<TaskId, Arc<Task>>>>,
     run_queue: Arc<IrqMutex<VecDeque<Arc<Task>>>>,
     awaiting_queue: Arc<IrqMutex<VecDeque<Arc<Task>>>>,
     idle_thread: Option<Arc<Task>>,
@@ -32,6 +33,7 @@ pub struct Scheduler {
 impl Scheduler {
     pub fn new() -> Arc<Self> {
         let mut s = Self {
+            tasks: Arc::new(IrqMutex::new(BTreeMap::new())),
             run_queue: Arc::new(IrqMutex::new(VecDeque::new())),
             awaiting_queue: Arc::new(IrqMutex::new(VecDeque::new())),
             idle_thread: None,
@@ -52,6 +54,7 @@ impl Scheduler {
     pub fn push_runnable(&self, task: Arc<Task>) {
         task.state.store(TaskState::Runnable);
         let mut queue = self.run_queue.lock();
+        self.tasks.lock().try_insert(task.pid, task.clone()).ok();
         self.awaiting_queue.lock().retain(|t| !Arc::ptr_eq(t, &task));
         let already_in_queue = queue.iter().any(|t| Arc::ptr_eq(t, &task));
         if !already_in_queue {
@@ -63,6 +66,7 @@ impl Scheduler {
     pub fn push_awaiting(&self, task: Arc<Task>) {
         task.state.store(TaskState::Waiting);
         let mut queue = self.awaiting_queue.lock();
+        self.tasks.lock().try_insert(task.pid, task.clone()).ok();
         self.run_queue.lock().retain(|t| !Arc::ptr_eq(t, &task));
         let already_in_queue = queue.iter().any(|t| Arc::ptr_eq(t, &task));
         if !already_in_queue {
@@ -85,6 +89,10 @@ impl Scheduler {
         clone
     }
 
+    pub fn find_task(&self, pid: TaskId) -> Option<Arc<Task>> {
+        self.tasks.lock().get(&pid).cloned()
+    }
+
     pub fn find_group(&self, pgid: PgId) -> Option<Arc<IrqMutex<TaskGroup>>> {
         self.task_groups.lock().get(&pgid).cloned()
     }
@@ -97,7 +105,7 @@ impl Scheduler {
         })
     }
 
-    pub fn exit_current(&self, status: c_int) -> ! {
+    pub fn exit_current(&self, status: c_int) {
         let current = self.current_task();
         if current.pid.as_usize() == 1 {
             panic!("init (pid=1) tried to exit with status {}", status);
@@ -120,7 +128,6 @@ impl Scheduler {
         self.wake_all(&JOIN_WAIT_QUEUE.get().unwrap());
         // drop(current);
         self.preempt();
-        unreachable!()
     }
 
     pub fn wake_all(&self, queue: &WaitQueue) {
@@ -152,14 +159,13 @@ impl Scheduler {
             if !set.get(signal as usize).as_deref().unwrap_or(&true) {
                 match sigaction {
                     SigAction::Ignore => {}
-                    // SigAction::Terminate => {
-                    //     log::trace!("terminating {:?} by signal {:?}", current.pid, signal);
-                    //     self.exit_current(1);
-                    // }
+                    SigAction::Terminate => {
+                        log::trace!("terminating pid {} by signal {:?}", current.pid.as_usize(), signal);
+                        self.exit_current(1);
+                    }
                     SigAction::Handler { handler } => {
-                        log::trace!("delivering signal {:?} to {:?} (handler addr {:#x})", signal, current.pid, handler as usize);
+                        log::trace!("delivering signal {:?} to pid {} (handler addr {:#x})", signal, current.pid.as_usize(), handler as usize);
                         current.signaled_frame.store(Some(frame.clone()));
-                        // current.set_signal_mask(SignalMask::Block, set, oldset, length)
                         set.set(signal as usize, true);
                         ArchTask::setup_signal_stack(
                             frame,

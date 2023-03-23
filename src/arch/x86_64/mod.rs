@@ -26,7 +26,7 @@ pub mod gdt;
 pub mod idt;
 pub mod syscall;
 pub mod task;
-pub mod signal;
+pub mod time;
 
 static HHDM: LimineHhdmRequest = LimineHhdmRequest::new(0);
 static MEMMAP: LimineMemmapRequest = LimineMemmapRequest::new(0);
@@ -49,6 +49,9 @@ pub fn arch_main() {
 
     crate::logging::init();
     log::info!("Logger initialized.");
+
+    log::info!("Setting up time structures.");
+    time::init();
 
     let kernel_file = KERNEL_FILE.get_response().get().unwrap();
     let kernel_file = kernel_file.kernel_file.get().unwrap();
@@ -127,7 +130,7 @@ pub fn arch_main() {
 
     let sched = get_scheduler();
 
-    let exe = "/bin/sh";
+    let exe = "/bin/kash";
     let file = get_root()
         .unwrap()
         .lookup(Path::new(exe), true)

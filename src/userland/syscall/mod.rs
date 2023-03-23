@@ -20,8 +20,8 @@ pub mod exit;
 pub mod fork;
 pub mod ioctl;
 pub mod read;
-pub mod rt_sigprocmask;
-pub mod set_tid_address;
+pub mod signal;
+pub mod pid;
 pub mod wait4;
 pub mod write;
 pub mod writev;
@@ -33,6 +33,7 @@ pub mod getcwd;
 pub mod uname;
 pub mod poll;
 pub mod pipe;
+pub mod time;
 
 pub fn errno_to_isize(res: &KResult<isize>) -> isize {
     match res {
@@ -50,35 +51,6 @@ pub fn errno_to_isize(res: &KResult<isize>) -> isize {
     }
 }
 
-// #[repr(C)]
-// #[derive(Default, Clone, Debug)]
-// pub struct SyscallFrame {
-//     // preserved registers
-//     pub r15: usize,
-//     pub r14: usize,
-//     pub r13: usize,
-//     pub r12: usize,
-//     pub rbp: usize,
-//     pub rbx: usize,
-
-//     // scratch registers
-//     pub r11: usize,
-//     pub r10: usize,
-//     pub r9: usize,
-//     pub r8: usize,
-//     pub rsi: usize,
-//     pub rdi: usize,
-//     pub rdx: usize,
-//     pub rcx: usize,
-//     pub rax: usize,
-//     // // iret regs
-//     pub rip: usize,
-//     pub cs: usize,
-//     pub rflags: usize,
-//     pub rsp: usize,
-//     pub ss: usize,
-// }
-
 pub struct SyscallHandler<'a> {
     pub frame: &'a mut InterruptFrame,
 }
@@ -95,7 +67,6 @@ impl<'a> SyscallHandler<'a> {
         a6: usize,
         n: usize,
     ) -> KResult<isize> {
-        // {
         let enter_pid = current_task().pid();
         log::trace!(
             "[{:#x}] SYSCALL #{} {}({:#x}, {:#x}, {:#x}, {:#x}, {:#x}, {:#x})",
@@ -151,14 +122,16 @@ impl<'a> SyscallHandler<'a> {
             SYS_UNAME => self.sys_uname(VirtAddr::new(a1)),
             SYS_CLOSE => self.sys_close(a1 as FileDesc),
             SYS_POLL => self.sys_poll(VirtAddr::new(a1), a2 as c_nfds, a3 as c_int),
-            // SYS_POLL => Err(errno!(Errno::EINVAL)),
+            // SYS_POLL => Err(errno!(Errno::ENOSYS)),
             SYS_CHDIR => self.sys_chdir(&resolve_path(a1)?),
             SYS_RT_SIGRETURN => self.sys_rt_sigreturn(),
             SYS_PIPE => self.sys_pipe(VirtAddr::new(a1)),
             SYS_CLONE => self.sys_clone(a1, VirtAddr::new(a2), a3, VirtAddr::new(a4), a5, VirtAddr::new(a6)),
+            SYS_KILL => self.sys_kill(TaskId::new(a1), a2 as c_int),
+            SYS_TKILL => self.sys_kill(TaskId::new(a1), a2 as c_int), // todo
             _ => Err(errno!(Errno::ENOSYS, "dispatch(): syscall not implemented")),
         };
-        // }
+
         let exit_pid = current_task().pid();
         if exit_pid == enter_pid {
             if let Err(err) = get_scheduler().try_delivering_signal(self.frame, errno_to_isize(&res)) {
@@ -169,8 +142,7 @@ impl<'a> SyscallHandler<'a> {
         }
         if let Err(ref err) = res {
             log::error!(
-                "[{}] Syscall handler returned Err {:?} with msg: {:?}",
-                current_task().pid().as_usize(),
+                "Syscall handler returned Err {:?} with msg: {:?}",
                 err.errno(),
                 err.msg()
             );
@@ -606,6 +578,7 @@ pub const SYS_SETGROUPS: usize = 116;
 pub const SYS_ARCH_PRCTL: usize = 158;
 pub const SYS_REBOOT: usize = 169;
 pub const SYS_GETTID: usize = 186;
+pub const SYS_TKILL: usize = 200;
 pub const SYS_GETDENTS64: usize = 217;
 pub const SYS_SET_TID_ADDRESS: usize = 218;
 pub const SYS_CLOCK_GETTIME: usize = 228;

@@ -44,8 +44,8 @@ fn xrstor(fpu: &Box<[u8]>) {
 
 pub fn arch_context_switch(prev: &mut ArchTask, next: &mut ArchTask) {
     unsafe {
-        // prev.fsbase = VirtAddr::new(rdmsr(IA32_FS_BASE) as usize);
-        // prev.gsbase = VirtAddr::new(rdmsr(IA32_GS_BASE) as usize);
+        prev.fsbase = VirtAddr::new(rdmsr(IA32_FS_BASE) as usize);
+        prev.gsbase = VirtAddr::new(rdmsr(IA32_GS_BASE) as usize);
         wrmsr(IA32_FS_BASE, next.fsbase.value() as u64);
         swapgs();
         wrmsr(IA32_GS_BASE, next.gsbase.value() as u64);
@@ -55,19 +55,13 @@ pub fn arch_context_switch(prev: &mut ArchTask, next: &mut ArchTask) {
         swapgs();
 
         if let Some(fpu) = prev.fpu_storage.as_mut() {
-            // xsave(fpu);
-            // let fpu = fpu.as_mut_ptr();
-            // core::arch::asm!("xsave [{}]", in(reg) fpu);
             xsave(fpu);
         }
 
         if let Some(fpu) = next.fpu_storage.as_mut() {
-            // let fpu = fpu.as_ptr();
-            // core::arch::asm!("xrstor [{}]", in(reg) fpu);
             xrstor(fpu)
         }
 
-        // get_scheduler().force_unlock();
         // log::debug!("Next context: {:#x?}", *next.context.as_ref());
 
         next.address_space.switch();
@@ -163,39 +157,6 @@ unsafe extern "sysv64" fn context_switch(_prev: &mut Context, _next: &mut Contex
 }
 
 unsafe extern "C" fn switch_finish_hook() {}
-
-// #[naked]
-// unsafe extern "C" fn context_switch(_prev: &mut Context, _next: &mut Context) {
-//     core::arch::asm!(
-//         "
-//         push rbp
-//         push rbx
-//         push r12
-//         push r13
-//         push r14
-//         push r15
-
-//         // mov rax, cr3
-//         // push rax
-
-//         mov [rdi], rsp
-//         mov rsp, rsi
-
-//         // pop rax
-//         // mov cr3, rax
-
-//         pop r15
-//         pop r14
-//         pop r13
-//         pop r12
-//         pop rbx
-//         pop rbp
-
-//         ret
-//     ",
-//         options(noreturn)
-//     )
-// }
 
 #[derive(Clone, Debug, Default)]
 #[repr(C)]
@@ -389,11 +350,9 @@ impl ArchTask {
         interrupts::disable();
         let mut userland_entry = elf::load_elf(file)?;
 
-        // let switch_stack = alloc::vec![0u8; KERNEL_STACK_SIZE].into_boxed_slice();
         let switch_stack = Self::alloc_switch_stack().unwrap();
 
         let current = AddressSpace::current();
-        // self.user = true;
 
         userland_entry.addr_space.switch();
 

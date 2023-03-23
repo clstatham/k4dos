@@ -10,7 +10,8 @@
     ptr_internals,
     const_refs_to_cell,
     slice_pattern,
-    is_sorted
+    is_sorted,
+    map_try_insert,
 )]
 
 extern crate alloc;

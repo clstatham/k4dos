@@ -407,7 +407,7 @@ impl Vmem {
         stack_frame: InterruptErrorFrame,
         reason: PageFaultErrorCode,
     ) -> KResult<()> {
-        let dump_and_exit = || -> ! {
+        let dump_and_exit = || {
             log::error!("{:#x?}", stack_frame);
             self.log();
             get_scheduler().send_signal_to(current_task(), SIGSEGV);
@@ -483,6 +483,6 @@ impl Vmem {
             dump_and_exit()
         }
 
-        // Err(errno!(Errno::EFAULT))
+        Err(errno!(Errno::EFAULT, "handle_page_fault(): couldn't handle page fault"))
     }
 }
