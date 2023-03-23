@@ -3,15 +3,15 @@ use crate::{util::{ctypes::c_int, KResult, errno::Errno}, fs::opened_file::{File
 use super::SyscallHandler;
 
 
-const F_DUPFD: c_int = 0;
-const F_GETFD: c_int = 1;
-const F_SETFD: c_int = 2;
-const F_GETFL: c_int = 3;
-const F_SETFL: c_int = 4;
+pub const F_DUPFD: c_int = 0;
+pub const F_GETFD: c_int = 1;
+pub const F_SETFD: c_int = 2;
+pub const F_GETFL: c_int = 3;
+pub const F_SETFL: c_int = 4;
 
 // Linux-specific commands.
-const F_LINUX_SPECIFIC_BASE: c_int = 1024;
-const F_DUPFD_CLOEXEC: c_int = F_LINUX_SPECIFIC_BASE + 6;
+pub const F_LINUX_SPECIFIC_BASE: c_int = 1024;
+pub const F_DUPFD_CLOEXEC: c_int = F_LINUX_SPECIFIC_BASE + 6;
 
 impl<'a> SyscallHandler<'a> {
     pub fn sys_fcntl(&mut self, fd: FileDesc, cmd: c_int, arg: usize) -> KResult<isize> {

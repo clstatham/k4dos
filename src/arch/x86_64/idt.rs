@@ -1,5 +1,5 @@
 use lazy_static::lazy_static;
-use pc_keyboard::{layouts::Us104Key, DecodedKey, HandleControl, Keyboard, ScancodeSet1};
+
 
 use pic8259::ChainedPics;
 use spin::Mutex;
@@ -8,15 +8,13 @@ use x86::{
     io::outb,
 };
 use x86_64::{
-    instructions::port::Port,
     registers::control::Cr3,
-    structures::idt::{InterruptDescriptorTable, InterruptStackFrame, PageFaultErrorCode},
+    structures::idt::{InterruptDescriptorTable, PageFaultErrorCode},
 };
 
 use crate::{
     mem::{addr::VirtAddr},
     task::{current_task, get_scheduler},
-    util::IrqMutex,
 };
 
 
@@ -30,7 +28,7 @@ pub const PIC_2_OFFSET: u8 = PIC_1_OFFSET + 8;
 pub static PICS: Mutex<ChainedPics> =
     Mutex::new(unsafe { ChainedPics::new(PIC_1_OFFSET, PIC_2_OFFSET) });
 
-pub const TIMER_IRQ: u8 = PIC_1_OFFSET + 0;
+pub const TIMER_IRQ: u8 = PIC_1_OFFSET;
 pub const COM2_IRQ: u8 = PIC_1_OFFSET + 3;
 // pub const ERROR_IRQ: u8 = 34;
 // pub const SPURIOUS_IRQ: u8 = 35;
@@ -48,6 +46,7 @@ lazy_static! {
 
     pub static ref IDT: InterruptDescriptorTable = {
         let mut idt = InterruptDescriptorTable::new();
+        #[allow(clippy::fn_to_numeric_cast)]
         unsafe {
             idt.divide_error.set_handler_addr(x86_64::VirtAddr::new(divide_error_handler as u64));
             idt.debug.set_handler_addr(x86_64::VirtAddr::new(debug_handler as u64));
@@ -59,11 +58,9 @@ lazy_static! {
             idt.invalid_opcode.set_handler_addr(x86_64::VirtAddr::new(invalid_opcode_handler as u64));
             idt.device_not_available
             .set_handler_addr(x86_64::VirtAddr::new(device_not_available_handler as u64));
-            unsafe {
-                idt.double_fault
-                .set_handler_addr(x86_64::VirtAddr::new(double_fault_handler as u64))
-                    .set_stack_index(0);
-            }
+            idt.double_fault
+            .set_handler_addr(x86_64::VirtAddr::new(double_fault_handler as u64))
+                .set_stack_index(0);
 
             // reserved: 0x09 coprocessor segment overrun exception
             idt.invalid_tss.set_handler_addr(x86_64::VirtAddr::new(invalid_tss_handler as u64));
@@ -320,7 +317,7 @@ extern "C" fn x64_handle_interrupt(vector: u8, stack_frame: *mut InterruptErrorF
                 // }
             if current_task().handle_page_fault(
                 VirtAddr::new(accessed_address as usize),
-                stack_frame.clone(),
+                *stack_frame,
                 error_code,
             ).is_err() {
                 log::error!(
@@ -331,16 +328,11 @@ extern "C" fn x64_handle_interrupt(vector: u8, stack_frame: *mut InterruptErrorF
                     cr3.start_address().as_u64(),
                     stack_frame,
                 );
-    
-                log::error!("Exception IP {:#x}", stack_frame.frame.rip as usize);
+                let rip = stack_frame.frame.rip;
+                log::error!("Exception IP {:#x}", rip);
                 log::error!("Faulted access address {:#x}", accessed_address,);
                 panic!()
             }
-            return;
-            // unsafe {
-            //     core::arch::asm!("swapgs");
-            // }
-            // }
         }
         X87_FPU_VECTOR => {
             log::error!("\nEXCEPTION: x87 FLOATING POINT\n{:#x?}", stack_frame);
@@ -386,8 +378,6 @@ extern "C" fn x64_handle_interrupt(vector: u8, stack_frame: *mut InterruptErrorF
     }
 }
 
-const DIVISOR: u16 = (1193182u32 / 1000) as u16;
-
 pub const PIC_1_DATA_PORT: u8 = 0x21;
 pub const PIC_2_DATA_PORT: u8 = 0xa1;
 
@@ -427,36 +417,36 @@ pub fn init() {
     unmask_irq(COM2_IRQ);
 }
 
-extern "x86-interrupt" fn lapic_error_handler(stack_frame: InterruptStackFrame) {
-    panic!("LOCAL APIC ERROR: {:#x?}", stack_frame)
-}
+// extern "x86-interrupt" fn lapic_error_handler(stack_frame: InterruptStackFrame) {
+//     panic!("LOCAL APIC ERROR: {:#x?}", stack_frame)
+// }
 
-extern "x86-interrupt" fn lapic_spurious_handler(_stack_frame: InterruptStackFrame) {
-    notify_eoi(0);
-}
+// extern "x86-interrupt" fn lapic_spurious_handler(_stack_frame: InterruptStackFrame) {
+//     notify_eoi(0);
+// }
 
-extern "x86-interrupt" fn keyboard_handler(_stack_frame: InterruptStackFrame) {
-    lazy_static! {
-        static ref KEYBOARD: IrqMutex<Keyboard<Us104Key, ScancodeSet1>> = IrqMutex::new(
-            Keyboard::new(ScancodeSet1::new(), Us104Key, HandleControl::Ignore)
-        );
-    }
+// extern "x86-interrupt" fn keyboard_handler(_stack_frame: InterruptStackFrame) {
+//     lazy_static! {
+//         static ref KEYBOARD: IrqMutex<Keyboard<Us104Key, ScancodeSet1>> = IrqMutex::new(
+//             Keyboard::new(ScancodeSet1::new(), Us104Key, HandleControl::Ignore)
+//         );
+//     }
 
-    let mut port = Port::new(0x60);
-    let scancode: u8 = unsafe { port.read() };
-    let mut keyboard = KEYBOARD.lock();
-    if let Ok(Some(key_evt)) = keyboard.add_byte(scancode) {
-        if let Some(key) = keyboard.process_keyevent(key_evt) {
-            let c = match key {
-                DecodedKey::Unicode(c) => c,
-                DecodedKey::RawKey(_code) => '?',
-            };
+//     let mut port = Port::new(0x60);
+//     let scancode: u8 = unsafe { port.read() };
+//     let mut keyboard = KEYBOARD.lock();
+//     if let Ok(Some(key_evt)) = keyboard.add_byte(scancode) {
+//         if let Some(key) = keyboard.process_keyevent(key_evt) {
+//             let c = match key {
+//                 DecodedKey::Unicode(c) => c,
+//                 DecodedKey::RawKey(_code) => '?',
+//             };
 
-            // todo: PTY emulation!
-            crate::terminal_print!("{}", c);
-            // TTY.get().unwrap().input_char(c as u8);
-        }
-    }
+//             // todo: PTY emulation!
+//             crate::terminal_print!("{}", c);
+//             // TTY.get().unwrap().input_char(c as u8);
+//         }
+//     }
 
-    notify_eoi(0);
-}
+//     notify_eoi(0);
+// }

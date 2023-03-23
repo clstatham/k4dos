@@ -1,5 +1,3 @@
-use core::borrow::BorrowMut;
-
 use alloc::{
     collections::{BTreeMap, VecDeque},
     sync::{Arc},
@@ -27,6 +25,7 @@ pub struct Scheduler {
 
     run_queue: Arc<IrqMutex<VecDeque<Arc<Task>>>>,
     awaiting_queue: Arc<IrqMutex<VecDeque<Arc<Task>>>>,
+    #[allow(clippy::type_complexity)]
     deadline_awaiting_queue: Arc<IrqMutex<VecDeque<(Arc<Task>, usize)>>>,
 
     idle_thread: Option<Arc<Task>>,
@@ -208,7 +207,7 @@ impl Scheduler {
                     }
                     SigAction::Handler { handler } => {
                         log::trace!("delivering signal {:?} to pid {} (handler addr {:#x})", signal, current.pid.as_usize(), handler as usize);
-                        current.signaled_frame.store(Some(frame.clone()));
+                        current.signaled_frame.store(Some(*frame));
                         set.set(signal as usize, true);
                         ArchTask::setup_signal_stack(
                             frame,

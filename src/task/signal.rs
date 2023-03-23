@@ -5,8 +5,6 @@ use crate::{
     util::{ctypes::c_int, errno::Errno, error::KResult},
 };
 
-use super::get_scheduler;
-
 pub type Signal = c_int;
 #[allow(unused)]
 pub const SIGHUP: Signal = 1;

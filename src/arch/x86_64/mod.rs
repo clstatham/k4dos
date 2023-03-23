@@ -145,9 +145,9 @@ pub fn arch_main() {
     log::info!("Welcome to K4DOS!");
 
     {
-        let task = Task::new_init(file, &sched, &[exe.as_bytes()], &[b"FOO=bar"]).unwrap();
+        let task = Task::new_init(file, sched, &[exe.as_bytes()], &[b"FOO=bar"]).unwrap();
         sched.push_runnable(task);
-        let task = Task::new_kernel(&sched, poll_serial1, true);
+        let task = Task::new_kernel(sched, poll_serial1, true);
         sched.push_runnable(task);
     }
 

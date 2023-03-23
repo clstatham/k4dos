@@ -1,7 +1,7 @@
 
 
 
-use elfloader::{ElfBinary, ElfLoader, Entry};
+use elfloader::{ElfBinary, ElfLoader};
 use x86::random::rdrand_slice;
 
 use xmas_elf::{program::Type};
@@ -39,7 +39,7 @@ pub struct UserlandEntry {
     pub hdr: [(AuxvType, usize); 4],
 }
 
-pub fn load_elf<'a>(file: FileRef) -> KResult<UserlandEntry> {
+pub fn load_elf(file: FileRef) -> KResult<UserlandEntry> {
     let len = file.stat()?.size.0 as usize;
     let mut buf = alloc::vec![0u8; len];
     let ubuf = UserBufferMut::from_slice(&mut buf);
@@ -97,7 +97,7 @@ pub fn load_elf<'a>(file: FileRef) -> KResult<UserlandEntry> {
     elf.load(&mut loader).unwrap();
 
     current.switch();
-    let p2 = elf.file.header.pt2.clone();
+    let p2 = elf.file.header.pt2;
     // log::debug!("{:?}", p2);
     log::debug!("Base address at {:?}", VirtAddr::new(loader.base_addr));
     let hdr = [
@@ -155,7 +155,7 @@ impl<'a> ElfLoader for KadosElfLoader<'a> {
                     .map_area(start, mem_end, flags, prot, kind, &mut self.addr_space.mapper())
                     .unwrap();
             } else if header.get_type().unwrap() == Type::Interp {
-                let ld = get_root().unwrap().lookup(&Path::new("/usr/lib/ld.so"), true).unwrap().as_file().unwrap().clone();
+                let ld = get_root().unwrap().lookup(Path::new("/usr/lib/ld.so"), true).unwrap().as_file().unwrap().clone();
                 let res = load_elf(ld).unwrap();
                 self.entry_point = res.entry_point;
             }

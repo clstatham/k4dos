@@ -13,10 +13,10 @@
     is_sorted,
     map_try_insert,
 )]
+#![allow(clippy::missing_safety_doc)]
 
 extern crate alloc;
 
-mod io;
 #[macro_use]
 pub mod serial;
 pub mod arch;

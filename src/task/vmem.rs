@@ -57,9 +57,6 @@ impl From<MMapProt> for PageTableFlags {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct VmemAreaId(usize);
-
 #[derive(Clone)]
 pub enum MMapKind {
     Anonymous,
@@ -72,7 +69,6 @@ pub enum MMapKind {
 
 #[derive(Clone)]
 pub struct VmemArea {
-    id: VmemAreaId,
     start_addr: VirtAddr,
     end_addr: VirtAddr,
     flags: MMapFlags,
@@ -82,7 +78,6 @@ pub struct VmemArea {
 
 impl VmemArea {
     pub const fn new(
-        id: VmemAreaId,
         start_addr: VirtAddr,
         end_addr: VirtAddr,
         flags: MMapFlags,
@@ -90,7 +85,6 @@ impl VmemArea {
         kind: MMapKind,
     ) -> Self {
         Self {
-            id,
             start_addr,
             end_addr,
             flags,
@@ -140,24 +134,12 @@ impl Vmem {
         }
     }
 
-    fn alloc_id(&self) -> VmemAreaId {
-        VmemAreaId(
-            self.next_id
-                .fetch_add(1, core::sync::atomic::Ordering::AcqRel),
-        )
-    }
-
     pub fn area_containing(
         &mut self,
         start_addr: VirtAddr,
         end_addr: VirtAddr,
     ) -> Option<&mut VmemArea> {
-        for area in self.areas.iter_mut() {
-            if area.contains_addr(start_addr) && area.contains_addr(end_addr) {
-                return Some(area);
-            }
-        }
-        None
+        self.areas.iter_mut().find(|area| area.contains_addr(start_addr) && area.contains_addr(end_addr))
     }
 
     pub fn add_area(
@@ -167,14 +149,12 @@ impl Vmem {
         flags: MMapFlags,
         prot: MMapProt,
         kind: MMapKind,
-    ) -> KResult<VmemAreaId> {
+    ) -> KResult<()> {
         if self.area_containing(start_addr, end_addr).is_some() {
             self.log();
             panic!("Cannot add vmem area that already exists");
         }
-        let id = self.alloc_id();
         self.areas.push(VmemArea {
-            id,
             start_addr,
             end_addr,
             flags,
@@ -183,7 +163,7 @@ impl Vmem {
         });
         self.areas.sort_by_key(|area| area.start_address());
         // self.mp.insert(id, Vec::new());
-        Ok(id)
+        Ok(())
     }
 
     fn zero_memory(&self, mut start_addr: VirtAddr, end_addr: VirtAddr) -> KResult<()> {
@@ -285,13 +265,13 @@ impl Vmem {
         prot: MMapProt,
         kind: MMapKind,
         active_mapper: &mut Mapper,
-    ) -> KResult<VmemAreaId> {
+    ) -> KResult<()> {
         let ap = self.page_allocator.allocate_range(PageRange::new(
             Page::containing_address(start_addr),
             Page::containing_address(end_addr - 1),
         ))?;
         let _mp = active_mapper.map(ap, prot.into())?;
-        let id = self.add_area(
+        self.add_area(
             start_addr.align_down(PAGE_SIZE),
             end_addr.align_up(PAGE_SIZE),
             flags,
@@ -299,7 +279,7 @@ impl Vmem {
             kind,
         )?;
         // self.mp.get_mut(&id).unwrap().push(mp);
-        Ok(id)
+        Ok(())
     }
 
     unsafe fn do_unmap(&mut self, start_addr: VirtAddr, end_addr: VirtAddr, active_mapper: &mut Mapper) -> Option<()> {
@@ -415,7 +395,8 @@ impl Vmem {
             get_scheduler().exit_current(1)
         };
 
-        log::warn!("User page fault at {:#x}", stack_frame.frame.rip as usize);
+        let rip = stack_frame.frame.rip;
+        log::warn!("User page fault at {:#x}", rip);
         log::warn!("PID: {}", current_task().pid().as_usize());
         log::warn!("Faulted address: {:?}", faulted_addr);
         log::warn!("Reason: {:?}", reason);
@@ -485,5 +466,11 @@ impl Vmem {
         }
 
         Err(errno!(Errno::EFAULT, "handle_page_fault(): couldn't handle page fault"))
+    }
+}
+
+impl Default for Vmem {
+    fn default() -> Self {
+        Self::new()
     }
 }

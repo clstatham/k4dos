@@ -16,11 +16,10 @@ pub struct TaskGroup {
 
 impl TaskGroup {
     pub(super) fn new(pgid: PgId) -> Arc<IrqMutex<TaskGroup>> {
-        let pg = Arc::new(IrqMutex::new(TaskGroup {
+        Arc::new(IrqMutex::new(TaskGroup {
             pgid,
             tasks: Vec::new(),
-        }));
-        pg
+        }))
     }
 
     pub fn pgid(&self) -> PgId {

@@ -19,7 +19,7 @@ use super::cpu_local::{get_kpcr, get_tss, CpuLocalData, Kpcr};
 
 pub const KERNEL_CS_IDX: u16 = 1;
 pub const KERNEL_DS_IDX: u16 = 2;
-const TSS_IDX: u16 = 3;
+pub const TSS_IDX: u16 = 3;
 pub const USER_DS_IDX: u16 = 5;
 pub const USER_CS_IDX: u16 = 6;
 
@@ -76,9 +76,9 @@ pub fn init() {
     // TSS
     let tss_sel = gdt.add_entry(Descriptor::tss_segment(tss));
     // user data (syscall)
-    let user_ds_sel = gdt.add_entry(Descriptor::user_data_segment());
+    let _user_ds_sel = gdt.add_entry(Descriptor::user_data_segment());
     // user code
-    let user_cs_sel = gdt.add_entry(Descriptor::user_code_segment());
+    let _user_cs_sel = gdt.add_entry(Descriptor::user_code_segment());
 
     // // user tls
     // let user_tls_sel = gdt.add_entry(Descriptor::user_data_segment());

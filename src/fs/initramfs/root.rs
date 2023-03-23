@@ -52,7 +52,7 @@ impl RootFs {
 
     pub fn lookup(&self, path: &Path, follow_symlinks: bool) -> KResult<INode> {
         if path.is_pipe() {
-            return PIPE_FS.lookup(path).map(|pipe| INode::Pipe(pipe));
+            return PIPE_FS.lookup(path).map(INode::Pipe);
         }
         self.lookup_path(path, follow_symlinks).map(|cmp| cmp.inode.clone())
     }

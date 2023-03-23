@@ -68,9 +68,10 @@ impl<'a> SyscallHandler<'a> {
         n: usize,
     ) -> KResult<isize> {
         let enter_pid = current_task().pid();
+        let rip = self.frame.rip;
         log::trace!(
             "[{:#x}] SYSCALL #{} {}({:#x}, {:#x}, {:#x}, {:#x}, {:#x}, {:#x})",
-            self.frame.rip as usize,
+            rip,
             n,
             syscall_name_by_number(n),
             a1,

@@ -53,6 +53,6 @@ impl File for InitRamFsFile {
     }
 
     fn stat(&self) -> KResult<Stat> {
-        Ok(self.stat.lock().clone())
+        Ok(*self.stat.lock())
     }
 }

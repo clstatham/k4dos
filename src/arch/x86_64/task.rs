@@ -36,7 +36,7 @@ fn xsave(fpu: &mut Box<[u8]>) {
     }
 }
 
-fn xrstor(fpu: &Box<[u8]>) {
+fn xrstor(fpu: &mut Box<[u8]>) {
     unsafe {
         core::arch::asm!("xrstor [{}]", in(reg) fpu.as_ptr(), in("eax") 0xffffffffu32, in("edx") 0xffffffffu32);
     }
@@ -331,7 +331,7 @@ impl ArchTask {
         *context = Context::default();
         // context.rip = iretq_init as usize;
         context.rsp = kframe_rsp;
-        context.rflags = kframe.rflags as usize;
+        context.rflags = kframe.rflags;
         // context.cr3 = unsafe { controlregs::cr3() as usize };
         Self {
             context: unsafe { core::ptr::Unique::new_unchecked(context) },
@@ -745,7 +745,7 @@ impl ArchTask {
         current_frame: &mut InterruptFrame,
         signaled_frame: &InterruptFrame,
     ) {
-        *current_frame = signaled_frame.clone();
+        *current_frame = *signaled_frame;
     }
 }
 

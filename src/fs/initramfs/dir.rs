@@ -1,5 +1,5 @@
 use alloc::{
-    string::{String, ToString},
+    string::String,
     sync::{Arc, Weak}, vec::Vec,
 };
 
@@ -39,7 +39,7 @@ impl InitRamFsDir {
     }
 
     pub fn add_dir(&self, name: String) -> Arc<InitRamFsDir> {
-        let dir = Arc::new(InitRamFsDir::new(name.clone(), alloc_inode_no()));
+        let dir = Arc::new(InitRamFsDir::new(name, alloc_inode_no()));
         // self.inner.with_write(|inner| {
         self.inner
             .lock()
@@ -50,7 +50,7 @@ impl InitRamFsDir {
     }
 
     pub fn add_file(&self, name: String) -> Arc<InitRamFsFile> {
-        let file = Arc::new(InitRamFsFile::new(name.clone(), alloc_inode_no()));
+        let file = Arc::new(InitRamFsFile::new(name, alloc_inode_no()));
         self.inner
             .lock()
             .children
@@ -74,7 +74,7 @@ impl Directory for InitRamFsDir {
             .lock()
             .children
             .iter()
-            .find(|child| child.get_name() == name.to_string())
+            .find(|child| child.get_name() == *name)
             // .get(name)
             .cloned()
             .ok_or(errno!(Errno::ENOENT, "lookup(): not found"))?;

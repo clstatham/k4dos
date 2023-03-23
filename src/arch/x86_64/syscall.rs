@@ -121,13 +121,13 @@ pub unsafe extern "C" fn syscall_entry() {
 unsafe extern "C" fn x64_handle_syscall(ctx: *mut InterruptFrame) -> isize {
     let context = &*ctx;
     handle_syscall(
-        context.rdi as usize,
-        context.rsi as usize,
-        context.rdx as usize,
-        context.r10 as usize,
-        context.r8 as usize,
-        context.r9 as usize,
-        context.rax as usize,
+        context.rdi,
+        context.rsi,
+        context.rdx,
+        context.r10,
+        context.r8,
+        context.r9,
+        context.rax,
         ctx,
     )
 }

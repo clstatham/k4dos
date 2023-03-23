@@ -14,7 +14,6 @@ use x86_64::structures::idt::PageFaultErrorCode;
 
 use crate::{
     arch::{idt::{InterruptFrame, InterruptErrorFrame}, task::ArchTask},
-    errno,
     fs::{
         initramfs::{get_root, root::RootFs},
         opened_file::{FileDesc, OpenFlags, OpenOptions, OpenedFile, OpenedFileTable},
@@ -23,7 +22,7 @@ use crate::{
         FileRef,
     },
     mem::addr::VirtAddr,
-    util::{ctypes::c_int, errno::Errno, KResult, IrqMutex},
+    util::{ctypes::c_int, KResult, IrqMutex},
 };
 
 use self::{
@@ -43,7 +42,7 @@ pub mod wait_queue;
 pub static SCHEDULER: Once<Arc<Scheduler>> = Once::new();
 pub static JOIN_WAIT_QUEUE: WaitQueue = WaitQueue::new();
 pub fn init() {
-    SCHEDULER.call_once(|| Scheduler::new());
+    SCHEDULER.call_once(Scheduler::new);
 }
 
 pub fn get_scheduler() -> &'static Arc<Scheduler> {
@@ -189,7 +188,7 @@ impl Task {
         files.open_with_fd(
             2,
             Arc::new(OpenedFile::new(
-                console.clone(),
+                console,
                 OpenFlags::O_WRONLY.into(),
                 0,
             )),
