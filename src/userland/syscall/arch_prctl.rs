@@ -33,7 +33,7 @@ fn arch_prctl(current_task: &Arc<Task>, code: i32, addr: VirtAddr) -> KResult<()
             //     vmem.allocate_new_area(range, VirtualMemoryType::Other, PageTableFlags::WRITABLE | PageTableFlags::NO_EXECUTE, None)?;
             // }
         }
-        _ => return Err(errno!(Errno::EINVAL)),
+        _ => return Err(errno!(Errno::EINVAL, "arch_prctl(): unknown code")),
     }
 
     Ok(())

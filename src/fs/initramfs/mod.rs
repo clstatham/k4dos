@@ -46,7 +46,7 @@ impl<'a> ByteParser<'a> {
 
     pub fn skip(&mut self, len: usize) -> KResult<()> {
         if self.current + len > self.buffer.len() {
-            return Err(errno!(Errno::EINVAL));
+            return Err(errno!(Errno::EINVAL, "skip(): out of bounds"));
         }
 
         self.current += len;
@@ -56,7 +56,7 @@ impl<'a> ByteParser<'a> {
     pub fn skip_until_alignment(&mut self, align: usize) -> KResult<()> {
         let next = align_up(self.current, align);
         if next > self.buffer.len() {
-            return Err(errno!(Errno::EINVAL));
+            return Err(errno!(Errno::EINVAL, "skip_until_alignment(): out of bounds"));
         }
 
         self.current = next;
@@ -65,7 +65,7 @@ impl<'a> ByteParser<'a> {
 
     pub fn consume_bytes(&mut self, len: usize) -> KResult<&'a [u8]> {
         if self.current + len > self.buffer.len() {
-            return Err(errno!(Errno::EINVAL));
+            return Err(errno!(Errno::EINVAL, "consume_bytes(): out of bounds"));
         }
 
         self.current += len;
@@ -74,11 +74,11 @@ impl<'a> ByteParser<'a> {
 }
 
 fn parse_str_field(bytes: &[u8]) -> KResult<&str> {
-    core::str::from_utf8(bytes).map_err(|_e| errno!(Errno::EINVAL))
+    core::str::from_utf8(bytes).map_err(|_e| errno!(Errno::EINVAL, "parse_str_field(): UTF-8 parsing error"))
 }
 
 fn parse_hex_field(bytes: &[u8]) -> KResult<usize> {
-    usize::from_str_radix(parse_str_field(bytes)?, 16).map_err(|_e| errno!(Errno::EINVAL))
+    usize::from_str_radix(parse_str_field(bytes)?, 16).map_err(|_e| errno!(Errno::EINVAL, "parse_hex_field(): int parsing error"))
 }
 
 pub static INITRAM_FS: Once<Arc<InitRamFs>> = Once::new();
@@ -121,7 +121,7 @@ impl InitRamFs {
                     0x070701,
                     magic
                 );
-                return Err(errno!(Errno::EINVAL));
+                return Err(errno!(Errno::EINVAL, "parse(): invalid magic"));
             }
 
             let ino = parse_hex_field(image.consume_bytes(8)?)?;
@@ -138,7 +138,7 @@ impl InitRamFs {
 
             let path_len = parse_hex_field(image.consume_bytes(8)?)?;
             if path_len == 0 {
-                return Err(errno!(Errno::EINVAL));
+                return Err(errno!(Errno::EINVAL, "parse(): path length is 0"));
             }
 
             image.skip(8)?;
@@ -153,7 +153,7 @@ impl InitRamFs {
             }
 
             if path.is_empty() {
-                return Err(errno!(Errno::EINVAL));
+                return Err(errno!(Errno::EINVAL, "parse(): empty path"));
                 // image.skip(1)?;
                 // image.skip_until_alignment(4)?;
                 // continue;

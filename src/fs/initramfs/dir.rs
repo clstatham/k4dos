@@ -77,7 +77,7 @@ impl Directory for InitRamFsDir {
             .find(|child| child.get_name() == name.to_string())
             // .get(name)
             .cloned()
-            .ok_or(errno!(Errno::ENOENT))?;
+            .ok_or(errno!(Errno::ENOENT, "lookup(): not found"))?;
         Ok(inode)
     }
 

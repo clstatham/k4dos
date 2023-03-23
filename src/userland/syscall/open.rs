@@ -7,12 +7,12 @@ use super::SyscallHandler;
 
 fn create(path: &Path, flags: OpenFlags, _mode: FileMode) -> KResult<INode> {
     if flags.contains(OpenFlags::O_DIRECTORY) {
-        return Err(errno!(Errno::EINVAL));
+        return Err(errno!(Errno::EINVAL, "create(): invalid flags"));
     }
 
     let (_parent_dir, name) = path
         .parent_and_basename()
-        .ok_or_else(|| errno!(Errno::EEXIST))?;
+        .ok_or_else(|| errno!(Errno::EEXIST, "create(): invalid path"))?;
 
     let current = current_task();
     let root = current.root_fs.lock();
@@ -40,11 +40,11 @@ impl<'a> SyscallHandler<'a> {
         let mut opened_files = current.opened_files.lock();
         let path_comp = root.lookup_path(path, true)?;
         if flags.contains(OpenFlags::O_DIRECTORY) && !path_comp.inode.is_dir() {
-            return Err(errno!(Errno::ENOTDIR));
+            return Err(errno!(Errno::ENOTDIR, "sys_open(): not a directory"));
         }
         let access_mode = mode.access_mode();
         if path_comp.inode.is_dir() && (access_mode == O_WRONLY || access_mode == O_RDWR) {
-            return Err(errno!(Errno::EISDIR));
+            return Err(errno!(Errno::EISDIR, "sys_open(): is a directory"));
         }
 
         let fd = opened_files.open(path_comp, flags.into())?;

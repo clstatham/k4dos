@@ -23,7 +23,7 @@ impl<'a> SyscallHandler<'a> {
             0 => SignalMask::Block,
             1 => SignalMask::Unblock,
             2 => SignalMask::Set,
-            _ => return Err(errno!(Errno::EINVAL)),
+            _ => return Err(errno!(Errno::EINVAL, "sys_rt_sigprocmask(): invalid mask")),
         };
 
         current_task().set_signal_mask(how, set, oldset, length)?;
@@ -47,7 +47,7 @@ impl<'a> SyscallHandler<'a> {
                 SIG_IGN => SigAction::Ignore,
                 SIG_DFL => match DEFAULT_ACTIONS.get(signum as usize) {
                     Some(def) => *def,
-                    None => return Err(errno!(Errno::EINVAL)),
+                    None => return Err(errno!(Errno::EINVAL, "sys_rt_sigaction(): no default action for signal")),
                 }
                 _ => SigAction::Handler { handler: unsafe { core::mem::transmute(handler) } }
             };
@@ -60,6 +60,6 @@ impl<'a> SyscallHandler<'a> {
 
     pub fn sys_rt_sigreturn(&mut self) -> KResult<isize> {
         get_scheduler().restore_signaled_user_stack(self.frame);
-        Err(errno!(Errno::EINTR))
+        Err(errno!(Errno::EINTR, "sys_rt_sigreturn(): interrupted by signal"))
     }
 }

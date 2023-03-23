@@ -8,19 +8,19 @@ use super::SyscallHandler;
 
 
 impl<'a> SyscallHandler<'a> {
-    pub fn sys_getcwd(&mut self, buf: VirtAddr, len: u64) -> KResult<isize> {
+    pub fn sys_getcwd(&mut self, buf: VirtAddr, len: usize) -> KResult<isize> {
         let cwd = current_task().root_fs.lock()
             .cwd_path()
             .resolve_abs_path();
 
-        if (len as usize) < cwd.as_str().as_bytes().len() {
-            return Err(errno!(Errno::ERANGE));
+        if len < cwd.as_str().as_bytes().len() {
+            return Err(errno!(Errno::ERANGE, "sys_getcwd(): buffer too small"));
         }
 
         let mut cwd = String::from(cwd.as_str());
         cwd.push('\0');
         let buf_val = buf.value();
-        let mut writer = UserBufferMut::from_vaddr(buf, len as usize);
+        let mut writer = UserBufferMut::from_vaddr(buf, len);
         writer
             .write_at(cwd.as_str().as_bytes(), 0, &OpenOptions::empty())
             .unwrap(); // this currently never returns Err; may change

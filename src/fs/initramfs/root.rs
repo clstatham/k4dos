@@ -59,7 +59,7 @@ impl RootFs {
 
     pub fn lookup_path(&self, path: &Path, follow_symlinks: bool) -> KResult<Arc<PathComponent>> {
         if path.is_empty() {
-            return Err(errno!(Errno::ENOENT));
+            return Err(errno!(Errno::ENOENT, "lookup_path(): not found"));
         }
         
         let lookup_from = if path.is_absolute() {
@@ -109,7 +109,7 @@ impl RootFs {
                     INode::Pipe(_) => unreachable!("Pipes should be contained in PipeFs, not RootFs"),
                     INode::Symlink(link) if follow_symlinks => {
                         if symlink_follow_limit == 0 {
-                            return Err(errno!(Errno::ELOOP));
+                            return Err(errno!(Errno::ELOOP, "lookup_path(): maximum symlink depth reached"));
                         }
                         let dst = link.link_location()?;
                         let follow_from = if dst.is_absolute() {
@@ -127,17 +127,17 @@ impl RootFs {
 
                         match dst_path.inode {
                             INode::Dir(_) => dst_path,
-                            _ => return Err(errno!(Errno::ENOTDIR)),
+                            _ => return Err(errno!(Errno::ENOTDIR, "lookup_path(): not a directory")),
                         }
                     }
-                    INode::Symlink(_) => return Err(errno!(Errno::ENOTDIR)),
-                    INode::File(_) => return Err(errno!(Errno::ENOTDIR)),
+                    INode::Symlink(_) => return Err(errno!(Errno::ENOTDIR, "lookup_path(): not a directory")),
+                    INode::File(_) => return Err(errno!(Errno::ENOTDIR, "lookup_path(): not a directory")),
                 }
             } else {
                 match &path_comp.inode {
                     INode::Symlink(link) if follow_symlinks => {
                         if symlink_follow_limit == 0 {
-                            return Err(errno!(Errno::ELOOP));
+                            return Err(errno!(Errno::ELOOP, "lookup_path(): maximum symlink depth reached"));
                         }
                         let dst = link.link_location()?;
                         let follow_from = if dst.is_absolute() {

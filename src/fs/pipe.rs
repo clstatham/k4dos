@@ -113,6 +113,6 @@ impl PipeFs {
     }
 
     pub fn lookup(&self, path: &Path) -> KResult<Arc<Pipe>> {
-        self.pipes.lock().iter().find(|pipe| pipe.get_name() == path.pipe_name().unwrap()).cloned().ok_or(errno!(Errno::ENOENT))
+        self.pipes.lock().iter().find(|pipe| pipe.get_name() == path.pipe_name().unwrap()).cloned().ok_or(errno!(Errno::ENOENT, "pipe does not exist"))
     }
 }

@@ -399,7 +399,7 @@ impl ArchTask {
 
         userland_entry.vmem.map_area(
             VirtAddr::new(USER_STACK_BOTTOM),
-            VirtAddr::new(USER_STACK_TOP) + 1,
+            VirtAddr::new(USER_STACK_TOP),
             MMapFlags::empty(),
             MMapProt::PROT_READ | MMapProt::PROT_WRITE | MMapProt::PROT_EXEC,
             MMapKind::Anonymous,
@@ -528,7 +528,7 @@ impl ArchTask {
         // userland_entry
         vmem.map_area(
             VirtAddr::new(USER_STACK_BOTTOM),
-            VirtAddr::new(USER_STACK_TOP) + 1,
+            VirtAddr::new(USER_STACK_TOP),
             MMapFlags::empty(),
             MMapProt::PROT_READ | MMapProt::PROT_WRITE | MMapProt::PROT_EXEC,
             MMapKind::Anonymous,

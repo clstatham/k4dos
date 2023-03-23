@@ -149,7 +149,7 @@ impl SignalDelivery {
 
     pub fn set_action(&mut self, signal: Signal, action: SigAction) -> KResult<()> {
         if signal > SIGMAX {
-            return Err(errno!(Errno::EINVAL));
+            return Err(errno!(Errno::EINVAL, "set_action(): signal out of range"));
         }
 
         self.actions[signal as usize] = action;

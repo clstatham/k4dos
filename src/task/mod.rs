@@ -371,15 +371,14 @@ impl Task {
         // if let Ok(old) = oldset {
         if oldset.value() != 0 {
             oldset
-                .write_bytes(sigset.as_raw_slice())
-                .map_err(|_| errno!(Errno::EINVAL))?;
+                .write_bytes(sigset.as_raw_slice())?;
         }
 
         // }
 
         // if let Ok(new) = set {
         if set.value() != 0 {
-            let new_set = set.read::<[u8; 128]>().map_err(|_| errno!(Errno::EINVAL))?;
+            let new_set = set.read::<[u8; 128]>()?;
             let new_set = SigSet::new(*new_set);
             match how {
                 SignalMask::Block => *sigset |= new_set,

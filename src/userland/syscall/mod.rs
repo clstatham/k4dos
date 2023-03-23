@@ -81,7 +81,6 @@ pub fn errno_to_isize(res: &KResult<isize>) -> isize {
 
 pub struct SyscallHandler<'a> {
     pub frame: &'a mut InterruptFrame,
-    // pub frame: &'a u8,
 }
 
 impl<'a> SyscallHandler<'a> {
@@ -147,7 +146,7 @@ impl<'a> SyscallHandler<'a> {
             SYS_LSTAT => self.sys_lstat(&resolve_path(a1)?, VirtAddr::new(a2)),
             SYS_FSTAT => self.sys_fstat(a1 as FileDesc, VirtAddr::new(a2)),
             SYS_OPEN => self.sys_open(&resolve_path(a1)?, crate::bitflags_from_user!(OpenFlags, a2 as i32), FileMode::new(a3 as u32)),
-            SYS_GETCWD => self.sys_getcwd(VirtAddr::new(a1), a2 as u64),
+            SYS_GETCWD => self.sys_getcwd(VirtAddr::new(a1), a2),
             SYS_GETDENTS64 => self.sys_getdents64(a1 as FileDesc, VirtAddr::new(a2), a3),
             SYS_FCNTL => self.sys_fcntl(a1 as FileDesc, a2 as c_int, a3),
             SYS_UNAME => self.sys_uname(VirtAddr::new(a1)),
@@ -158,7 +157,7 @@ impl<'a> SyscallHandler<'a> {
             SYS_RT_SIGRETURN => self.sys_rt_sigreturn(),
             SYS_PIPE => self.sys_pipe(VirtAddr::new(a1)),
             SYS_CLONE => self.sys_clone(a1, VirtAddr::new(a2), a3, VirtAddr::new(a4), a5, VirtAddr::new(a6)),
-            _ => Err(errno!(Errno::ENOSYS)),
+            _ => Err(errno!(Errno::ENOSYS, "dispatch(): syscall not implemented")),
         };
         // }
         let exit_pid = current_task().pid();
@@ -185,15 +184,18 @@ impl<'a> SyscallHandler<'a> {
 macro_rules! bitflags_from_user {
     ($st:tt, $input:expr) => {{
         let bits = $input;
-        $st::from_bits(bits).unwrap_or_else(|| {
-            log::warn!(
-                concat!("unsupported bitflags for ", stringify!($st), ": {:x}"),
-                bits
-            );
-            $st::from_bits_truncate(bits)
+            match $st::from_bits(bits) {
+                Some(flags) => Ok(flags)?,
+                None => {
+                log::warn!(
+                    concat!("unsupported bitflags for ", stringify!($st), ": {:x}"),
+                    bits
+                );
+                // $st::from_bits_truncate(bits)
 
-            // $crate::errno!($crate::util::errno::Errno::ENOSYS)
-        })
+                Err($crate::errno!($crate::util::errno::Errno::ENOSYS))?
+            }
+        }
     }};
 }
 

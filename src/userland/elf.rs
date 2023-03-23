@@ -45,7 +45,7 @@ pub fn load_elf<'a>(file: FileRef) -> KResult<UserlandEntry> {
     let ubuf = UserBufferMut::from_slice(&mut buf);
     file.read(0, ubuf, &OpenOptions::empty())?;
 
-    let elf = ElfBinary::new(&buf).map_err(|_e| errno!(Errno::EBADF))?;
+    let elf = ElfBinary::new(&buf).map_err(|_e| errno!(Errno::EBADF, "load_elf(): elf loader error"))?;
 
     let mut start_of_image = usize::MAX;
     let mut end_of_image = 0;

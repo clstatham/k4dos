@@ -194,23 +194,23 @@ pub trait File: FsNode {
 
     /// `stat(2)`.
     fn stat(&self) -> KResult<Stat> {
-        Err(errno!(Errno::EBADF))
+        Err(errno!(Errno::EBADF, "stat(): not implemented"))
     }
 
     /// `readlink(2)`.
     fn readlink(&self) -> KResult<PathBuf> {
         // "EINVAL - The named file is not a symbolic link." -- readlink(2)
-        Err(errno!(Errno::EINVAL))
+        Err(errno!(Errno::EINVAL, "not a symbolic link"))
     }
 
     /// `poll(2)` and `select(2)`.
     fn poll(&self) -> KResult<PollStatus> {
-        Err(errno!(Errno::EBADF))
+        Err(errno!(Errno::EBADF, "poll(): not implemented"))
     }
 
     /// `ioctl(2)`.
     fn ioctl(&self, _cmd: usize, _arg: usize) -> KResult<isize> {
-        Err(errno!(Errno::EBADF))
+        Err(errno!(Errno::EBADF, "ioctl(): not implemented"))
     }
 
     /// `read(2)`.
@@ -221,16 +221,8 @@ pub trait File: FsNode {
         _options: &OpenOptions,
         // len: usize,
     ) -> KResult<usize> {
-        Err(errno!(Errno::EBADF))
+        Err(errno!(Errno::EBADF, "read(): not implemented"))
     }
-
-    // fn read_bytes(&self, _offset: usize, _buf: &mut [u8]) -> KResult<usize> {
-    //     Err(errno!(Errno::EBADF))
-    // }
-
-    // fn write_bytes(&self, _offset: usize, _buf: &[u8]) -> KResult<usize> {
-    //     Err(errno!(Errno::EBADF))
-    // }
 
     /// `write(2)`.
     fn write(
@@ -239,7 +231,7 @@ pub trait File: FsNode {
         _buf: UserBuffer<'_>,
         _options: &OpenOptions,
     ) -> KResult<usize> {
-        Err(errno!(Errno::EBADF))
+        Err(errno!(Errno::EBADF, "write(): not implemented"))
     }
 }
 
@@ -273,7 +265,7 @@ pub trait Directory: FsNode {
     /// `readlink(2)`.
     fn readlink(&self) -> KResult<PathBuf> {
         // "EINVAL - The named file is not a symbolic link." -- readlink(2)
-        Err(errno!(Errno::EINVAL))
+        Err(errno!(Errno::EINVAL, "readlink(): not a symbolic link"))
     }
 
     fn readdir(&self, index: usize) -> KResult<Option<DirEntry>>;
@@ -307,7 +299,7 @@ impl INode {
     pub fn as_file(&self) -> KResult<&FileRef> {
         match self {
             INode::File(file) => Ok(file),
-            _ => Err(errno!(Errno::EINVAL)),
+            _ => Err(errno!(Errno::EINVAL, "as_file(): not a file")),
         }
     }
 
@@ -324,21 +316,21 @@ impl INode {
     pub fn as_dir(&self) -> KResult<&DirRef> {
         match self {
             INode::Dir(d) => Ok(d),
-            _ => Err(errno!(Errno::EINVAL)),
+            _ => Err(errno!(Errno::EINVAL, "as_dir(): not a directory")),
         }
     }
 
     pub fn as_symlink(&self) -> KResult<&SymlinkRef> {
         match self {
             INode::Symlink(s) => Ok(s),
-            _ => Err(errno!(Errno::EINVAL)),
+            _ => Err(errno!(Errno::EINVAL, "as_symlink(): not a symbolic link")),
         }
     }
 
     pub fn as_pipe(&self) -> KResult<&Arc<Pipe>> {
         match self {
             INode::Pipe(p) => Ok(p),
-            _ => Err(errno!(Errno::EINVAL)),
+            _ => Err(errno!(Errno::EINVAL, "as_pipe(): not a pipe")),
         }
     }
 }

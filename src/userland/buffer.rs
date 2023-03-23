@@ -65,9 +65,6 @@ impl<'a> UserBuffer<'a> {
         match &self.inner {
             Inner::Slice(src) => buffer[..len].copy_from_slice(&src[offset..(offset + len)]),
             Inner::User { base, .. } => {
-                // buffer[..len].copy_from_slice(core::slice::from_raw_parts(base.as_ptr(), len));
-                // buffer[..len]
-                //     .copy_from_slice(base.as_bytes(len).map_err(|_e| errno!(Errno::EINVAL))?);
                 base.read_bytes(&mut buffer[..len])?;
             }
         }
@@ -196,7 +193,7 @@ impl UserCStr {
         let read_len =
             unsafe { user_strncpy(tmp.as_mut_ptr(), vaddr.value() as *const u8, max_len) };
         let string = core::str::from_utf8(&tmp[..read_len])
-            .map_err(|_| errno!(Errno::EINVAL))?
+            .map_err(|_| errno!(Errno::EINVAL, "UserCStr: UTF-8 parsing error"))?
             .to_string();
         Ok(UserCStr { string })
     }
@@ -242,11 +239,6 @@ impl<'a> UserBufferReader<'a> {
             }
             Inner::User { base, .. } => {
                 base.add(self.pos).read_bytes(&mut dst[..read_len])?;
-                // dst[..read_len].copy_from_slice(
-                //     base.add(self.pos)
-                //         .as_bytes(read_len)
-                //         .map_err(|_e| errno!(Errno::EINVAL))?,
-                // )
             }
         }
 
@@ -269,8 +261,7 @@ impl<'a> UserBufferReader<'a> {
             }
             Inner::User { base, .. } => *base
                 .add(self.pos)
-                .read()
-                .map_err(|_e| errno!(Errno::EINVAL))?,
+                .read()?
         };
 
         self.pos += size_of::<T>();
@@ -282,7 +273,7 @@ impl<'a> UserBufferReader<'a> {
         if len <= self.remaining_len() {
             Ok(())
         } else {
-            Err(errno!(Errno::EINVAL))
+            Err(errno!(Errno::EINVAL, "check_remaining_len(): len out of bounds"))
         }
     }
 
@@ -330,10 +321,6 @@ impl<'a> UserBufferWriter<'a> {
             }
             InnerMut::User { base, .. } => {
                 base.add(self.pos).write_bytes(&src[..copy_len])?;
-                // base.add(self.pos)
-                //     .as_bytes_mut(copy_len)
-                //     .map_err(|_e| errno!(Errno::EINVAL))?
-                //     .copy_from_slice(&src[..copy_len])
             }
         }
 
@@ -357,10 +344,6 @@ impl<'a> UserBufferWriter<'a> {
             }
             InnerMut::User { base, .. } => {
                 base.add(self.pos).fill(value, len)?;
-                // base.add(self.pos)
-                //     .as_bytes_mut(len)
-                //     .map_err(|_e| errno!(Errno::EINVAL))?
-                //     .fill(value)
             }
         }
 
@@ -380,7 +363,7 @@ impl<'a> UserBufferWriter<'a> {
         if len <= self.remaining_len() {
             Ok(())
         } else {
-            Err(errno!(Errno::EINVAL))
+            Err(errno!(Errno::EINVAL, "check_remaining_len(): len out of bounds"))
         }
     }
 

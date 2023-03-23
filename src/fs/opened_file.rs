@@ -194,7 +194,7 @@ impl OpenedFileTable {
     pub fn get(&self, fd: FileDesc) -> KResult<&Arc<OpenedFile>> {
         match self.files.get(fd as usize) {
             Some(Some(LocalOpenedFile { opened_file, .. })) => Ok(opened_file),
-            _ => Err(errno!(Errno::EBADF)),
+            _ => Err(errno!(Errno::EBADF, "get(): file not opened")),
         }
     }
 
@@ -234,14 +234,14 @@ impl OpenedFileTable {
         }
 
         match self.files.get_mut(fd as usize) {
-            Some(Some(_)) => return Err(errno!(Errno::EBADF)),
+            Some(Some(_)) => return Err(errno!(Errno::EBADF, "open_with_fd(): file already opened")),
             Some(entry @ None) => {
                 *entry = Some(LocalOpenedFile {
                     opened_file,
                     close_on_exec: options.close_on_exec,
                 });
             }
-            None if fd >= FD_MAX => return Err(errno!(Errno::EBADF)),
+            None if fd >= FD_MAX => return Err(errno!(Errno::EBADF, "open_with_fd(): maximum file descriptor reached")),
             None => {
                 self.files.resize(fd as usize + 1, None);
                 self.files[fd as usize] = Some(LocalOpenedFile {
@@ -268,7 +268,7 @@ impl OpenedFileTable {
             i = (i + 1) % FD_MAX;
         }
 
-        Err(errno!(Errno::ENFILE))
+        Err(errno!(Errno::ENFILE, "alloc_fd(): cannot alloc file descriptor"))
     }
 
     pub fn close_all(&mut self) {
@@ -292,7 +292,7 @@ impl OpenedFileTable {
     pub fn close(&mut self, fd: FileDesc) -> KResult<()> {
         match self.files.get_mut(fd as usize) {
             Some(opened_file) => *opened_file = None,
-            _ => return Err(errno!(Errno::EBADF)),
+            _ => return Err(errno!(Errno::EBADF, "close(): file not opened")),
         }
         Ok(())
     }
@@ -305,7 +305,7 @@ impl OpenedFileTable {
     ) -> KResult<FileDesc> {
         let file = match self.files.get(fd as usize) {
             Some(Some(file)) => file.opened_file.clone(),
-            _ => return Err(errno!(Errno::EBADF)),
+            _ => return Err(errno!(Errno::EBADF, "dup(): file not opened")),
         };
 
         self.alloc_fd(gte)

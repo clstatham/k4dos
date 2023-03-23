@@ -213,7 +213,7 @@ impl Scheduler {
         let current = self.current_task();
         
         if current.has_pending_signals() {
-            Err(errno!(Errno::EINTR))
+            Err(errno!(Errno::EINTR, "sleep(): pending signals"))
         } else {
             Ok(())
         }

@@ -169,7 +169,6 @@ impl Vmem {
         kind: MMapKind,
     ) -> KResult<VmemAreaId> {
         if self.area_containing(start_addr, end_addr).is_some() {
-            // return Err(errno!(Errno::EAGAIN));
             self.log();
             panic!("Cannot add vmem area that already exists");
         }
@@ -200,7 +199,7 @@ impl Vmem {
     ) -> KResult<()> {
         let area = self
             .area_containing(start_addr, start_addr + size - 1)
-            .ok_or(errno!(Errno::ENOMEM))?;
+            .ok_or(errno!(Errno::ENOMEM, "mprotect(): no areas containing address"))?;
         area.prot = protection;
         Ok(())
     }
@@ -215,7 +214,7 @@ impl Vmem {
         _offset: usize,
     ) -> KResult<VirtAddr> {
         if size == 0 {
-            return Err(errno!(Errno::EFAULT));
+            return Err(errno!(Errno::EFAULT, "mmap(): size is 0"));
         }
 
         let size_aligned = align_up(size, PAGE_SIZE);
@@ -246,10 +245,10 @@ impl Vmem {
                 return Ok(start);
             }
 
-            return Err(errno!(Errno::ENOMEM));
+            return Err(errno!(Errno::ENOMEM, "mmap(): no free space big enough"));
         }
         // todo!()
-        Err(errno!(Errno::ENOSYS))
+        Err(errno!(Errno::ENOSYS, "mmap(): not yet implemented for start_addr != 0"))
     }
 
     fn find_free_space_above(
@@ -408,11 +407,11 @@ impl Vmem {
         stack_frame: InterruptErrorFrame,
         reason: PageFaultErrorCode,
     ) -> KResult<()> {
-        let dump_and_exit = || {
+        let dump_and_exit = || -> ! {
             log::error!("{:#x?}", stack_frame);
             self.log();
             get_scheduler().send_signal_to(current_task(), SIGSEGV);
-            get_scheduler().exit_current(1);
+            get_scheduler().exit_current(1)
         };
 
         log::warn!("User page fault at {:#x}", stack_frame.frame.rip as usize);
@@ -422,7 +421,7 @@ impl Vmem {
         // backtrace::unwind_user_stack_from(stack_frame.frame.rbp as usize).unwrap();
         if faulted_addr.align_down(PAGE_SIZE) == VirtAddr::null() {
             log::error!("User segmentation fault: null pointer access");
-            dump_and_exit();
+            dump_and_exit()
         }
 
         let mut faulted_area = None;
@@ -478,11 +477,12 @@ impl Vmem {
                     )?;
                 return Ok(())
             }
+            unreachable!("handle_page_fault(): faulted area found, but was already readable and writable")
         } else {
             log::error!("User segmentation fault: illegal access");
-            dump_and_exit();
+            dump_and_exit()
         }
 
-        Err(errno!(Errno::EFAULT))
+        // Err(errno!(Errno::EFAULT))
     }
 }

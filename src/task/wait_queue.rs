@@ -44,7 +44,7 @@ impl WaitQueue {
                 self.queue
                     .lock()
                     .retain(|proc| !Arc::ptr_eq(proc, &current));
-                return Err(errno!(Errno::EINTR));
+                return Err(errno!(Errno::EINTR, "sleep_signalable_until(): interrupted by pending signals"));
             }
 
             let ret_value = match sleep_if_none() {

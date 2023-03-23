@@ -7,7 +7,7 @@ use super::SyscallHandler;
 impl<'a> SyscallHandler<'a> {
     pub fn sys_pipe(&mut self, fds: VirtAddr) -> KResult<isize> {
         if fds == VirtAddr::null() {
-            return Err(errno!(Errno::EFAULT))
+            return Err(errno!(Errno::EFAULT, "sys_pipe(): null VirtAddr"))
         }
         // let fds: &mut [FileDesc] = unsafe { core::slice::from_raw_parts_mut::<i32>(fds.as_mut_ptr(), core::mem::size_of::<i32>() * 2) };
 

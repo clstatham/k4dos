@@ -343,7 +343,7 @@ impl File for Tty {
                 let group = self
                     .discipline
                     .foreground_process_group()
-                    .ok_or_else(|| errno!(Errno::ENOENT))?;
+                    .ok_or_else(|| errno!(Errno::ENOENT, "ioctl(): no foreground process group set for tty"))?;
                 let pgid = group.lock().pgid();
                 let arg = VirtAddr::new(arg);
 
@@ -354,14 +354,14 @@ impl File for Tty {
                 let pgid = *arg.read::<c_int>()?;
                 let pg = get_scheduler()
                     .find_group(pgid)
-                    .ok_or_else(|| errno!(Errno::ESRCH))?;
+                    .ok_or_else(|| errno!(Errno::ESRCH, "ioctl(): cannot find group for tty"))?;
                 self.discipline
                     .set_foreground_process_group(Arc::downgrade(&pg));
             }
             TIOCGWINSZ => {}
             _ => {
                 warn!("ioctl(): unknown cmd: {:#x}", cmd);
-                return Err(errno!(Errno::ENOSYS));
+                return Err(errno!(Errno::ENOSYS, "ioctl(): unknown cmd"));
             }
         }
 

@@ -36,7 +36,7 @@ impl<'a> SyscallHandler<'a> {
                 let fd = files.dup(fd, Some(arg as i32), OpenOptions::new(false, true))?;
                 Ok(fd as isize)
             }
-            _ => Err(errno!(Errno::ENOSYS)),
+            _ => Err(errno!(Errno::ENOSYS, "sys_fctnl(): unknown command")),
         }
     }
 }
