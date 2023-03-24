@@ -19,7 +19,7 @@ const ENV_LEN_MAX: usize = 4096;
 
 impl<'a> SyscallHandler<'a> {
     pub fn sys_arch_prctl(&mut self, code: i32, uaddr: VirtAddr) -> KResult<isize> {
-        arch_prctl(&current_task(), code, uaddr)?;
+        arch_prctl(current_task(), code, uaddr)?;
         Ok(0)
     }
 
@@ -196,7 +196,7 @@ impl<'a> SyscallHandler<'a> {
     }
 }
 
-fn arch_prctl(current_task: &Arc<Task>, code: i32, addr: VirtAddr) -> KResult<()> {
+fn arch_prctl(current_task: Arc<Task>, code: i32, addr: VirtAddr) -> KResult<()> {
     const ARCH_SET_FS: i32 = 0x1002;
 
     match code {

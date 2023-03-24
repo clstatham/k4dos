@@ -11,7 +11,7 @@ use x86_64::{
 
 use crate::{
     mem::addr::VirtAddr,
-    task::{current_task, get_scheduler},
+    task::{current_task, get_scheduler}, backtrace,
 };
 
 pub const PIC_1_OFFSET: u8 = 32;
@@ -117,6 +117,13 @@ pub struct InterruptFrame {
     pub rflags: usize,
     pub rsp: usize,
     pub ss: usize,
+}
+
+impl InterruptFrame {
+    #[inline(always)]
+    pub fn is_user_mode(&self) -> bool {
+        self.cs & 0x3 != 0
+    }
 }
 
 #[derive(Copy, Clone, Debug, Default)]
@@ -300,6 +307,10 @@ extern "C" fn x64_handle_interrupt(vector: u8, stack_frame: *mut InterruptErrorF
                 stack_frame,
                 error_code
             );
+            if stack_frame.frame.is_user_mode() {
+                backtrace::unwind_user_stack_from(stack_frame.frame.rbp).unwrap();
+                get_scheduler().exit_current(1);
+            }
             panic!()
         }
         PAGE_FAULT_VECTOR => {

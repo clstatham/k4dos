@@ -204,12 +204,13 @@ impl LineDiscipline {
 
                         if termios.is_cooked() {
                             ringbuf.push_slice(current_line.as_slice());
+                            current_line.clear();
                         } else {
                             ringbuf.push(b'\n').ok();
                         }
 
                         // serial1_println!();
-                        current_line.clear();
+                        
                         if termios.lflag.contains(LFlag::ECHO) {
                             // callback(LineControl::Echo(b'\r'));
                             callback(LineControl::Echo(b'\n'));
@@ -329,9 +330,16 @@ impl Tty {
     }
 }
 
+#[repr(C)]
+struct WinSize {
+    ws_row: u16,
+    ws_col: u16,
+    ws_xpixel: u16,
+    ws_ypixel: u16,
+}
+
 impl File for Tty {
     fn ioctl(&self, cmd: usize, arg: usize) -> KResult<isize> {
-        // const TIOCSPTLCK: usize = 0x40045431;
         const TCGETS: usize = 0x5401;
         const TCSETS: usize = 0x5402;
         const TIOCGPGRP: usize = 0x540f;
@@ -339,24 +347,20 @@ impl File for Tty {
         const TIOCGWINSZ: usize = 0x5413;
 
         match cmd {
-            // TIOCSPTLCK => Ok(0),
             TCGETS => {
                 let arg = VirtAddr::new(arg);
-                arg.write(&Termios {
-                    lflag: LFlag::default(),
-                    iflag: IFlag::default(),
-                    ..Default::default()
-                })?;
+                let termios = *self.discipline.termios.lock();
+                arg.write(termios)?;
             }
             TCSETS => {
                 let arg = VirtAddr::new(arg);
                 let termios = arg.read::<Termios>()?;
-                log::debug!("{:?}", termios);
+                log::debug!("Setting Termios: {:?}", termios);
                 let mut lock = self.discipline.termios.lock();
                 *lock = *termios;
             }
             TIOCGPGRP => {
-                let group = self.discipline.foreground_process_group().ok_or_else(|| {
+                let group = self.discipline.foreground_process_group().ok_or({
                     errno!(
                         Errno::ENOENT,
                         "ioctl(): no foreground process group set for tty"
@@ -374,7 +378,16 @@ impl File for Tty {
                 self.discipline
                     .set_foreground_process_group(Arc::downgrade(&pg));
             }
-            TIOCGWINSZ => {}
+            TIOCGWINSZ => {
+                let arg = VirtAddr::new(arg);
+                let winsz = WinSize {
+                    ws_row: 80,
+                    ws_col: 24,
+                    ws_xpixel: 640,
+                    ws_ypixel: 480,
+                };
+                arg.write(winsz)?;
+            }
             _ => {
                 warn!("ioctl(): unknown cmd: {:#x}", cmd);
                 return Err(errno!(Errno::ENOSYS, "ioctl(): unknown cmd"));
