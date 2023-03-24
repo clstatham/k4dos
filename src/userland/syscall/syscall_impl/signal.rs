@@ -2,10 +2,8 @@ use crate::{
     errno,
     mem::addr::VirtAddr,
     task::{current_task, signal::{SignalMask, SIG_IGN, SigAction, SIG_DFL, DEFAULT_ACTIONS}, get_scheduler, TaskId},
-    util::{errno::Errno, error::KResult, ctypes::c_int},
+    util::{errno::Errno, error::KResult, ctypes::c_int}, userland::syscall::SyscallHandler,
 };
-
-use super::SyscallHandler;
 
 impl<'a> SyscallHandler<'a> {
     pub fn sys_rt_sigprocmask(

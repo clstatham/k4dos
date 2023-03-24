@@ -26,6 +26,10 @@ impl TaskGroup {
         self.pgid
     }
 
+    pub fn set_pgid(&mut self, pgid: PgId) {
+        self.pgid = pgid
+    }
+
     pub fn add(&mut self, task: Weak<Task>) {
         self.tasks.push(task)
     }

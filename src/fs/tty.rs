@@ -363,14 +363,13 @@ impl File for Tty {
                 let pgid = group.lock().pgid();
                 let arg = VirtAddr::new(arg);
 
-                arg.write(&pgid)?;
+                arg.write(pgid)?;
             }
             TIOCSPGRP => {
                 let arg = VirtAddr::new(arg);
                 let pgid = *arg.read::<c_int>()?;
                 let pg = get_scheduler()
-                    .find_group(pgid)
-                    .ok_or_else(|| errno!(Errno::ESRCH, "ioctl(): cannot find group for tty"))?;
+                    .find_or_create_group(pgid);
                 self.discipline
                     .set_foreground_process_group(Arc::downgrade(&pg));
             }

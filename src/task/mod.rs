@@ -26,7 +26,7 @@ use crate::{
 };
 
 use self::{
-    group::{TaskGroup},
+    group::{TaskGroup, PgId},
     scheduler::Scheduler,
     signal::{SigSet, SignalDelivery, SignalMask},
     vmem::Vmem,
@@ -91,7 +91,7 @@ pub struct Task {
 
     parent: IrqMutex<Weak<Task>>,
     pub(crate) children: Arc<IrqMutex<Vec<Arc<Task>>>>,
-    group: AtomicRefCell<Weak<IrqMutex<TaskGroup>>>,
+    pub(crate) group: AtomicRefCell<Weak<IrqMutex<TaskGroup>>>,
 
     vmem: Arc<IrqMutex<Vmem>>,
 
@@ -315,6 +315,10 @@ impl Task {
         } else {
             TaskId::new(0)
         }
+    }
+
+    pub fn pgid(&self) -> Option<PgId> {
+        Some(self.group.borrow().upgrade()?.lock().pgid())
     }
 
     pub fn get_state(&self) -> TaskState {

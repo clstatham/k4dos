@@ -3,7 +3,7 @@ use core::sync::atomic::{AtomicUsize, Ordering};
 use limine::LimineBootTimeRequest;
 use x86::io::{outb, inb};
 
-use crate::{util::IrqMutex, userland::syscall::time::TimeSpec};
+use crate::{util::IrqMutex, userland::syscall::syscall_impl::time::TimeSpec};
 
 
 const PIT_FREQUENCY_HZ: usize = 1000;

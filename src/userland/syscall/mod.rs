@@ -7,33 +7,13 @@ use crate::{
         path::{Path, PathBuf}, FileMode,
     },
     mem::addr::VirtAddr,
-    task::{current_task, get_scheduler, TaskId, vmem::{MMapProt, MMapFlags}},
-    userland::syscall::wait4::WaitOptions,
-    util::{ctypes::{c_int, c_nfds}, errno::Errno, KResult}, arch::idt::InterruptFrame,
+    task::{current_task, get_scheduler, TaskId, vmem::{MMapProt, MMapFlags}, group::PgId},
+    util::{ctypes::{c_int, c_nfds}, errno::Errno, KResult}, arch::idt::InterruptFrame, userland::syscall::syscall_impl::task::WaitOptions,
 };
 
 use super::buffer::UserCStr;
 
-pub mod arch_prctl;
-pub mod execve;
-pub mod exit;
-pub mod fork;
-pub mod ioctl;
-pub mod read;
-pub mod signal;
-pub mod pid;
-pub mod wait4;
-pub mod write;
-pub mod writev;
-pub mod mmap;
-pub mod stat;
-pub mod open;
-pub mod fcntl;
-pub mod getcwd;
-pub mod uname;
-pub mod poll;
-pub mod pipe;
-pub mod time;
+pub mod syscall_impl;
 
 pub fn errno_to_isize(res: &KResult<isize>) -> isize {
     match res {
@@ -103,6 +83,8 @@ impl<'a> SyscallHandler<'a> {
             SYS_GETTID => self.sys_getpid(), // todo
             SYS_GETPID => self.sys_getpid(),
             SYS_GETPPID => self.sys_getppid(),
+            SYS_GETPGID => self.sys_getpgid(TaskId::new(a1)),
+            SYS_SETPGID => self.sys_setpgid(TaskId::new(a1), a2 as PgId),
             SYS_EXIT => self.sys_exit(a1 as c_int),
             SYS_MMAP => self.sys_mmap(VirtAddr::new(a1), a2, crate::bitflags_from_user!(MMapProt, a3 as u64), crate::bitflags_from_user!(MMapFlags, a4 as u64), a5 as FileDesc, a6),
             SYS_MPROTECT => self.sys_mprotect(VirtAddr::new(a1), a2, crate::bitflags_from_user!(MMapProt, a3 as u64)),

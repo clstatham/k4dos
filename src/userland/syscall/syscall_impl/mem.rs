@@ -1,6 +1,4 @@
-use crate::{mem::addr::VirtAddr, fs::opened_file::FileDesc, util::KResult, task::{current_task, vmem::{MMapProt, MMapFlags}}};
-
-use super::SyscallHandler;
+use crate::{mem::addr::VirtAddr, fs::opened_file::FileDesc, util::KResult, task::{current_task, vmem::{MMapProt, MMapFlags}}, userland::syscall::SyscallHandler};
 
 impl<'a> SyscallHandler<'a> {
     pub fn sys_mmap(&mut self, addr: VirtAddr, size: usize, prot: MMapProt, flags: MMapFlags, fd: FileDesc, offset: usize) -> KResult<isize> {
