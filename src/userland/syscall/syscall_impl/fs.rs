@@ -72,9 +72,10 @@ impl<'a> SyscallHandler<'a> {
         let mut cwd = String::from(cwd.as_str());
         cwd.push('\0');
         let buf_val = buf.value();
-        let mut writer = UserBufferMut::from_vaddr(buf, len);
+        let ubuf = UserBufferMut::from_vaddr(buf, len);
+        let mut writer = UserBufferWriter::from(ubuf);
         writer
-            .write_at(cwd.as_str().as_bytes(), 0, &OpenOptions::empty())
+            .write_bytes(cwd.as_str().as_bytes())
             .unwrap(); // this currently never returns Err; may change
         Ok(buf_val as isize)
     }

@@ -4,7 +4,6 @@ use alloc::string::{String, ToString};
 
 use crate::{
     errno,
-    fs::opened_file::OpenOptions,
     mem::addr::VirtAddr,
     util::{align_up, errno::Errno, error::KResult},
 };
@@ -21,17 +20,6 @@ pub struct UserBuffer<'a> {
 
 impl<'a> UserBuffer<'a> {
     pub fn from_vaddr(vaddr: VirtAddr, len: usize) -> UserBuffer<'static> {
-        // let mut mp = allocate_mapped_pages(
-        //     bytes_to_pages(len),
-        //     mapper,
-        //     PageTableFlags::USER_ACCESSIBLE | PageTableFlags::WRITABLE,
-        // )
-        // .unwrap();
-        // unsafe {
-        //     mp.as_slice_mut::<u8>(0, len)
-        //         .unwrap()
-        //         .copy_from_slice(core::slice::from_raw_parts(vaddr.as_ptr(), len));
-        // }
         UserBuffer {
             inner: Inner::User { base: vaddr, len },
         }
@@ -49,26 +37,6 @@ impl<'a> UserBuffer<'a> {
             Inner::Slice(slice) => slice.len(),
             Inner::User { len, .. } => *len,
         }
-    }
-
-    pub fn read_at(
-        &mut self,
-        buffer: &mut [u8],
-        offset: usize,
-        _options: &OpenOptions,
-    ) -> KResult<usize> {
-        let len = usize::min(self.len() - offset, buffer.len());
-        if len == 0 {
-            return Ok(0);
-        }
-
-        match &self.inner {
-            Inner::Slice(src) => buffer[..len].copy_from_slice(&src[offset..(offset + len)]),
-            Inner::User { base, .. } => {
-                base.read_bytes(&mut buffer[..len])?;
-            }
-        }
-        Ok(len)
     }
 }
 
@@ -112,49 +80,6 @@ impl<'a> UserBufferMut<'a> {
             InnerMut::Slice(slice) => slice.len(),
             InnerMut::User { len, .. } => *len,
         }
-    }
-
-    pub fn read_at(
-        &self,
-        buffer: &mut [u8],
-        offset: usize,
-        _options: &OpenOptions,
-    ) -> KResult<usize> {
-        let len = usize::min(self.len() - offset, buffer.len());
-        if len == 0 {
-            return Ok(0);
-        }
-
-        match &self.inner {
-            InnerMut::Slice(src) => buffer[..len].copy_from_slice(&src[offset..(offset + len)]),
-            InnerMut::User { base, .. } => unsafe {
-                buffer[..len].copy_from_slice(core::slice::from_raw_parts(base.as_ptr(), len));
-            },
-        }
-        Ok(len)
-    }
-
-    pub fn write_at(
-        &mut self,
-        buffer: &[u8],
-        offset: usize,
-        _options: &OpenOptions,
-    ) -> KResult<usize> {
-        let len = usize::min(self.len() - offset, buffer.len());
-        if len == 0 {
-            return Ok(0);
-        }
-
-        match &mut self.inner {
-            InnerMut::Slice(dst) => dst[..len].copy_from_slice(&buffer[offset..(offset + len)]),
-            InnerMut::User { base, .. } => unsafe {
-                core::slice::from_raw_parts_mut(base.as_mut_ptr(), len)
-                    .copy_from_slice(&buffer[offset..(offset + len)]);
-                // base.write_bytes(&buffer[offset..(offset + len)])?;
-            },
-        }
-
-        Ok(len)
     }
 }
 
@@ -247,7 +172,7 @@ impl<'a> UserBufferReader<'a> {
         Ok(read_len)
     }
 
-    pub fn read<T: Copy>(&mut self) -> KResult<T> {
+    pub fn read<T: Copy + Sized>(&mut self) -> KResult<T> {
         // let read_len = core::cmp::min(dst.len(), self.remaining_len());
         // if read_len == 0 {
         //     return Ok(0);
@@ -303,7 +228,7 @@ impl<'a> UserBufferWriter<'a> {
         self.pos
     }
 
-    pub fn write<T: Copy>(&mut self, value: T) -> KResult<usize> {
+    pub fn write<T: Copy + Sized>(&mut self, value: T) -> KResult<usize> {
         let bytes =
             unsafe { core::slice::from_raw_parts(&value as *const T as *const u8, size_of::<T>()) };
         self.write_bytes(bytes)
