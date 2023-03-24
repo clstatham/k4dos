@@ -11,7 +11,7 @@
     const_refs_to_cell,
     slice_pattern,
     is_sorted,
-    map_try_insert,
+    map_try_insert
 )]
 #![allow(clippy::missing_safety_doc)]
 

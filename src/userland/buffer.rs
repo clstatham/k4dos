@@ -191,8 +191,7 @@ impl UserCStr {
         // vaddr.access_ok(max_len as isize)?;
         vaddr.read_ok::<u8>()?;
         // SAFE: we've validated the length of the string, and confirmed that it won't run into kernel memory
-        let read_len =
-            unsafe { user_strncpy(tmp.as_mut_ptr(), vaddr.as_ptr(), max_len) };
+        let read_len = unsafe { user_strncpy(tmp.as_mut_ptr(), vaddr.as_ptr(), max_len) };
         let string = core::str::from_utf8(&tmp[..read_len])
             .map_err(|_| errno!(Errno::EINVAL, "UserCStr: UTF-8 parsing error"))?
             .to_string();
@@ -260,9 +259,7 @@ impl<'a> UserBufferReader<'a> {
                 // this could cause a page fault if the inner slice of the buffer isn't mapped to the current page table!
                 unsafe { *(src.as_ptr().add(self.pos) as *const T) }
             }
-            Inner::User { base, .. } => *base
-                .add(self.pos)
-                .read()?
+            Inner::User { base, .. } => *base.add(self.pos).read()?,
         };
 
         self.pos += size_of::<T>();
@@ -274,7 +271,10 @@ impl<'a> UserBufferReader<'a> {
         if len <= self.remaining_len() {
             Ok(())
         } else {
-            Err(errno!(Errno::EINVAL, "check_remaining_len(): len out of bounds"))
+            Err(errno!(
+                Errno::EINVAL,
+                "check_remaining_len(): len out of bounds"
+            ))
         }
     }
 
@@ -364,7 +364,10 @@ impl<'a> UserBufferWriter<'a> {
         if len <= self.remaining_len() {
             Ok(())
         } else {
-            Err(errno!(Errno::EINVAL, "check_remaining_len(): len out of bounds"))
+            Err(errno!(
+                Errno::EINVAL,
+                "check_remaining_len(): len out of bounds"
+            ))
         }
     }
 

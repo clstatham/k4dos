@@ -1,14 +1,24 @@
-
-
 use crate::{
+    arch::idt::InterruptFrame,
     errno,
     fs::{
         opened_file::{FileDesc, OpenFlags},
-        path::{Path, PathBuf}, FileMode,
+        path::{Path, PathBuf},
+        FileMode,
     },
     mem::addr::VirtAddr,
-    task::{current_task, get_scheduler, TaskId, vmem::{MMapProt, MMapFlags}, group::PgId},
-    util::{ctypes::{c_int, c_nfds}, errno::Errno, KResult}, arch::idt::InterruptFrame, userland::syscall::syscall_impl::task::WaitOptions,
+    task::{
+        current_task, get_scheduler,
+        group::PgId,
+        vmem::{MMapFlags, MMapProt},
+        TaskId,
+    },
+    userland::syscall::syscall_impl::task::WaitOptions,
+    util::{
+        ctypes::{c_int, c_nfds},
+        errno::Errno,
+        KResult,
+    },
 };
 
 use super::buffer::UserCStr;
@@ -23,7 +33,7 @@ pub fn errno_to_isize(res: &KResult<isize>) -> isize {
         }
         Err(err) => {
             // if let Some(msg) = err.msg {
-            
+
             // }
             let errno = err.errno().unwrap() as i32;
             -errno as isize
@@ -86,10 +96,23 @@ impl<'a> SyscallHandler<'a> {
             SYS_GETPGID => self.sys_getpgid(TaskId::new(a1)),
             SYS_SETPGID => self.sys_setpgid(TaskId::new(a1), a2 as PgId),
             SYS_EXIT => self.sys_exit(a1 as c_int),
-            SYS_MMAP => self.sys_mmap(VirtAddr::new(a1), a2, crate::bitflags_from_user!(MMapProt, a3 as u64), crate::bitflags_from_user!(MMapFlags, a4 as u64), a5 as FileDesc, a6),
-            SYS_MPROTECT => self.sys_mprotect(VirtAddr::new(a1), a2, crate::bitflags_from_user!(MMapProt, a3 as u64)),
+            SYS_MMAP => self.sys_mmap(
+                VirtAddr::new(a1),
+                a2,
+                crate::bitflags_from_user!(MMapProt, a3 as u64),
+                crate::bitflags_from_user!(MMapFlags, a4 as u64),
+                a5 as FileDesc,
+                a6,
+            ),
+            SYS_MPROTECT => self.sys_mprotect(
+                VirtAddr::new(a1),
+                a2,
+                crate::bitflags_from_user!(MMapProt, a3 as u64),
+            ),
             SYS_MUNMAP => self.sys_munmap(VirtAddr::new(a1), a2),
-            SYS_RT_SIGACTION => self.sys_rt_sigaction(a1 as c_int, VirtAddr::new(a2), VirtAddr::new(a3)),
+            SYS_RT_SIGACTION => {
+                self.sys_rt_sigaction(a1 as c_int, VirtAddr::new(a2), VirtAddr::new(a3))
+            }
             SYS_GETUID => Ok(0),    // TODO:
             SYS_GETEUID => Ok(0),   // TODO:
             SYS_SETUID => Ok(0),    // TODO:
@@ -98,7 +121,11 @@ impl<'a> SyscallHandler<'a> {
             SYS_STAT => self.sys_stat(&resolve_path(a1)?, VirtAddr::new(a2)),
             SYS_LSTAT => self.sys_lstat(&resolve_path(a1)?, VirtAddr::new(a2)),
             SYS_FSTAT => self.sys_fstat(a1 as FileDesc, VirtAddr::new(a2)),
-            SYS_OPEN => self.sys_open(&resolve_path(a1)?, crate::bitflags_from_user!(OpenFlags, a2 as i32), FileMode::new(a3 as u32)),
+            SYS_OPEN => self.sys_open(
+                &resolve_path(a1)?,
+                crate::bitflags_from_user!(OpenFlags, a2 as i32),
+                FileMode::new(a3 as u32),
+            ),
             SYS_GETCWD => self.sys_getcwd(VirtAddr::new(a1), a2),
             SYS_GETDENTS64 => self.sys_getdents64(a1 as FileDesc, VirtAddr::new(a2), a3),
             SYS_FCNTL => self.sys_fcntl(a1 as FileDesc, a2 as c_int, a3),
@@ -109,7 +136,14 @@ impl<'a> SyscallHandler<'a> {
             SYS_CHDIR => self.sys_chdir(&resolve_path(a1)?),
             SYS_RT_SIGRETURN => self.sys_rt_sigreturn(),
             SYS_PIPE => self.sys_pipe(VirtAddr::new(a1)),
-            SYS_CLONE => self.sys_clone(a1, VirtAddr::new(a2), a3, VirtAddr::new(a4), a5, VirtAddr::new(a6)),
+            SYS_CLONE => self.sys_clone(
+                a1,
+                VirtAddr::new(a2),
+                a3,
+                VirtAddr::new(a4),
+                a5,
+                VirtAddr::new(a6),
+            ),
             SYS_KILL => self.sys_kill(TaskId::new(a1), a2 as c_int),
             SYS_TKILL => self.sys_kill(TaskId::new(a1), a2 as c_int), // todo
             _ => Err(errno!(Errno::ENOSYS, "dispatch(): syscall not implemented")),
@@ -117,11 +151,17 @@ impl<'a> SyscallHandler<'a> {
 
         let exit_pid = current_task().pid();
         if exit_pid == enter_pid {
-            if let Err(err) = get_scheduler().try_delivering_signal(self.frame, errno_to_isize(&res)) {
+            if let Err(err) =
+                get_scheduler().try_delivering_signal(self.frame, errno_to_isize(&res))
+            {
                 log::error!("Failed to send signal: {:?}", err);
             }
         } else {
-            log::warn!("Syscall ended with a different process ({}) than it started with ({})!", exit_pid.as_usize(), enter_pid.as_usize());
+            log::warn!(
+                "Syscall ended with a different process ({}) than it started with ({})!",
+                exit_pid.as_usize(),
+                enter_pid.as_usize()
+            );
         }
         if let Err(ref err) = res {
             log::error!(
@@ -138,16 +178,19 @@ impl<'a> SyscallHandler<'a> {
 macro_rules! bitflags_from_user {
     ($st:tt, $input:expr) => {{
         let bits = $input;
-            match $st::from_bits(bits) {
-                Some(flags) => Ok(flags)?,
-                None => {
+        match $st::from_bits(bits) {
+            Some(flags) => Ok(flags)?,
+            None => {
                 log::warn!(
                     concat!("unsupported bitflags for ", stringify!($st), ": {:#x}"),
                     bits
                 );
                 // $st::from_bits_truncate(bits)
 
-                Err($crate::errno!($crate::util::errno::Errno::ENOSYS, "bitflags_from_user(): unsupported bitflags"))?
+                Err($crate::errno!(
+                    $crate::util::errno::Errno::ENOSYS,
+                    "bitflags_from_user(): unsupported bitflags"
+                ))?
             }
         }
     }};

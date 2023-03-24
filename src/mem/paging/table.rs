@@ -12,7 +12,7 @@ use crate::{
         allocator::alloc_kernel_frames,
         consts::{PAGE_SIZE, PAGE_TABLE_ENTRIES},
     },
-    util::{KResult},
+    util::KResult,
 };
 
 use super::units::Frame;

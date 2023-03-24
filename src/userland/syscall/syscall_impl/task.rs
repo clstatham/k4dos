@@ -1,13 +1,15 @@
-use core::{ops::Add, mem::size_of};
+use core::{mem::size_of, ops::Add};
 
 use alloc::{sync::Arc, vec::Vec};
 use bitflags::bitflags;
 
 use crate::{
     errno,
+    fs::path::Path,
     mem::addr::VirtAddr,
-    task::{current_task, Task, get_scheduler, TaskId, group::PgId, JOIN_WAIT_QUEUE, TaskState},
-    util::{errno::Errno, KResult, ctypes::c_int}, userland::{syscall::SyscallHandler, buffer::UserCStr}, fs::path::Path,
+    task::{current_task, get_scheduler, group::PgId, Task, TaskId, TaskState, JOIN_WAIT_QUEUE},
+    userland::{buffer::UserCStr, syscall::SyscallHandler},
+    util::{ctypes::c_int, errno::Errno, KResult},
 };
 
 const ARG_MAX: usize = 512;
@@ -26,7 +28,15 @@ impl<'a> SyscallHandler<'a> {
         Ok(child.pid().as_usize() as isize)
     }
 
-    pub fn sys_clone(&mut self, _clone_flags: usize, user_stack: VirtAddr, r8:  usize, args: VirtAddr, r9: usize, entry_point: VirtAddr) -> KResult<isize> {
+    pub fn sys_clone(
+        &mut self,
+        _clone_flags: usize,
+        user_stack: VirtAddr,
+        r8: usize,
+        args: VirtAddr,
+        r9: usize,
+        entry_point: VirtAddr,
+    ) -> KResult<isize> {
         let child = current_task().clone_process(entry_point, user_stack, args, r8, r9, self.frame);
         Ok(child.pid().as_usize() as isize)
     }
@@ -39,7 +49,12 @@ impl<'a> SyscallHandler<'a> {
     ) -> KResult<isize> {
         let current = current_task();
         log::debug!("Statting path {}", path);
-        let exefile = current_task().root_fs.lock().lookup(path, true)?.as_file()?.clone();
+        let exefile = current_task()
+            .root_fs
+            .lock()
+            .lookup(path, true)?
+            .as_file()?
+            .clone();
 
         let mut argv = Vec::new();
         for i in 0..ARG_MAX {
@@ -90,20 +105,37 @@ impl<'a> SyscallHandler<'a> {
         if pid.as_usize() == 0 {
             Ok(current_task().pgid().unwrap() as isize)
         } else {
-            Ok(get_scheduler().find_task(pid).ok_or(errno!(Errno::ESRCH))?.pgid().unwrap() as isize)
+            Ok(get_scheduler()
+                .find_task(pid)
+                .ok_or(errno!(Errno::ESRCH))?
+                .pgid()
+                .unwrap() as isize)
         }
     }
 
     pub fn sys_setpgid(&mut self, pid: TaskId, pgid: PgId) -> KResult<isize> {
         if pid.as_usize() == 0 {
-            current_task().group.borrow_mut().upgrade().unwrap().lock().set_pgid(pgid);
+            current_task()
+                .group
+                .borrow_mut()
+                .upgrade()
+                .unwrap()
+                .lock()
+                .set_pgid(pgid);
         } else {
-            get_scheduler().find_task(pid).ok_or(errno!(Errno::ESRCH))?.group.borrow_mut().upgrade().unwrap().lock().set_pgid(pgid);
+            get_scheduler()
+                .find_task(pid)
+                .ok_or(errno!(Errno::ESRCH))?
+                .group
+                .borrow_mut()
+                .upgrade()
+                .unwrap()
+                .lock()
+                .set_pgid(pgid);
         }
         Ok(0)
     }
 }
-
 
 bitflags! {
     pub struct WaitOptions: c_int {
@@ -120,30 +152,29 @@ impl<'a> SyscallHandler<'a> {
         options: WaitOptions,
         _rusage: VirtAddr, // could be null
     ) -> KResult<isize> {
-        let (got_pid, status_val) =
-            JOIN_WAIT_QUEUE.sleep_signalable_until(None, || {
-                let current = current_task();
-                let children = current.children.lock();
-                for child in children.iter() {
-                    if pid.as_usize() as isize > 0 && pid != child.pid() {
-                        continue;
-                    }
-
-                    if pid.as_usize() == 0 {
-                        todo!()
-                    }
-
-                    if let TaskState::ExitedWith(status_val) = child.get_state() {
-                        return Ok(Some((child.pid(), status_val)));
-                    }
+        let (got_pid, status_val) = JOIN_WAIT_QUEUE.sleep_signalable_until(None, || {
+            let current = current_task();
+            let children = current.children.lock();
+            for child in children.iter() {
+                if pid.as_usize() as isize > 0 && pid != child.pid() {
+                    continue;
                 }
 
-                if options.contains(WaitOptions::WNOHANG) {
-                    return Ok(Some((TaskId::new(0), 0)));
+                if pid.as_usize() == 0 {
+                    todo!()
                 }
 
-                Ok(None)
-            })?;
+                if let TaskState::ExitedWith(status_val) = child.get_state() {
+                    return Ok(Some((child.pid(), status_val)));
+                }
+            }
+
+            if options.contains(WaitOptions::WNOHANG) {
+                return Ok(Some((TaskId::new(0), 0)));
+            }
+
+            Ok(None)
+        })?;
 
         // log::debug!("wait4: status = {status_val}");
         current_task()
@@ -161,8 +192,6 @@ impl<'a> SyscallHandler<'a> {
         Ok(got_pid.as_usize() as isize)
     }
 }
-
-
 
 fn arch_prctl(current_task: &Arc<Task>, code: i32, addr: VirtAddr) -> KResult<()> {
     const ARCH_SET_FS: i32 = 0x1002;
@@ -186,5 +215,3 @@ fn arch_prctl(current_task: &Arc<Task>, code: i32, addr: VirtAddr) -> KResult<()
 
     Ok(())
 }
-
-

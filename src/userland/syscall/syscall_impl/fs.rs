@@ -1,9 +1,29 @@
 use core::{mem::size_of, ops::Add};
 
-use alloc::{string::String, sync::Arc, borrow::ToOwned};
+use alloc::{borrow::ToOwned, string::String, sync::Arc};
 
-use crate::{util::{ctypes::{c_int, c_nfds, c_short}, KResult, errno::Errno, align_up}, userland::{syscall::SyscallHandler, buffer::{UserBufferMut, UserBufferWriter, UserBufferReader, UserBuffer}}, task::current_task, fs::{opened_file::{FileDesc, OpenFlags, OpenOptions}, path::Path, FileMode, INode, initramfs::file::InitRamFsFile, alloc_inode_no, POLL_WAIT_QUEUE, PollStatus, O_WRONLY, O_RDWR}, errno, mem::addr::VirtAddr, bitflags_from_user};
-
+use crate::{
+    bitflags_from_user, errno,
+    fs::{
+        alloc_inode_no,
+        initramfs::file::InitRamFsFile,
+        opened_file::{FileDesc, OpenFlags, OpenOptions},
+        path::Path,
+        FileMode, INode, PollStatus, O_RDWR, O_WRONLY, POLL_WAIT_QUEUE,
+    },
+    mem::addr::VirtAddr,
+    task::current_task,
+    userland::{
+        buffer::{UserBuffer, UserBufferMut, UserBufferReader, UserBufferWriter},
+        syscall::SyscallHandler,
+    },
+    util::{
+        align_up,
+        ctypes::{c_int, c_nfds, c_short},
+        errno::Errno,
+        KResult,
+    },
+};
 
 pub const F_DUPFD: c_int = 0;
 pub const F_GETFD: c_int = 1;
@@ -43,9 +63,7 @@ impl<'a> SyscallHandler<'a> {
     }
 
     pub fn sys_getcwd(&mut self, buf: VirtAddr, len: usize) -> KResult<isize> {
-        let cwd = current_task().root_fs.lock()
-            .cwd_path()
-            .resolve_abs_path();
+        let cwd = current_task().root_fs.lock().cwd_path().resolve_abs_path();
 
         if len < cwd.as_str().as_bytes().len() {
             return Err(errno!(Errno::ERANGE, "sys_getcwd(): buffer too small"));
@@ -115,11 +133,11 @@ fn create(path: &Path, flags: OpenFlags, _mode: FileMode) -> KResult<INode> {
 
     let current = current_task();
     let root = current.root_fs.lock();
-    let inode = INode::File(Arc::new(InitRamFsFile::new(name.to_owned(), alloc_inode_no())));
-    root
-        .lookup(path, true)?
-        .as_dir()?
-        .insert(inode.clone());
+    let inode = INode::File(Arc::new(InitRamFsFile::new(
+        name.to_owned(),
+        alloc_inode_no(),
+    )));
+    root.lookup(path, true)?.as_dir()?.insert(inode.clone());
     Ok(inode)
 }
 
@@ -129,8 +147,9 @@ impl<'a> SyscallHandler<'a> {
         log::trace!("Attempting to open {}", path);
         if flags.contains(OpenFlags::O_CREAT) {
             match create(path, flags, mode) {
-                Ok(_) => {},
-                Err(err) if flags.contains(OpenFlags::O_EXCL) && err.errno() == Some(Errno::EEXIST) => {},
+                Ok(_) => {}
+                Err(err)
+                    if flags.contains(OpenFlags::O_EXCL) && err.errno() == Some(Errno::EEXIST) => {}
                 Err(err) => return Err(err),
             }
         }
@@ -160,13 +179,16 @@ impl<'a> SyscallHandler<'a> {
 
     pub fn sys_pipe(&mut self, fds: VirtAddr) -> KResult<isize> {
         if fds == VirtAddr::null() {
-            return Err(errno!(Errno::EFAULT, "sys_pipe(): null VirtAddr"))
+            return Err(errno!(Errno::EFAULT, "sys_pipe(): null VirtAddr"));
         }
         // let fds: &mut [FileDesc] = unsafe { core::slice::from_raw_parts_mut::<i32>(fds.as_mut_ptr(), core::mem::size_of::<i32>() * 2) };
 
         let current = current_task();
-        let pipe = current.opened_files.lock().open_pipe(OpenOptions::empty())?;
-        
+        let pipe = current
+            .opened_files
+            .lock()
+            .open_pipe(OpenOptions::empty())?;
+
         let write_fd = pipe.write_fd();
         let read_fd = pipe.read_fd();
 
@@ -184,7 +206,11 @@ impl<'a> SyscallHandler<'a> {
         // if timeout > 0 {
         //     log::warn!("Ignoring timeout of {} ms.", timeout);
         // }
-        let timeout = if timeout > 0 { Some(timeout as usize) } else { None };
+        let timeout = if timeout > 0 {
+            Some(timeout as usize)
+        } else {
+            None
+        };
 
         POLL_WAIT_QUEUE.sleep_signalable_until(timeout, || {
             // todo: check timeout
@@ -198,7 +224,7 @@ impl<'a> SyscallHandler<'a> {
                 let events = bitflags_from_user!(PollStatus, reader.read::<c_short>()?);
                 // log::debug!("events: {:?}", events);
                 if fd < 0 || events.is_empty() {
-                    return Err(errno!(Errno::EINVAL))
+                    return Err(errno!(Errno::EINVAL));
                 } else {
                     let status = current_task().opened_files.lock().get(fd)?.poll()?;
                     // log::debug!("status: {:?}", status);
@@ -208,7 +234,8 @@ impl<'a> SyscallHandler<'a> {
                     }
                     // log::debug!("revents: {:?}", revents);
 
-                    fds.add(reader.read_len()).write::<c_short>(revents.bits())?;
+                    fds.add(reader.read_len())
+                        .write::<c_short>(revents.bits())?;
 
                     reader.skip(size_of::<c_short>())?;
                 };
@@ -257,7 +284,6 @@ impl<'a> SyscallHandler<'a> {
     }
 }
 
-
 pub const IOV_MAX: usize = 1024;
 #[repr(C)]
 #[derive(Clone, Copy)]
@@ -300,4 +326,3 @@ impl<'a> SyscallHandler<'a> {
         Ok(total as isize)
     }
 }
-

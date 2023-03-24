@@ -3,16 +3,11 @@ use x86::{
     controlregs::{self, Cr0, Cr4, Xcr0},
     cpuid::CpuId,
 };
-use x86_64::instructions::{interrupts, hlt};
+use x86_64::instructions::{hlt, interrupts};
 use xmas_elf::ElfFile;
 
 use crate::{
-    fs::{
-        self,
-        initramfs::get_root,
-        path::Path,
-        tty::{TTY},
-    },
+    fs::{self, initramfs::get_root, path::Path, tty::TTY},
     mem::{
         self,
         allocator::{KERNEL_FRAME_ALLOCATOR, KERNEL_PAGE_ALLOCATOR},

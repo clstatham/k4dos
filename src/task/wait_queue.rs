@@ -1,8 +1,8 @@
 use alloc::{collections::VecDeque, sync::Arc};
 
 use crate::{
-    errno,
-    util::{errno::Errno, KResult, IrqMutex}, arch,
+    arch, errno,
+    util::{errno::Errno, IrqMutex, KResult},
 };
 
 use super::{current_task, get_scheduler, Task, TaskState};
@@ -24,7 +24,11 @@ impl WaitQueue {
         }
     }
 
-    pub fn sleep_signalable_until<F, R>(&self, timeout: Option<usize>, mut sleep_if_none: F) -> KResult<R>
+    pub fn sleep_signalable_until<F, R>(
+        &self,
+        timeout: Option<usize>,
+        mut sleep_if_none: F,
+    ) -> KResult<R>
     where
         F: FnMut() -> KResult<Option<R>>,
     {
@@ -32,7 +36,10 @@ impl WaitQueue {
         loop {
             if let Some(timeout) = timeout {
                 if arch::time::get_uptime_ticks() >= start_time + timeout {
-                    return Err(errno!(Errno::EINTR, "sleep_signalable_until(): timeout reached"))
+                    return Err(errno!(
+                        Errno::EINTR,
+                        "sleep_signalable_until(): timeout reached"
+                    ));
                 }
             }
             let current = current_task();
@@ -47,10 +54,11 @@ impl WaitQueue {
 
             if current.has_pending_signals() {
                 scheduler.resume_task(current.clone());
-                self.queue
-                    .lock()
-                    .retain(|t| t.pid != current.pid);
-                return Err(errno!(Errno::EINTR, "sleep_signalable_until(): interrupted by pending signals"));
+                self.queue.lock().retain(|t| t.pid != current.pid);
+                return Err(errno!(
+                    Errno::EINTR,
+                    "sleep_signalable_until(): interrupted by pending signals"
+                ));
             }
 
             let ret_value = match sleep_if_none() {
@@ -61,9 +69,7 @@ impl WaitQueue {
 
             if let Some(ret_val) = ret_value {
                 scheduler.resume_task(current.clone());
-                self.queue
-                    .lock()
-                    .retain(|t| t.pid != current.pid);
+                self.queue.lock().retain(|t| t.pid != current.pid);
                 return ret_val;
             }
             scheduler.sleep(timeout)?;

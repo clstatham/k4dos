@@ -5,8 +5,13 @@ use super::errno::Errno;
 pub type KResult<T> = Result<T, KError>;
 
 pub enum KError {
-    Message { msg: &'static str },
-    Errno { errno: Errno, msg: Option<&'static str> },
+    Message {
+        msg: &'static str,
+    },
+    Errno {
+        errno: Errno,
+        msg: Option<&'static str>,
+    },
 }
 
 impl KError {
@@ -33,12 +38,10 @@ impl Debug for KError {
             // KError::Error { err } => write!(f, "{:?}", err),
             // KError::ErrorWithMessage { err, msg } => write!(f, "{:?}: {}", err, msg),
             KError::Message { msg } => write!(f, "{}", msg),
-            KError::Errno { errno, msg } => {
-                match msg {
-                    Some(msg) => write!(f, "{:?}: {}", errno, msg),
-                    None => write!(f, "{:?}", errno),
-                }
-            }
+            KError::Errno { errno, msg } => match msg {
+                Some(msg) => write!(f, "{:?}: {}", errno, msg),
+                None => write!(f, "{:?}", errno),
+            },
         }
     }
 }
@@ -59,9 +62,15 @@ macro_rules! kerrmsg {
 #[macro_export]
 macro_rules! errno {
     ($e:expr) => {
-        $crate::util::error::KError::Errno { errno: $e, msg: None }
+        $crate::util::error::KError::Errno {
+            errno: $e,
+            msg: None,
+        }
     };
     ($e:expr, $msg:expr) => {
-        $crate::util::error::KError::Errno { errno: $e, msg: Some($msg) }
-    }
+        $crate::util::error::KError::Errno {
+            errno: $e,
+            msg: Some($msg),
+        }
+    };
 }

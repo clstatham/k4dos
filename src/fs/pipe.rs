@@ -1,9 +1,13 @@
-use alloc::{sync::Arc, format, vec::Vec};
+use alloc::{format, sync::Arc, vec::Vec};
 
+use crate::{
+    errno,
+    task::wait_queue::WaitQueue,
+    userland::buffer::{UserBuffer, UserBufferMut, UserBufferReader, UserBufferWriter},
+    util::{errno::Errno, ringbuffer::RingBuffer, IrqMutex, KResult},
+};
 
-use crate::{util::{ringbuffer::RingBuffer, IrqMutex, KResult, errno::Errno}, userland::buffer::{UserBufferMut, UserBufferWriter, UserBuffer, UserBufferReader}, task::{wait_queue::WaitQueue}, errno};
-
-use super::{opened_file::FileDesc, FsNode, File, path::Path};
+use super::{opened_file::FileDesc, path::Path, File, FsNode};
 
 pub static PIPE_FS: PipeFs = PipeFs::new();
 
@@ -16,7 +20,12 @@ pub struct Pipe {
 
 impl Pipe {
     pub fn new(read_fd: FileDesc, write_fd: FileDesc) -> Self {
-        Self { wait_queue: WaitQueue::new(), ringbuffer: Arc::new(IrqMutex::new(RingBuffer::new())), read_fd, write_fd }
+        Self {
+            wait_queue: WaitQueue::new(),
+            ringbuffer: Arc::new(IrqMutex::new(RingBuffer::new())),
+            read_fd,
+            write_fd,
+        }
     }
 
     pub fn read_pipe(&self, buf: UserBufferMut<'_>) -> KResult<usize> {
@@ -76,21 +85,21 @@ impl FsNode for Pipe {
 
 impl File for Pipe {
     fn read(
-            &self,
-            _offset: usize,
-            buf: UserBufferMut,
-            _options: &super::opened_file::OpenOptions,
-            // len: usize,
-        ) -> KResult<usize> {
+        &self,
+        _offset: usize,
+        buf: UserBufferMut,
+        _options: &super::opened_file::OpenOptions,
+        // len: usize,
+    ) -> KResult<usize> {
         self.read_pipe(buf)
     }
 
     fn write(
-            &self,
-            _offset: usize,
-            buf: UserBuffer<'_>,
-            _options: &super::opened_file::OpenOptions,
-        ) -> KResult<usize> {
+        &self,
+        _offset: usize,
+        buf: UserBuffer<'_>,
+        _options: &super::opened_file::OpenOptions,
+    ) -> KResult<usize> {
         self.write_pipe(buf)
     }
 }
@@ -101,7 +110,9 @@ pub struct PipeFs {
 
 impl PipeFs {
     pub const fn new() -> Self {
-        Self { pipes: IrqMutex::new(Vec::new()) }
+        Self {
+            pipes: IrqMutex::new(Vec::new()),
+        }
     }
 
     // pub fn pipe(&mut self, reader: Arc<Task>, writer: Arc<Task>) -> KResult<Arc<Pipe>> {
@@ -113,6 +124,11 @@ impl PipeFs {
     }
 
     pub fn lookup(&self, path: &Path) -> KResult<Arc<Pipe>> {
-        self.pipes.lock().iter().find(|pipe| pipe.get_name() == path.pipe_name().unwrap()).cloned().ok_or(errno!(Errno::ENOENT, "pipe does not exist"))
+        self.pipes
+            .lock()
+            .iter()
+            .find(|pipe| pipe.get_name() == path.pipe_name().unwrap())
+            .cloned()
+            .ok_or(errno!(Errno::ENOENT, "pipe does not exist"))
     }
 }

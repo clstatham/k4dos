@@ -9,24 +9,27 @@ use alloc::{
 };
 use atomic_refcell::AtomicRefCell;
 use crossbeam_utils::atomic::AtomicCell;
-use spin::{Once};
+use spin::Once;
 use x86_64::structures::idt::PageFaultErrorCode;
 
 use crate::{
-    arch::{idt::{InterruptFrame, InterruptErrorFrame}, task::ArchTask},
+    arch::{
+        idt::{InterruptErrorFrame, InterruptFrame},
+        task::ArchTask,
+    },
     fs::{
         initramfs::{get_root, root::RootFs},
         opened_file::{FileDesc, OpenFlags, OpenOptions, OpenedFile, OpenedFileTable},
-        path::{Path},
+        path::Path,
         tty::TTY,
         FileRef,
     },
     mem::addr::VirtAddr,
-    util::{ctypes::c_int, KResult, IrqMutex},
+    util::{ctypes::c_int, IrqMutex, KResult},
 };
 
 use self::{
-    group::{TaskGroup, PgId},
+    group::{PgId, TaskGroup},
     scheduler::Scheduler,
     signal::{SigSet, SignalDelivery, SignalMask},
     vmem::Vmem,
@@ -187,11 +190,7 @@ impl Task {
         // stderr
         files.open_with_fd(
             2,
-            Arc::new(OpenedFile::new(
-                console,
-                OpenFlags::O_WRONLY.into(),
-                0,
-            )),
+            Arc::new(OpenedFile::new(console, OpenFlags::O_WRONLY.into(), 0)),
             OpenOptions::empty(),
         )?;
         let group = sched.find_or_create_group(1);
@@ -265,8 +264,20 @@ impl Task {
         self.make_child(arch)
     }
 
-    pub fn clone_process(&self, entry_point: VirtAddr, user_stack: VirtAddr, args: VirtAddr, r8: usize, r9: usize,  syscall_frame: &InterruptFrame) -> Arc<Task> {
-        let arch = UnsafeCell::new(self.arch_mut().clone_process(entry_point, user_stack, args, r8, r9, syscall_frame).unwrap());
+    pub fn clone_process(
+        &self,
+        entry_point: VirtAddr,
+        user_stack: VirtAddr,
+        args: VirtAddr,
+        r8: usize,
+        r9: usize,
+        syscall_frame: &InterruptFrame,
+    ) -> Arc<Task> {
+        let arch = UnsafeCell::new(
+            self.arch_mut()
+                .clone_process(entry_point, user_stack, args, r8, r9, syscall_frame)
+                .unwrap(),
+        );
         let pid = TaskId::allocate();
 
         let group = self.group.borrow().upgrade().unwrap();
@@ -285,7 +296,7 @@ impl Task {
             signaled_frame: AtomicCell::new(None),
             sigset: Arc::new(IrqMutex::new(SigSet::ZERO)),
             vmem: self.vmem.clone(), // important: we don't fork_from here
-            // vmem: Arc::new(SpinLock::new(Vmem::new())),
+                                     // vmem: Arc::new(SpinLock::new(Vmem::new())),
         });
         self.add_child(t.clone());
         // t.vmem.lock().fork_from(&self.vmem.lock());
@@ -372,8 +383,7 @@ impl Task {
         let mut sigset = self.sigset.lock();
         // if let Ok(old) = oldset {
         if oldset.value() != 0 {
-            oldset
-                .write_bytes(sigset.as_raw_slice())?;
+            oldset.write_bytes(sigset.as_raw_slice())?;
         }
 
         // }

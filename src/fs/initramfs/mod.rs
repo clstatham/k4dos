@@ -2,7 +2,8 @@ use core::iter::Peekable;
 
 use alloc::{
     string::{String, ToString},
-    sync::{Arc, Weak}, vec::Vec,
+    sync::{Arc, Weak},
+    vec::Vec,
 };
 use spin::Once;
 
@@ -17,7 +18,7 @@ use crate::{
         path::{Components, Path, PathBuf},
         DirRef, FileMode, FileSize, FsNode, INode, Stat,
     },
-    util::{align_up, errno::Errno, KResult, IrqMutex},
+    util::{align_up, errno::Errno, IrqMutex, KResult},
 };
 
 use self::root::RootFs;
@@ -56,7 +57,10 @@ impl<'a> ByteParser<'a> {
     pub fn skip_until_alignment(&mut self, align: usize) -> KResult<()> {
         let next = align_up(self.current, align);
         if next > self.buffer.len() {
-            return Err(errno!(Errno::EINVAL, "skip_until_alignment(): out of bounds"));
+            return Err(errno!(
+                Errno::EINVAL,
+                "skip_until_alignment(): out of bounds"
+            ));
         }
 
         self.current = next;
@@ -74,11 +78,13 @@ impl<'a> ByteParser<'a> {
 }
 
 fn parse_str_field(bytes: &[u8]) -> KResult<&str> {
-    core::str::from_utf8(bytes).map_err(|_e| errno!(Errno::EINVAL, "parse_str_field(): UTF-8 parsing error"))
+    core::str::from_utf8(bytes)
+        .map_err(|_e| errno!(Errno::EINVAL, "parse_str_field(): UTF-8 parsing error"))
 }
 
 fn parse_hex_field(bytes: &[u8]) -> KResult<usize> {
-    usize::from_str_radix(parse_str_field(bytes)?, 16).map_err(|_e| errno!(Errno::EINVAL, "parse_hex_field(): int parsing error"))
+    usize::from_str_radix(parse_str_field(bytes)?, 16)
+        .map_err(|_e| errno!(Errno::EINVAL, "parse_hex_field(): int parsing error"))
 }
 
 pub static INITRAM_FS: Once<Arc<InitRamFs>> = Once::new();

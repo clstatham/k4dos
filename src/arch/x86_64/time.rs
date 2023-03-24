@@ -1,10 +1,9 @@
 use core::sync::atomic::{AtomicUsize, Ordering};
 
 use limine::LimineBootTimeRequest;
-use x86::io::{outb, inb};
+use x86::io::{inb, outb};
 
-use crate::{util::IrqMutex, userland::syscall::syscall_impl::time::TimeSpec};
-
+use crate::{userland::syscall::syscall_impl::time::TimeSpec, util::IrqMutex};
 
 const PIT_FREQUENCY_HZ: usize = 1000;
 pub const PIT_DIVIDEND: usize = 1193182;
@@ -15,7 +14,10 @@ static UPTIME_RAW: AtomicUsize = AtomicUsize::new(0);
 static UPTIME_SEC: AtomicUsize = AtomicUsize::new(0);
 
 pub static EPOCH: AtomicUsize = AtomicUsize::new(usize::MAX);
-pub static RT_CLOCK: IrqMutex<TimeSpec> = IrqMutex::new(TimeSpec { tv_sec: 0, tv_nsec: 0 });
+pub static RT_CLOCK: IrqMutex<TimeSpec> = IrqMutex::new(TimeSpec {
+    tv_sec: 0,
+    tv_nsec: 0,
+});
 
 pub fn get_uptime_ticks() -> usize {
     UPTIME_SEC.load(Ordering::SeqCst)
@@ -36,7 +38,6 @@ pub fn get_pit_count() -> u16 {
     }
 }
 
-
 pub fn set_reload_value(new_count: u16) {
     unsafe {
         outb(0x43, 0x34);
@@ -44,7 +45,6 @@ pub fn set_reload_value(new_count: u16) {
         outb(0x40, (new_count >> 8) as u8);
     }
 }
-
 
 pub fn set_pit_frequency(frequency: usize) {
     let mut new_divisor = PIT_DIVIDEND / frequency;
@@ -84,7 +84,10 @@ pub fn pit_irq() {
 }
 
 pub fn init() {
-    EPOCH.store(BOOT_TIME.get_response().get().unwrap().boot_time as usize, Ordering::SeqCst);
+    EPOCH.store(
+        BOOT_TIME.get_response().get().unwrap().boot_time as usize,
+        Ordering::SeqCst,
+    );
     RT_CLOCK.lock().tv_sec = EPOCH.load(Ordering::SeqCst) as isize;
 
     set_pit_frequency(PIT_FREQUENCY_HZ);

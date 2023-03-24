@@ -1,16 +1,13 @@
-
-
-
 use elfloader::{ElfBinary, ElfLoader};
 use x86::random::rdrand_slice;
 
-use xmas_elf::{program::Type};
+use xmas_elf::program::Type;
 
 use crate::{
     errno,
-    fs::{opened_file::OpenOptions, FileRef, initramfs::get_root, path::Path},
+    fs::{initramfs::get_root, opened_file::OpenOptions, path::Path, FileRef},
     mem::{addr::VirtAddr, addr_space::AddressSpace, consts::PAGE_SIZE},
-    task::vmem::{Vmem, MMapFlags, MMapProt, MMapKind},
+    task::vmem::{MMapFlags, MMapKind, MMapProt, Vmem},
     userland::buffer::UserBufferMut,
     util::{errno::Errno, KResult},
 };
@@ -45,7 +42,8 @@ pub fn load_elf(file: FileRef) -> KResult<UserlandEntry> {
     let ubuf = UserBufferMut::from_slice(&mut buf);
     file.read(0, ubuf, &OpenOptions::empty())?;
 
-    let elf = ElfBinary::new(&buf).map_err(|_e| errno!(Errno::EBADF, "load_elf(): elf loader error"))?;
+    let elf =
+        ElfBinary::new(&buf).map_err(|_e| errno!(Errno::EBADF, "load_elf(): elf loader error"))?;
 
     let mut start_of_image = usize::MAX;
     let mut end_of_image = 0;
@@ -69,13 +67,14 @@ pub fn load_elf(file: FileRef) -> KResult<UserlandEntry> {
 
     // let user_heap_bottom = align_up(end_of_image, PAGE_SIZE);
     // let random_bytes = gen_stack_canary();
-    let load_offset = if elf.file.header.pt2.type_().as_type() == xmas_elf::header::Type::SharedObject {
-        0x40000000
-    } else {
-        // 0x00400000
-        0
-    };
-    
+    let load_offset =
+        if elf.file.header.pt2.type_().as_type() == xmas_elf::header::Type::SharedObject {
+            0x40000000
+        } else {
+            // 0x00400000
+            0
+        };
+
     // let mut symbols = BTreeMap::new();
     // elf.for_each_symbol(|entry| {
     //     symbols.insert(entry.shndx(), elf.file.section_header(entry.shndx()).unwrap());
@@ -134,10 +133,12 @@ impl<'a> ElfLoader for KadosElfLoader<'a> {
     ) -> Result<(), elfloader::ElfLoaderErr> {
         for header in load_headers {
             if header.get_type().unwrap() == Type::Load {
-                let start = VirtAddr::new(header.virtual_addr() as usize + self.load_offset).align_down(PAGE_SIZE);
-                let mem_end =
-                    VirtAddr::new(header.virtual_addr() as usize + header.mem_size() as usize + self.load_offset)
-                        .align_up(PAGE_SIZE);
+                let start = VirtAddr::new(header.virtual_addr() as usize + self.load_offset)
+                    .align_down(PAGE_SIZE);
+                let mem_end = VirtAddr::new(
+                    header.virtual_addr() as usize + header.mem_size() as usize + self.load_offset,
+                )
+                .align_up(PAGE_SIZE);
                 if start.value() < self.base_addr {
                     self.base_addr = start.value();
                 }
@@ -149,13 +150,30 @@ impl<'a> ElfLoader for KadosElfLoader<'a> {
                 if header.flags().is_execute() {
                     prot.insert(MMapProt::PROT_EXEC);
                 }
-                let kind = MMapKind::File { file: self.file.clone(), offset: header.offset() as usize, size: header.file_size() as usize };
+                let kind = MMapKind::File {
+                    file: self.file.clone(),
+                    offset: header.offset() as usize,
+                    size: header.file_size() as usize,
+                };
                 log::debug!("Mapping region {:?} .. {:?}", start, mem_end);
                 self.vmem
-                    .map_area(start, mem_end, flags, prot, kind, &mut self.addr_space.mapper())
+                    .map_area(
+                        start,
+                        mem_end,
+                        flags,
+                        prot,
+                        kind,
+                        &mut self.addr_space.mapper(),
+                    )
                     .unwrap();
             } else if header.get_type().unwrap() == Type::Interp {
-                let ld = get_root().unwrap().lookup(Path::new("/usr/lib/ld.so"), true).unwrap().as_file().unwrap().clone();
+                let ld = get_root()
+                    .unwrap()
+                    .lookup(Path::new("/usr/lib/ld.so"), true)
+                    .unwrap()
+                    .as_file()
+                    .unwrap()
+                    .clone();
                 let res = load_elf(ld).unwrap();
                 self.entry_point = res.entry_point;
             }
@@ -217,19 +235,21 @@ impl<'a> ElfLoader for KadosElfLoader<'a> {
     ) -> Result<(), elfloader::ElfLoaderErr> {
         use elfloader::arch::x86_64::RelocationTypes;
         match entry.rtype {
-            elfloader::RelocationType::x86_64(rtype) => {
-                match rtype {
-                    RelocationTypes::R_AMD64_RELATIVE => {
-                        let reloc_value = entry.addend.unwrap() as usize + self.load_offset;
-                        log::trace!("Applying relocation R_AMD64_RELATIVE at location {:#x} -> {:#x}", entry.offset, reloc_value);
-                        unsafe {
-                            *((entry.offset + self.load_offset as u64) as *mut usize) = reloc_value;    
-                        }
-                    },
-                    rtype => {
-                        log::error!("Unsupported relocation type: {:?}", rtype);
-                        return Err(elfloader::ElfLoaderErr::UnsupportedRelocationEntry)
+            elfloader::RelocationType::x86_64(rtype) => match rtype {
+                RelocationTypes::R_AMD64_RELATIVE => {
+                    let reloc_value = entry.addend.unwrap() as usize + self.load_offset;
+                    log::trace!(
+                        "Applying relocation R_AMD64_RELATIVE at location {:#x} -> {:#x}",
+                        entry.offset,
+                        reloc_value
+                    );
+                    unsafe {
+                        *((entry.offset + self.load_offset as u64) as *mut usize) = reloc_value;
                     }
+                }
+                rtype => {
+                    log::error!("Unsupported relocation type: {:?}", rtype);
+                    return Err(elfloader::ElfLoaderErr::UnsupportedRelocationEntry);
                 }
             },
             _ => return Err(elfloader::ElfLoaderErr::UnsupportedArchitecture),

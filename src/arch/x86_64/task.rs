@@ -7,7 +7,7 @@ use x86::{
     msr::{rdmsr, wrmsr, IA32_FS_BASE, IA32_GS_BASE},
     tlb,
 };
-use x86_64::{instructions::interrupts};
+use x86_64::instructions::interrupts;
 
 use crate::{
     fs::FileRef,
@@ -17,10 +17,11 @@ use crate::{
         allocator::alloc_kernel_frames,
         consts::{KERNEL_STACK_SIZE, PAGE_SIZE, USER_STACK_BOTTOM, USER_STACK_TOP},
     },
-    task::{signal::Signal, vmem::{Vmem, MMapFlags, MMapProt, MMapKind}},
-    userland::{
-        elf::{self, AuxvType},
+    task::{
+        signal::Signal,
+        vmem::{MMapFlags, MMapKind, MMapProt, Vmem},
     },
+    userland::elf::{self, AuxvType},
     util::{stack::Stack, KResult},
 };
 
@@ -631,7 +632,15 @@ impl ArchTask {
         })
     }
 
-    pub fn clone_process(&self, entry_point: VirtAddr, user_stack: VirtAddr, args: VirtAddr, r8: usize, r9: usize, syscall_frame: &InterruptFrame) -> KResult<Self> {
+    pub fn clone_process(
+        &self,
+        entry_point: VirtAddr,
+        user_stack: VirtAddr,
+        args: VirtAddr,
+        r8: usize,
+        r9: usize,
+        syscall_frame: &InterruptFrame,
+    ) -> KResult<Self> {
         assert!(self.user, "Cannot clone a kernel task");
 
         let address_space = AddressSpace::current().fork(true)?;
@@ -675,7 +684,6 @@ impl ArchTask {
             fsbase: self.fsbase,
             kernel_stack: alloc::vec![0u8; KERNEL_STACK_SIZE].into_boxed_slice(),
         })
-
     }
 
     fn alloc_fpu_storage() -> Box<[u8]> {
@@ -716,7 +724,7 @@ impl ArchTask {
 
         // let mut rsp = unsafe { self.context.as_ref().rsp as usize };
         if frame.cs & 0x3 == 0 {
-            return Ok(())
+            return Ok(());
         }
         let mut rsp = frame.rsp;
         let mut stack = Stack::new(&mut rsp);
@@ -748,4 +756,3 @@ impl ArchTask {
         *current_frame = *signaled_frame;
     }
 }
-

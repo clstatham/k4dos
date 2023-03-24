@@ -12,7 +12,7 @@ use super::paging::units::{
     AllocatedFrames, AllocatedPages, Frame, FrameRange, Page, PageIndex, PageRange,
 };
 use crate::kerrmsg;
-use crate::util::{align_down, KResult, IrqMutex};
+use crate::util::{align_down, IrqMutex, KResult};
 
 pub static KERNEL_FRAME_ALLOCATOR: Once<IrqMutex<FrameAllocator>> = Once::new();
 pub static KERNEL_PAGE_ALLOCATOR: Once<IrqMutex<PageAllocator>> = Once::new();

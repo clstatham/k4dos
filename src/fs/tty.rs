@@ -21,7 +21,7 @@ use crate::{
 
 use super::{
     initramfs::get_root, opened_file::OpenOptions, path::Path, File, FsNode, INode, PollStatus,
-    Stat, S_IFCHR, POLL_WAIT_QUEUE,
+    Stat, POLL_WAIT_QUEUE, S_IFCHR,
 };
 
 pub static TTY: Once<Arc<Tty>> = Once::new();
@@ -199,21 +199,21 @@ impl LineDiscipline {
                     }
                     b'\r' | b'\n' => {
                         // if termios.iflag.contains(IFlag::ICRNL) {
-                            // current_line.push(b'\r');
-                            current_line.push(b'\n');
-                            
-                            if termios.is_cooked() {
-                                ringbuf.push_slice(current_line.as_slice());
-                            } else {
-                                ringbuf.push(b'\n').ok();
-                            }
-                            
-                            // serial1_println!();
-                            current_line.clear();
-                            if termios.lflag.contains(LFlag::ECHO) {
-                                // callback(LineControl::Echo(b'\r'));
-                                callback(LineControl::Echo(b'\n'));
-                            }
+                        // current_line.push(b'\r');
+                        current_line.push(b'\n');
+
+                        if termios.is_cooked() {
+                            ringbuf.push_slice(current_line.as_slice());
+                        } else {
+                            ringbuf.push(b'\n').ok();
+                        }
+
+                        // serial1_println!();
+                        current_line.clear();
+                        if termios.lflag.contains(LFlag::ECHO) {
+                            // callback(LineControl::Echo(b'\r'));
+                            callback(LineControl::Echo(b'\n'));
+                        }
                         // }
                     }
                     // b'\n' => {
@@ -356,10 +356,12 @@ impl File for Tty {
                 *lock = *termios;
             }
             TIOCGPGRP => {
-                let group = self
-                    .discipline
-                    .foreground_process_group()
-                    .ok_or_else(|| errno!(Errno::ENOENT, "ioctl(): no foreground process group set for tty"))?;
+                let group = self.discipline.foreground_process_group().ok_or_else(|| {
+                    errno!(
+                        Errno::ENOENT,
+                        "ioctl(): no foreground process group set for tty"
+                    )
+                })?;
                 let pgid = group.lock().pgid();
                 let arg = VirtAddr::new(arg);
 
@@ -368,8 +370,7 @@ impl File for Tty {
             TIOCSPGRP => {
                 let arg = VirtAddr::new(arg);
                 let pgid = *arg.read::<c_int>()?;
-                let pg = get_scheduler()
-                    .find_or_create_group(pgid);
+                let pg = get_scheduler().find_or_create_group(pgid);
                 self.discipline
                     .set_foreground_process_group(Arc::downgrade(&pg));
             }

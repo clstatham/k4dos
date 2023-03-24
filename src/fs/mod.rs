@@ -5,18 +5,19 @@ use bitflags::bitflags;
 
 use crate::{
     errno,
+    task::wait_queue::WaitQueue,
     userland::buffer::{UserBuffer, UserBufferMut},
-    util::{ctypes::c_short, errno::Errno, KResult}, task::wait_queue::WaitQueue,
+    util::{ctypes::c_short, errno::Errno, KResult},
 };
 
 use self::{opened_file::OpenOptions, path::PathBuf, pipe::Pipe};
 
 pub mod initramfs;
+pub mod null;
 pub mod opened_file;
 pub mod path;
-pub mod tty;
-pub mod null;
 pub mod pipe;
+pub mod tty;
 
 pub type FileRef = Arc<dyn File + Send + Sync>;
 pub type DirRef = Arc<dyn Directory + Send + Sync>;
@@ -309,7 +310,6 @@ impl INode {
             INode::File(d) => d.stat(),
             INode::Symlink(d) => d.stat(),
             INode::Pipe(p) => p.stat(),
-            
         }
     }
 

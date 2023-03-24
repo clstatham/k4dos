@@ -11,7 +11,11 @@ use crate::{
     util::{ctypes::c_int, errno::Errno, error::KResult},
 };
 
-use super::{path::PathComponent, DirRef, FileRef, INode, PollStatus, DirEntry, pipe::{Pipe, PIPE_FS}, FsNode};
+use super::{
+    path::PathComponent,
+    pipe::{Pipe, PIPE_FS},
+    DirEntry, DirRef, FileRef, FsNode, INode, PollStatus,
+};
 
 const FD_MAX: c_int = 1024;
 
@@ -39,7 +43,7 @@ bitflags! {
         const O_NOATIME  =      0o01000000;
         const O_PATH    =       0o010000000;
         const O_TMPFILE =       0o020200000;
-        
+
         // const O_CREAT = 0x100;
         // const O_EXCL = 0x200;
         // const O_NOCTTY = 0x400;
@@ -175,7 +179,6 @@ impl OpenedFile {
         self.as_file()?.ioctl(cmd, arg)
     }
 
-    
     pub fn readdir(&self) -> KResult<Option<DirEntry>> {
         let pos = self.pos();
 
@@ -254,14 +257,21 @@ impl OpenedFileTable {
         }
 
         match self.files.get_mut(fd as usize) {
-            Some(Some(_)) => return Err(errno!(Errno::EBADF, "open_with_fd(): file already opened")),
+            Some(Some(_)) => {
+                return Err(errno!(Errno::EBADF, "open_with_fd(): file already opened"))
+            }
             Some(entry @ None) => {
                 *entry = Some(LocalOpenedFile {
                     opened_file,
                     close_on_exec: options.close_on_exec,
                 });
             }
-            None if fd >= FD_MAX => return Err(errno!(Errno::EBADF, "open_with_fd(): maximum file descriptor reached")),
+            None if fd >= FD_MAX => {
+                return Err(errno!(
+                    Errno::EBADF,
+                    "open_with_fd(): maximum file descriptor reached"
+                ))
+            }
             None => {
                 self.files.resize(fd as usize + 1, None);
                 self.files[fd as usize] = Some(LocalOpenedFile {
@@ -288,7 +298,10 @@ impl OpenedFileTable {
             i = (i + 1) % FD_MAX;
         }
 
-        Err(errno!(Errno::ENFILE, "alloc_fd(): cannot alloc file descriptor"))
+        Err(errno!(
+            Errno::ENFILE,
+            "alloc_fd(): cannot alloc file descriptor"
+        ))
     }
 
     pub fn close_all(&mut self) {
@@ -329,9 +342,7 @@ impl OpenedFileTable {
         };
 
         self.alloc_fd(gte)
-            .and_then(|fd| {
-                self.open_with_fd(fd, file, options).map(|_| fd)
-            })
+            .and_then(|fd| self.open_with_fd(fd, file, options).map(|_| fd))
     }
 
     pub fn open_pipe(&mut self, options: OpenOptions) -> KResult<Arc<Pipe>> {
@@ -344,9 +355,35 @@ impl OpenedFileTable {
 
         self.files.resize(read_fd as usize + 1, None);
         // let fd = self.alloc_fd(Some(read_fd + 1))?;
-        self.open_with_fd(write_fd, OpenedFile::new(Arc::new(PathComponent { parent_dir: None, name: pipe.get_name(), inode: INode::Pipe(pipe.clone()) }), options, 0).into(), options)?;
-        self.open_with_fd(read_fd, OpenedFile::new(Arc::new(PathComponent { parent_dir: None, name: pipe.get_name(), inode: INode::Pipe(pipe.clone()) }), options, 0).into(), options)?;
-        
+        self.open_with_fd(
+            write_fd,
+            OpenedFile::new(
+                Arc::new(PathComponent {
+                    parent_dir: None,
+                    name: pipe.get_name(),
+                    inode: INode::Pipe(pipe.clone()),
+                }),
+                options,
+                0,
+            )
+            .into(),
+            options,
+        )?;
+        self.open_with_fd(
+            read_fd,
+            OpenedFile::new(
+                Arc::new(PathComponent {
+                    parent_dir: None,
+                    name: pipe.get_name(),
+                    inode: INode::Pipe(pipe.clone()),
+                }),
+                options,
+                0,
+            )
+            .into(),
+            options,
+        )?;
+
         // self.files[write_fd as usize] = Some(LocalOpenedFile {
         //     opened_file: Arc::new(OpenedFileType::Pipe(pipe.clone())),
         //     close_on_exec: options.close_on_exec,

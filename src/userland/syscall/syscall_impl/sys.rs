@@ -1,4 +1,8 @@
-use crate::{mem::addr::VirtAddr, util::KResult, userland::{buffer::UserBufferWriter, syscall::SyscallHandler}};
+use crate::{
+    mem::addr::VirtAddr,
+    userland::{buffer::UserBufferWriter, syscall::SyscallHandler},
+    util::KResult,
+};
 
 const UTS_FIELD_LEN: usize = 65;
 

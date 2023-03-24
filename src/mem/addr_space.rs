@@ -6,7 +6,7 @@ use x86_64::{
 use crate::util::KResult;
 
 use super::{
-    addr::{PhysAddr},
+    addr::PhysAddr,
     allocator::alloc_kernel_frames,
     consts::PAGE_TABLE_ENTRIES,
     paging::{

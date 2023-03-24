@@ -43,7 +43,6 @@ impl<T> BlockingMutex<T> {
     }
 }
 
-
 impl<T: ?Sized> BlockingMutex<T> {
     pub fn get_mut(&mut self) -> &mut T {
         self.inner.get_mut()
@@ -91,7 +90,6 @@ impl<T: ?Sized> BlockingMutex<T> {
 
 unsafe impl<T: ?Sized + Send> Sync for BlockingMutex<T> {}
 unsafe impl<T: ?Sized + Send> Send for BlockingMutex<T> {}
-
 
 pub struct BlockingMutexGuard<'a, T: ?Sized> {
     inner: ManuallyDrop<IrqMutexGuard<'a, T>>,

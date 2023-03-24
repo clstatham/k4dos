@@ -1,11 +1,12 @@
 use alloc::{
     string::String,
-    sync::{Arc, Weak}, vec::Vec,
+    sync::{Arc, Weak},
+    vec::Vec,
 };
 
 use crate::{
     errno,
-    fs::{alloc_inode_no, Directory, FileMode, FsNode, INode, Stat, S_IFDIR, DirEntry, FileType},
+    fs::{alloc_inode_no, DirEntry, Directory, FileMode, FileType, FsNode, INode, Stat, S_IFDIR},
     util::{errno::Errno, lock::IrqMutex, KResult},
 };
 
@@ -41,20 +42,14 @@ impl InitRamFsDir {
     pub fn add_dir(&self, name: String) -> Arc<InitRamFsDir> {
         let dir = Arc::new(InitRamFsDir::new(name, alloc_inode_no()));
         // self.inner.with_write(|inner| {
-        self.inner
-            .lock()
-            .children
-            .push(INode::Dir(dir.clone()));
+        self.inner.lock().children.push(INode::Dir(dir.clone()));
         // });
         dir
     }
 
     pub fn add_file(&self, name: String) -> Arc<InitRamFsFile> {
         let file = Arc::new(InitRamFsFile::new(name, alloc_inode_no()));
-        self.inner
-            .lock()
-            .children
-            .push(INode::File(file.clone()));
+        self.inner.lock().children.push(INode::File(file.clone()));
         file
     }
 

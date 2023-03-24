@@ -4,7 +4,8 @@ use crate::{
     errno,
     fs::{
         path::{Path, PathComponent},
-        DirRef, INode, pipe::PIPE_FS,
+        pipe::PIPE_FS,
+        DirRef, INode,
     },
     util::{errno::Errno, KResult},
 };
@@ -12,7 +13,6 @@ use crate::{
 use super::dir::InitRamFsDir;
 
 const MAX_SYMLINK_FOLLOW_DEPTH: usize = 20;
-
 
 #[derive(Clone)]
 pub struct RootFs {
@@ -54,14 +54,15 @@ impl RootFs {
         if path.is_pipe() {
             return PIPE_FS.lookup(path).map(INode::Pipe);
         }
-        self.lookup_path(path, follow_symlinks).map(|cmp| cmp.inode.clone())
+        self.lookup_path(path, follow_symlinks)
+            .map(|cmp| cmp.inode.clone())
     }
 
     pub fn lookup_path(&self, path: &Path, follow_symlinks: bool) -> KResult<Arc<PathComponent>> {
         if path.is_empty() {
             return Err(errno!(Errno::ENOENT, "lookup_path(): not found"));
         }
-        
+
         let lookup_from = if path.is_absolute() {
             self.root_path.clone()
         } else {
@@ -106,10 +107,15 @@ impl RootFs {
             if components.peek().is_some() {
                 parent = match &path_comp.inode {
                     INode::Dir(_) => path_comp,
-                    INode::Pipe(_) => unreachable!("Pipes should be contained in PipeFs, not RootFs"),
+                    INode::Pipe(_) => {
+                        unreachable!("Pipes should be contained in PipeFs, not RootFs")
+                    }
                     INode::Symlink(link) if follow_symlinks => {
                         if symlink_follow_limit == 0 {
-                            return Err(errno!(Errno::ELOOP, "lookup_path(): maximum symlink depth reached"));
+                            return Err(errno!(
+                                Errno::ELOOP,
+                                "lookup_path(): maximum symlink depth reached"
+                            ));
                         }
                         let dst = link.link_location()?;
                         let follow_from = if dst.is_absolute() {
@@ -127,17 +133,29 @@ impl RootFs {
 
                         match dst_path.inode {
                             INode::Dir(_) => dst_path,
-                            _ => return Err(errno!(Errno::ENOTDIR, "lookup_path(): not a directory")),
+                            _ => {
+                                return Err(errno!(
+                                    Errno::ENOTDIR,
+                                    "lookup_path(): not a directory"
+                                ))
+                            }
                         }
                     }
-                    INode::Symlink(_) => return Err(errno!(Errno::ENOTDIR, "lookup_path(): not a directory")),
-                    INode::File(_) => return Err(errno!(Errno::ENOTDIR, "lookup_path(): not a directory")),
+                    INode::Symlink(_) => {
+                        return Err(errno!(Errno::ENOTDIR, "lookup_path(): not a directory"))
+                    }
+                    INode::File(_) => {
+                        return Err(errno!(Errno::ENOTDIR, "lookup_path(): not a directory"))
+                    }
                 }
             } else {
                 match &path_comp.inode {
                     INode::Symlink(link) if follow_symlinks => {
                         if symlink_follow_limit == 0 {
-                            return Err(errno!(Errno::ELOOP, "lookup_path(): maximum symlink depth reached"));
+                            return Err(errno!(
+                                Errno::ELOOP,
+                                "lookup_path(): maximum symlink depth reached"
+                            ));
                         }
                         let dst = link.link_location()?;
                         let follow_from = if dst.is_absolute() {

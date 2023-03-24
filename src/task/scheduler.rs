@@ -1,15 +1,22 @@
 use alloc::{
     collections::{BTreeMap, VecDeque},
-    sync::{Arc},
+    sync::Arc,
     vec::Vec,
 };
 use spin::RwLock;
 use x86_64::instructions::hlt;
 
 use crate::{
-    arch::{idt::InterruptFrame, task::{arch_context_switch, ArchTask}, self},
+    arch::{
+        self,
+        idt::InterruptFrame,
+        task::{arch_context_switch, ArchTask},
+    },
+    errno,
+    fs::POLL_WAIT_QUEUE,
     mem::addr::VirtAddr,
-    util::{ctypes::c_int, KResult, IrqMutex, errno::Errno}, errno, task::{JOIN_WAIT_QUEUE}, fs::POLL_WAIT_QUEUE,
+    task::JOIN_WAIT_QUEUE,
+    util::{ctypes::c_int, errno::Errno, IrqMutex, KResult},
 };
 
 use super::{
@@ -17,7 +24,7 @@ use super::{
     group::{PgId, TaskGroup},
     signal::{SigAction, Signal, SIGCHLD},
     wait_queue::WaitQueue,
-    Task, TaskState, TaskId,
+    Task, TaskId, TaskState,
 };
 
 pub struct Scheduler {
@@ -69,7 +76,10 @@ impl Scheduler {
             log::debug!("Pushing {} as runnable", task.pid.as_usize());
             queue.push_back(task);
         } else {
-            log::warn!("Attempted to push {} as runnable, but it was already runnable", task.pid.as_usize());
+            log::warn!(
+                "Attempted to push {} as runnable, but it was already runnable",
+                task.pid.as_usize()
+            );
         }
     }
 
@@ -78,13 +88,18 @@ impl Scheduler {
         let mut queue = self.awaiting_queue.lock();
         self.tasks.lock().try_insert(task.pid, task.clone()).ok();
         self.run_queue.lock().retain(|t| t.pid != task.pid);
-        self.deadline_awaiting_queue.lock().retain(|(t, _)| t.pid != task.pid);
+        self.deadline_awaiting_queue
+            .lock()
+            .retain(|(t, _)| t.pid != task.pid);
         let already_in_queue = queue.iter().any(|t| t.pid == task.pid);
         if !already_in_queue {
             log::debug!("Pushing {} as waiting", task.pid.as_usize());
             queue.push_back(task);
         } else {
-            log::warn!("Attempted to push {} as awaiting, but it was already awaiting", task.pid.as_usize());
+            log::warn!(
+                "Attempted to push {} as awaiting, but it was already awaiting",
+                task.pid.as_usize()
+            );
         }
     }
 
@@ -97,10 +112,18 @@ impl Scheduler {
         let already_in_queue = queue.iter().any(|(t, _)| t.pid == task.pid);
         if !already_in_queue {
             let deadline = arch::time::get_uptime_ticks() + duration;
-            log::debug!("Pushing {} as waiting with duration {} ms", task.pid.as_usize(), duration);
+            log::debug!(
+                "Pushing {} as waiting with duration {} ms",
+                task.pid.as_usize(),
+                duration
+            );
             queue.push_back((task, deadline));
         } else {
-            log::warn!("Attempted to push {} as awaiting with duration {} ms, but it was already awaiting", task.pid.as_usize(), duration);
+            log::warn!(
+                "Attempted to push {} as awaiting with duration {} ms, but it was already awaiting",
+                task.pid.as_usize(),
+                duration
+            );
         }
     }
 
@@ -111,7 +134,11 @@ impl Scheduler {
             if let Some((task, deadline)) = queue.pop_front() {
                 if deadline <= time {
                     // time's up!
-                    log::debug!("Deadline of {} ms reached for PID {}.", deadline, task.pid.as_usize());
+                    log::debug!(
+                        "Deadline of {} ms reached for PID {}.",
+                        deadline,
+                        task.pid.as_usize()
+                    );
                     drop(queue);
                     self.push_runnable(task);
                     queue = self.deadline_awaiting_queue.lock();
@@ -194,7 +221,11 @@ impl Scheduler {
         self.push_runnable(task);
     }
 
-    pub fn try_delivering_signal(&self, frame: &mut InterruptFrame, syscall_result: isize) -> KResult<()> {
+    pub fn try_delivering_signal(
+        &self,
+        frame: &mut InterruptFrame,
+        syscall_result: isize,
+    ) -> KResult<()> {
         let current = self.current_task();
         if let Some((signal, sigaction)) = current.signals.lock().pop_pending() {
             let mut set = current.sigset.lock();
@@ -202,11 +233,20 @@ impl Scheduler {
                 match sigaction {
                     SigAction::Ignore => {}
                     SigAction::Terminate => {
-                        log::trace!("terminating pid {} by signal {:?}", current.pid.as_usize(), signal);
+                        log::trace!(
+                            "terminating pid {} by signal {:?}",
+                            current.pid.as_usize(),
+                            signal
+                        );
                         self.exit_current(1);
                     }
                     SigAction::Handler { handler } => {
-                        log::trace!("delivering signal {:?} to pid {} (handler addr {:#x})", signal, current.pid.as_usize(), handler as usize);
+                        log::trace!(
+                            "delivering signal {:?} to pid {} (handler addr {:#x})",
+                            signal,
+                            current.pid.as_usize(),
+                            handler as usize
+                        );
                         current.signaled_frame.store(Some(*frame));
                         set.set(signal as usize, true);
                         ArchTask::setup_signal_stack(
@@ -236,7 +276,7 @@ impl Scheduler {
 
     pub fn reap_dead(&self) {
         let mut exited = self.exited_tasks.lock();
-        
+
         for task in exited.iter() {
             self.tasks.lock().remove(&task.pid);
             self.run_queue.lock().retain(|t| t.pid != task.pid);
@@ -252,7 +292,7 @@ impl Scheduler {
             // assert_eq!(Arc::strong_count(task), 1, "PID {} has dangling references", task.pid.as_usize());
         }
         exited.clear();
-    }   
+    }
 
     pub fn preempt(&self) {
         let current = self.current_task.read();
@@ -286,7 +326,7 @@ impl Scheduler {
         self.preempt();
 
         let current = self.current_task();
-        
+
         if current.has_pending_signals() {
             Err(errno!(Errno::EINTR, "sleep(): pending signals"))
         } else {
@@ -299,7 +339,10 @@ pub fn switch() {
     let sched = get_scheduler();
     sched.check_deadline();
     let mut queue = sched.run_queue.lock();
-    let mut current = sched.current_task.try_write().expect("switch(): couldn't lock the current task for switching");
+    let mut current = sched
+        .current_task
+        .try_write()
+        .expect("switch(): couldn't lock the current task for switching");
     let mut task = None;
     loop {
         let t = queue.pop_front();

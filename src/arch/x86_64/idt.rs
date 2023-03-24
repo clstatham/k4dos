@@ -1,23 +1,18 @@
 use lazy_static::lazy_static;
 
-
 use pic8259::ChainedPics;
 use spin::Mutex;
 
-use x86::{
-    io::outb,
-};
+use x86::io::outb;
 use x86_64::{
     registers::control::Cr3,
     structures::idt::{InterruptDescriptorTable, PageFaultErrorCode},
 };
 
 use crate::{
-    mem::{addr::VirtAddr},
+    mem::addr::VirtAddr,
     task::{current_task, get_scheduler},
 };
-
-
 
 pub const PIC_1_OFFSET: u8 = 32;
 pub const PIC_2_OFFSET: u8 = PIC_1_OFFSET + 8;
@@ -312,14 +307,17 @@ extern "C" fn x64_handle_interrupt(vector: u8, stack_frame: *mut InterruptErrorF
             let cr3 = x86_64::registers::control::Cr3::read_raw().0;
             let error_code = PageFaultErrorCode::from_bits_truncate(error_code as u64);
             // if error_code.contains(PageFaultErrorCode::USER_MODE) {
-                // unsafe {
-                //     core::arch::asm!("swapgs");
-                // }
-            if current_task().handle_page_fault(
-                VirtAddr::new(accessed_address as usize),
-                *stack_frame,
-                error_code,
-            ).is_err() {
+            // unsafe {
+            //     core::arch::asm!("swapgs");
+            // }
+            if current_task()
+                .handle_page_fault(
+                    VirtAddr::new(accessed_address as usize),
+                    *stack_frame,
+                    error_code,
+                )
+                .is_err()
+            {
                 log::error!(
                     "\nEXCEPTION: PAGE FAULT while accessing {:#x}\n\
                     error code: {:?}\ncr3: {:#x}\n{:#x?}",
@@ -412,7 +410,7 @@ pub fn init() {
         // lock.enable();
         PICS.lock().initialize();
     }
-    
+
     unmask_irq(TIMER_IRQ);
     unmask_irq(COM2_IRQ);
 }
