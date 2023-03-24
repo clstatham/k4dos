@@ -8,7 +8,6 @@ use alloc::{
 };
 
 use bitflags::bitflags;
-use log::warn;
 use spin::Once;
 
 use crate::{
@@ -20,21 +19,36 @@ use crate::{
 };
 
 use super::{
-    initramfs::get_root, opened_file::OpenOptions, path::Path, File, FsNode, INode, PollStatus,
-    Stat, POLL_WAIT_QUEUE, S_IFCHR,
+    initramfs::{get_root, dir::InitRamFsDir, symlink::InitRamFsSymlink}, opened_file::OpenOptions, path::Path, File, FsNode, INode, PollStatus,
+    Stat, POLL_WAIT_QUEUE, S_IFCHR, FileMode, FileRef, alloc_inode_no, SymlinkRef,
 };
 
 pub static TTY: Once<Arc<Tty>> = Once::new();
 
 pub fn init() {
-    TTY.call_once(|| Arc::new(Tty::new("console")));
+    let tty = Arc::new(Tty::new("console"));
+    TTY.call_once(|| tty.clone());
     get_root()
         .unwrap()
         .lookup(Path::new("dev"), true)
         .unwrap()
         .as_dir()
         .unwrap()
-        .insert(INode::File(TTY.get().unwrap().clone()));
+        .insert(INode::File(tty));
+    // get_root()
+    //     .unwrap()
+    //     .lookup(Path::new("dev"), true)
+    //     .unwrap()
+    //     .as_dir()
+    //     .unwrap()
+    //     .insert(INode::Symlink(Arc::new(InitRamFsSymlink {
+    //         dst: Path::new("/dev/console").into(),
+    //         name: "tty".to_owned(),
+    //         stat: Stat {
+    //             inode_no: alloc_inode_no(),
+    //             ..tty.stat().unwrap()
+    //         }
+    //     }) as SymlinkRef));
 }
 
 bitflags! {
@@ -132,27 +146,21 @@ pub enum LineControl {
 }
 
 pub struct LineDiscipline {
-    termios: IrqMutex<Termios>,
     wait_queue: WaitQueue,
     current_line: IrqMutex<Vec<u8>>,
     buf: IrqMutex<RingBuffer<u8, 4096>>,
-    foreground_process_group: IrqMutex<Weak<IrqMutex<TaskGroup>>>,
-}
-
-impl Default for LineDiscipline {
-    fn default() -> Self {
-        Self::new()
-    }
+    termios: IrqMutex<Termios>,
+    foreground_group: IrqMutex<Weak<IrqMutex<TaskGroup>>>,
 }
 
 impl LineDiscipline {
-    pub fn new() -> LineDiscipline {
-        LineDiscipline {
-            termios: IrqMutex::new(Termios::default()),
-            foreground_process_group: IrqMutex::new(Weak::new()),
+    pub fn new() -> Self {
+        Self {
             wait_queue: WaitQueue::new(),
-            buf: IrqMutex::new(RingBuffer::new()),
             current_line: IrqMutex::new(Vec::new()),
+            buf: IrqMutex::new(RingBuffer::new()),
+            termios: IrqMutex::new(Termios::default()),
+            foreground_group: IrqMutex::new(Weak::new()),
         }
     }
 
@@ -164,85 +172,64 @@ impl LineDiscipline {
         self.buf.lock().is_writable()
     }
 
-    pub fn foreground_process_group(&self) -> Option<Arc<IrqMutex<TaskGroup>>> {
-        self.foreground_process_group.lock().upgrade()
+    pub fn foreground_group(&self) -> Option<Arc<IrqMutex<TaskGroup>>> {
+        self.foreground_group.lock().upgrade()
     }
 
-    pub fn set_foreground_process_group(&self, pg: Weak<IrqMutex<TaskGroup>>) {
-        *self.foreground_process_group.lock() = pg;
+    pub fn set_foreground_group(&self, pg: Weak<IrqMutex<TaskGroup>>) {
+        *self.foreground_group.lock() = pg;
     }
 
-    pub fn is_current_foreground(&self) -> bool {
-        let fg = &*self.foreground_process_group.lock();
-        let current = current_task();
-        current.belongs_to_group(fg) || fg.upgrade().is_none()
+    fn is_current_foreground(&self) -> bool {
+        let pg = &*self.foreground_group.lock();
+        current_task().belongs_to_group(pg) || pg.upgrade().is_none() 
     }
 
-    pub fn write<F: Fn(LineControl)>(&self, buf: UserBuffer<'_>, callback: F) -> KResult<usize> {
+    pub fn write<F>(&self, buf: UserBuffer<'_>, callback: F) -> KResult<usize> where F: Fn(LineControl) {
         let termios = self.termios.lock();
-        let mut reader = UserBufferReader::from(buf);
         let mut current_line = self.current_line.lock();
         let mut ringbuf = self.buf.lock();
         let mut written_len = 0;
+        let mut reader = UserBufferReader::from(buf);
         while reader.remaining_len() > 0 {
             let mut tmp = [0; 128];
             let copied_len = reader.read_bytes(&mut tmp)?;
             for ch in &tmp.as_slice()[..copied_len] {
                 match ch {
-                    // ctrl-c
-                    0x03 => {
-                        if termios.is_cooked() {
-                            if let Some(pg) = self.foreground_process_group() {
-                                pg.lock().signal(SIGINT);
-                            }
+                    0x03 if termios.is_cooked() => {
+                        if let Some(pg) = self.foreground_group() {
+                            pg.lock().signal(SIGINT);
                         }
                     }
-                    b'\r' | b'\n' => {
-                        // if termios.iflag.contains(IFlag::ICRNL) {
-                        // current_line.push(b'\r');
-                        current_line.push(b'\n');
-
-                        if termios.is_cooked() {
-                            ringbuf.push_slice(current_line.as_slice());
-                            current_line.clear();
-                        } else {
-                            ringbuf.push(b'\n').ok();
-                        }
-
-                        // serial1_println!();
-                        
-                        if termios.lflag.contains(LFlag::ECHO) {
-                            // callback(LineControl::Echo(b'\r'));
-                            callback(LineControl::Echo(b'\n'));
-                        }
-                        // }
-                    }
-                    // b'\n' => {
-                    //     // current_line.push(b'\r');
-                    //     current_line.push(b'\n');
-                    //     // vga_print!("\n");
-                    //     // serial1_println!();
-                    //     ringbuf.push(b'\n').ok();
-                    //     // ringbuf.push_slice(current_line.as_slice());
-                    //     current_line.clear();
-                    //     if termios.lflag.contains(LFlag::ECHO) {
-                    //         // callback(LineControl::Echo(b'\r'));
-                    //         callback(LineControl::Echo(b'\n'));
-                    //     }
-                    // }
-                    // backspace
-                    0x7f | 0x08 if termios.is_cooked() => {
+                    0x7f if termios.is_cooked() => {
                         if !current_line.is_empty() {
-                            // vga_print!("\x08 \x08");
                             current_line.pop();
                             callback(LineControl::Backspace);
                         }
                     }
-                    ch if 0x20 <= *ch && *ch <= 0x7f && termios.is_cooked() => {
-                        current_line.push(*ch);
-                        // ringbuf.push(*ch).ok();
+                    b'\r' if termios.iflag.contains(IFlag::ICRNL) => {
+                        current_line.push(b'\n');
+                        ringbuf.push_slice(&current_line);
+                        current_line.clear();
                         if termios.lflag.contains(LFlag::ECHO) {
-                            callback(LineControl::Echo(*ch));
+                            callback(LineControl::Echo(b'\r'));
+                            callback(LineControl::Echo(b'\n'));
+                        }
+                    }
+                    b'\n' => {
+                        current_line.push(b'\n');
+                        ringbuf.push_slice(&current_line);
+                        current_line.clear();
+                        if termios.lflag.contains(LFlag::ECHO) {
+                            callback(LineControl::Echo(b'\n'));
+                        }
+                    }
+                    ch if termios.is_cooked() => {
+                        if 0x20 <= *ch && *ch < 0x7f {
+                            current_line.push(*ch);
+                            if termios.lflag.contains(LFlag::ECHO) {
+                                callback(LineControl::Echo(*ch));
+                            }
                         }
                     }
                     _ => {
@@ -254,19 +241,22 @@ impl LineDiscipline {
             }
         }
 
-        if written_len > 0 {
-            get_scheduler().wake_all(&self.wait_queue);
-            get_scheduler().wake_all(&POLL_WAIT_QUEUE);
-        }
+        get_scheduler().wake_all(&self.wait_queue);
+
         Ok(written_len)
     }
 
-    fn read(&self, buf: UserBufferMut) -> KResult<usize> {
-        let mut writer = UserBufferWriter::from(buf);
-        let read_len = self.wait_queue.sleep_signalable_until(None, || {
-            if !self.is_current_foreground() {
-                return Ok(None);
-            }
+    pub fn read(&self, dst: UserBufferMut<'_>, options: &OpenOptions) -> KResult<usize> {
+        let mut writer = UserBufferWriter::from(dst);
+        let timeout = if options.nonblock {
+            Some(0)
+        } else {
+            None
+        };
+        self.wait_queue.sleep_signalable_until(timeout, || {
+            // if !self.is_current_foreground() {
+            //     return Ok(None)
+            // }
 
             let mut buf_lock = self.buf.lock();
             while writer.remaining_len() > 0 {
@@ -282,53 +272,55 @@ impl LineDiscipline {
             } else {
                 Ok(None)
             }
-        })?;
-        if read_len > 0 {
-            get_scheduler().wake_all(&self.wait_queue);
-            get_scheduler().wake_all(&POLL_WAIT_QUEUE);
-        }
-        Ok(read_len)
+        })
+    }
+}
+
+impl Default for LineDiscipline {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
 pub struct Tty {
-    discipline: LineDiscipline,
     name: String,
-}
-
-impl Default for Tty {
-    fn default() -> Self {
-        Self::new("console")
-    }
+    discipline: LineDiscipline,
 }
 
 impl Tty {
-    pub fn new(name: &str) -> Tty {
-        Tty {
-            name: name.to_owned(),
-            discipline: LineDiscipline::new(),
-        }
+    pub fn new(name: &str) -> Self {
+        Self { name: name.to_owned(), discipline: LineDiscipline::new() }
     }
 
     pub fn input_char(&self, ch: u8) {
-        self.discipline
-            .write(UserBuffer::from_slice(&[ch]), |ctrl| match ctrl {
-                LineControl::Echo(ch) => {
-                    self.write(0, UserBuffer::from_slice(&[ch]), &OpenOptions::readwrite())
-                        .ok();
-                }
+        self.discipline.write(UserBuffer::from_slice(&[ch]), |ctrl| {
+            match ctrl {
                 LineControl::Backspace => {
                     serial1_print!("\x08 \x08");
-                    // serial_print!("\x08 \x08");
                 }
-            })
-            .ok();
+                LineControl::Echo(ch) => {
+                    self.write(0, UserBuffer::from_slice(&[ch]), &OpenOptions::readwrite()).ok();
+                }
+            }
+        }).ok();
     }
 
-    pub fn set_foreground_process_group(&self, pg: Weak<IrqMutex<TaskGroup>>) {
-        self.discipline.set_foreground_process_group(pg);
+    pub fn set_foreground_group(&self, pg: Weak<IrqMutex<TaskGroup>>) {
+        self.discipline.set_foreground_group(pg)
     }
 }
+
+impl FsNode for Tty {
+    fn get_name(&self) -> String {
+        self.name.clone()
+    }
+}
+const TCGETS: usize = 0x5401;
+const TCSETS: usize = 0x5402;
+
+const TIOCGPGRP: usize = 0x540f;
+const TIOCSPGRP: usize = 0x5410;
+const TIOCGWINSZ: usize = 0x5413;
 
 #[repr(C)]
 struct WinSize {
@@ -340,111 +332,356 @@ struct WinSize {
 
 impl File for Tty {
     fn ioctl(&self, cmd: usize, arg: usize) -> KResult<isize> {
-        const TCGETS: usize = 0x5401;
-        const TCSETS: usize = 0x5402;
-        const TIOCGPGRP: usize = 0x540f;
-        const TIOCSPGRP: usize = 0x5410;
-        const TIOCGWINSZ: usize = 0x5413;
-
         match cmd {
             TCGETS => {
-                let arg = VirtAddr::new(arg);
                 let termios = *self.discipline.termios.lock();
+                let arg = VirtAddr::new(arg);
                 arg.write(termios)?;
             }
             TCSETS => {
                 let arg = VirtAddr::new(arg);
                 let termios = arg.read::<Termios>()?;
-                log::debug!("Setting Termios: {:?}", termios);
-                let mut lock = self.discipline.termios.lock();
-                *lock = *termios;
+                log::debug!("Termios: {:?}", termios);
+                *self.discipline.termios.lock() = *termios;
             }
             TIOCGPGRP => {
-                let group = self.discipline.foreground_process_group().ok_or({
-                    errno!(
-                        Errno::ENOENT,
-                        "ioctl(): no foreground process group set for tty"
-                    )
-                })?;
-                let pgid = group.lock().pgid();
+                let group = self.discipline.foreground_group().ok_or(errno!(Errno::ENOENT, "ioctl(): no foreground process group for tty"))?;
+                let id = group.lock().pgid();
                 let arg = VirtAddr::new(arg);
-
-                arg.write(pgid)?;
+                arg.write(id)?;
             }
             TIOCSPGRP => {
                 let arg = VirtAddr::new(arg);
-                let pgid = *arg.read::<c_int>()?;
-                let pg = get_scheduler().find_or_create_group(pgid);
-                self.discipline
-                    .set_foreground_process_group(Arc::downgrade(&pg));
+                let pgid = arg.read::<c_int>()?;
+                let pg = get_scheduler().find_or_create_group(*pgid);
+                self.discipline.set_foreground_group(Arc::downgrade(&pg));
             }
             TIOCGWINSZ => {
-                let arg = VirtAddr::new(arg);
-                let winsz = WinSize {
-                    ws_row: 80,
-                    ws_col: 24,
+                let winsize = WinSize {
+                    ws_row: 24,
+                    ws_col: 80,
                     ws_xpixel: 640,
                     ws_ypixel: 480,
                 };
-                arg.write(winsz)?;
+                let arg = VirtAddr::new(arg);
+                arg.write(winsize)?;
             }
-            _ => {
-                warn!("ioctl(): unknown cmd: {:#x}", cmd);
-                return Err(errno!(Errno::ENOSYS, "ioctl(): unknown cmd"));
-            }
+            _ => return Err(errno!(Errno::ENOSYS, "ioctl(): command not found"))
         }
 
         Ok(0)
     }
 
-    fn poll(&self) -> KResult<PollStatus> {
-        let mut status = PollStatus::POLLIN;
-        // let mut status = PollStatus::empty();
-        // if !self.discipline.current_line.lock().is_empty() {
-        //     status |= PollStatus::POLLIN;
-        // }
-        if self.discipline.is_writable() {
-            status |= PollStatus::POLLOUT;
-        }
-        Ok(status)
-    }
-
     fn stat(&self) -> KResult<Stat> {
         Ok(Stat {
             inode_no: 3,
-            mode: super::FileMode::new(S_IFCHR | 0o666),
+            mode: FileMode::new(S_IFCHR | 0o666),
             ..Stat::zeroed()
         })
     }
 
     fn read(
-        &self,
-        _offset: usize,
-        buf: UserBufferMut,
-        _options: &OpenOptions,
-        // len: usize,
-    ) -> KResult<usize> {
-        self.discipline.read(buf)
+            &self,
+            _offset: usize,
+            buf: UserBufferMut,
+            options: &OpenOptions,
+            // len: usize,
+        ) -> KResult<usize> {
+        let read_len = self.discipline.read(buf, options)?;
+        if read_len > 0 {
+            get_scheduler().wake_all(&POLL_WAIT_QUEUE);
+        }
+        Ok(read_len)
     }
 
-    fn write(&self, _offset: usize, buf: UserBuffer<'_>, _options: &OpenOptions) -> KResult<usize> {
+    fn write(
+            &self,
+            _offset: usize,
+            buf: UserBuffer<'_>,
+            _options: &OpenOptions,
+        ) -> KResult<usize> {
         let mut tmp = [0; 32];
         let mut total_len = 0;
         let mut reader = UserBufferReader::from(buf);
         while reader.remaining_len() > 0 {
-            // get_scheduler().with_kernel_addr_space_active(|| {
             let copied_len = reader.read_bytes(&mut tmp)?;
-            serial1_print!("{}", String::from_utf8_lossy(&tmp.as_slice()[..copied_len]));
+            serial1_print!("{}", String::from_utf8_lossy(&tmp[..copied_len]));
             total_len += copied_len;
-            // Ok(())
-            // })?;
+        }
+        if total_len > 0 {
+            get_scheduler().wake_all(&POLL_WAIT_QUEUE);
         }
         Ok(total_len)
     }
+
+    fn poll(&self) -> KResult<PollStatus> {
+        let mut status = PollStatus::empty();
+        if self.discipline.is_readable() {
+            status |= PollStatus::POLLIN;
+        }
+        if self.discipline.is_writable() {
+            status |= PollStatus::POLLOUT;
+        }
+        Ok(status)
+    }
 }
 
-impl FsNode for Tty {
+pub struct PtyMaster {
+    wait_queue: WaitQueue,
+    buf: IrqMutex<Vec<u8>>,
+    discipline: LineDiscipline,
+}
+
+impl PtyMaster {
+    pub fn new() -> KResult<(Arc<PtyMaster>, Arc<PtySlave>)> {
+        let master = Arc::new(PtyMaster {
+            wait_queue: WaitQueue::new(),
+            buf: IrqMutex::new(Vec::new()),
+            discipline: LineDiscipline::new(),
+        });
+        let slave = Arc::new(PtySlave::new(master.clone()));
+        Ok((master, slave))
+    }
+}
+
+impl FsNode for PtyMaster {
     fn get_name(&self) -> String {
-        self.name.clone()
+        "tty0".to_owned()
+    }
+}
+
+impl File for PtyMaster {
+    fn read(
+            &self,
+            _offset: usize,
+            buf: UserBufferMut<'_>,
+            options: &OpenOptions,
+            // len: usize,
+        ) -> KResult<usize> {
+        let mut writer = UserBufferWriter::from(buf);
+        let timeout = if options.nonblock {
+            Some(0)
+        } else {
+            None
+        };
+        let read_len = self.wait_queue.sleep_signalable_until(timeout, || {
+            let mut buf_lock = self.buf.lock();
+            if buf_lock.is_empty() {
+                return Ok(None)
+            }
+
+            let copy_len = core::cmp::min(buf_lock.len(), writer.remaining_len());
+            writer.write_bytes(&buf_lock[..copy_len])?;
+            buf_lock.drain(..copy_len);
+            Ok(Some(copy_len))
+        })?;
+
+        if read_len > 0 {
+            get_scheduler().wake_all(&POLL_WAIT_QUEUE);
+        }
+
+        Ok(read_len)
+    }
+
+    fn write(
+            &self,
+            _offset: usize,
+            buf: UserBuffer<'_>,
+            _options: &OpenOptions,
+        ) -> KResult<usize> {
+        let written_len = self.discipline.write(buf, |ctrl| {
+            let mut master_buf = self.buf.lock();
+            match ctrl {
+                LineControl::Backspace => {
+                    master_buf.extend_from_slice(b"\x08 \x08");
+                }
+                LineControl::Echo(ch) => {
+                    master_buf.push(ch);
+                }
+            }
+        })?;
+
+        if written_len > 0 {
+            get_scheduler().wake_all(&POLL_WAIT_QUEUE);
+        }
+
+        Ok(written_len)
+    }
+
+    fn ioctl(&self, cmd: usize, _arg: usize) -> KResult<isize> {
+        log::warn!("ioctl(): unknown cmd for PtyMaster ({:#x})", cmd);
+        Ok(0)
+    }
+
+    fn stat(&self) -> KResult<Stat> {
+        Ok(Stat {
+            inode_no: 5,
+            mode: FileMode::new(S_IFCHR | 0o666),
+            ..Stat::zeroed()
+        })
+    }
+
+    fn poll(&self) -> KResult<PollStatus> {
+        let mut status = PollStatus::empty();
+        if !self.buf.lock().is_empty() {
+            status |= PollStatus::POLLIN;
+        }
+        if self.discipline.is_writable() {
+            status |= PollStatus::POLLOUT;
+        }
+
+        Ok(status)
+    }
+}
+
+pub struct PtySlave {
+    master: Arc<PtyMaster>,
+}
+
+impl PtySlave {
+    pub fn new(master: Arc<PtyMaster>) -> Self {
+        Self { master }
+    }
+}
+
+impl FsNode for PtySlave {
+    fn get_name(&self) -> String {
+        "ttyS0".to_owned()
+    }
+}
+
+impl File for PtySlave {
+    fn read(
+            &self,
+            _offset: usize,
+            buf: UserBufferMut,
+            options: &OpenOptions,
+            // len: usize,
+        ) -> KResult<usize> {
+        let read_len = self.master.discipline.read(buf, options)?;
+        if read_len > 0 {
+            get_scheduler().wake_all(&POLL_WAIT_QUEUE);
+        }
+        Ok(read_len)
+    }
+
+    fn write(
+            &self,
+            _offset: usize,
+            buf: UserBuffer<'_>,
+            _options: &OpenOptions,
+        ) -> KResult<usize> {
+        let mut written_len = 0;
+        let mut master_buf = self.master.buf.lock();
+        let mut reader = UserBufferReader::from(buf);
+
+        while reader.remaining_len() > 0 {
+            let mut tmp = [0; 128];
+            let copied_len = reader.read_bytes(&mut tmp)?;
+            for ch in &tmp[..copied_len] {
+                match *ch {
+                    b'\n' => {
+                        master_buf.push(b'\r');
+                        master_buf.push(b'\n');
+                    }
+                    _ => {
+                        master_buf.push(*ch);
+                    }
+                }
+            }
+            written_len += copied_len;
+        }
+
+        if written_len > 0 {
+            get_scheduler().wake_all(&POLL_WAIT_QUEUE);
+        }
+
+        Ok(written_len)
+    }
+
+    fn stat(&self) -> KResult<Stat> {
+        Ok(Stat {
+            inode_no: 6,
+            mode: FileMode::new(S_IFCHR | 0o666),
+            ..Stat::zeroed()
+        })
+    }
+
+    fn ioctl(&self, cmd: usize, _arg: usize) -> KResult<isize> {
+        const TIOCSPTLCK: usize = 0x40045431;
+        match cmd {
+            TIOCSPTLCK => Ok(0),
+            _ => {
+                log::warn!("ioctl(): unknown cmd for PtySlave ({:#x})", cmd);
+                Ok(0)
+            }
+        }
+    }
+
+    fn poll(&self) -> KResult<PollStatus> {
+        let mut status = PollStatus::empty();
+
+        if self.master.discipline.is_readable() {
+            status |= PollStatus::POLLIN;
+        }
+
+        status |= PollStatus::POLLOUT;
+
+        Ok(status)
+    }
+}
+
+pub struct Ptmx {
+    pts_dir: Arc<InitRamFsDir>,
+}
+
+impl Ptmx {
+    pub fn new(pts_dir: Arc<InitRamFsDir>) -> Self {
+        Self { pts_dir }
+    }
+}
+
+impl FsNode for Ptmx {
+    fn get_name(&self) -> String {
+        todo!()
+    }
+}
+
+impl File for Ptmx {
+    fn open(&self, _options: &OpenOptions) -> KResult<Option<super::FileRef>> {
+        let (master, slave) = PtyMaster::new()?;
+        self.pts_dir.add_file(slave);
+        Ok(Some(master as FileRef))
+    }
+
+    fn stat(&self) -> KResult<Stat> {
+        Ok(Stat {
+            inode_no: 4,
+            mode: FileMode::new(S_IFCHR | 0o666),
+            ..Stat::zeroed()
+        })
+    }
+
+    fn read(
+            &self,
+            _offset: usize,
+            _buf: UserBufferMut,
+            _options: &OpenOptions,
+            // len: usize,
+        ) -> KResult<usize> {
+        unreachable!()
+    }
+
+    fn write(
+            &self,
+            _offset: usize,
+            _buf: UserBuffer<'_>,
+            _options: &OpenOptions,
+        ) -> KResult<usize> {
+        unreachable!()
+    }
+
+    fn poll(&self) -> KResult<PollStatus> {
+        Ok(PollStatus::empty())
     }
 }

@@ -6,9 +6,9 @@ use crate::{
 };
 
 pub struct InitRamFsSymlink {
-    pub(super) name: String,
-    pub(super) dst: PathBuf,
-    pub(super) stat: Stat,
+    pub(crate) name: String,
+    pub(crate) dst: PathBuf,
+    pub(crate) stat: Stat,
 }
 
 impl Symlink for InitRamFsSymlink {

@@ -34,14 +34,6 @@ impl WaitQueue {
     {
         let start_time = arch::time::get_uptime_ticks();
         loop {
-            if let Some(timeout) = timeout {
-                if arch::time::get_uptime_ticks() >= start_time + timeout {
-                    return Err(errno!(
-                        Errno::EINTR,
-                        "sleep_signalable_until(): timeout reached"
-                    ));
-                }
-            }
             let current = current_task();
             let scheduler = get_scheduler();
             current.set_state(TaskState::Waiting);
@@ -67,12 +59,23 @@ impl WaitQueue {
                 Err(err) => Some(Err(err)),
             };
 
+            let current = current_task();
             if let Some(ret_val) = ret_value {
                 scheduler.resume_task(current.clone());
                 self.queue.lock().retain(|t| t.pid != current.pid);
                 return ret_val;
             }
+
             scheduler.sleep(timeout)?;
+
+            if let Some(timeout) = timeout {
+                if arch::time::get_uptime_ticks() >= start_time + timeout {
+                    return Err(errno!(
+                        Errno::EINTR,
+                        "sleep_signalable_until(): timeout reached"
+                    ));
+                }
+            }
         }
     }
 }

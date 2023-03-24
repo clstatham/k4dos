@@ -41,6 +41,10 @@ pub fn errno_to_isize(res: &KResult<isize>) -> isize {
     }
 }
 
+pub const QUIET_SYSCALLS: &[usize] = &[
+    // SYS_POLL,
+];
+
 pub struct SyscallHandler<'a> {
     pub frame: &'a mut InterruptFrame,
 }
@@ -59,18 +63,23 @@ impl<'a> SyscallHandler<'a> {
     ) -> KResult<isize> {
         let enter_pid = current_task().pid();
         let rip = self.frame.rip;
-        log::trace!(
-            "[{:#x}] SYSCALL #{} {}({:#x}, {:#x}, {:#x}, {:#x}, {:#x}, {:#x})",
-            rip,
-            n,
-            syscall_name_by_number(n),
-            a1,
-            a2,
-            a3,
-            a4,
-            a5,
-            a6
-        );
+        let quiet = QUIET_SYSCALLS.contains(&n);
+
+        if !quiet {
+            log::trace!(
+                "[{:#x}] SYSCALL #{} {}({:#x}, {:#x}, {:#x}, {:#x}, {:#x}, {:#x})",
+                rip,
+                n,
+                syscall_name_by_number(n),
+                a1,
+                a2,
+                a3,
+                a4,
+                a5,
+                a6
+            );
+        }
+        
 
         let res = match n {
             SYS_ARCH_PRCTL => self.sys_arch_prctl(a1 as i32, VirtAddr::new(a2)),
@@ -132,7 +141,6 @@ impl<'a> SyscallHandler<'a> {
             SYS_UNAME => self.sys_uname(VirtAddr::new(a1)),
             SYS_CLOSE => self.sys_close(a1 as FileDesc),
             SYS_POLL => self.sys_poll(VirtAddr::new(a1), a2 as c_nfds, a3 as c_int),
-            // SYS_POLL => Err(errno!(Errno::ENOSYS)),
             SYS_CHDIR => self.sys_chdir(&resolve_path(a1)?),
             SYS_RT_SIGRETURN => self.sys_rt_sigreturn(),
             SYS_PIPE => self.sys_pipe(VirtAddr::new(a1)),
@@ -154,22 +162,18 @@ impl<'a> SyscallHandler<'a> {
             if let Err(err) =
                 get_scheduler().try_delivering_signal(self.frame, errno_to_isize(&res))
             {
-                log::error!("Failed to send signal: {:?}", err);
+                if !quiet {
+                    log::error!("Failed to send signal: {:?}", err);
+                }
             }
-        } else {
+        } else if !quiet {
             log::warn!(
                 "Syscall ended with a different process ({}) than it started with ({})!",
                 exit_pid.as_usize(),
                 enter_pid.as_usize()
             );
         }
-        if let Err(ref err) = res {
-            log::error!(
-                "Syscall handler returned Err {:?} with msg: {:?}",
-                err.errno(),
-                err.msg()
-            );
-        }
+        
         res
     }
 }

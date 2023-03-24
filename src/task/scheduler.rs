@@ -73,13 +73,13 @@ impl Scheduler {
         self.awaiting_queue.lock().retain(|t| t.pid != task.pid);
         let already_in_queue = queue.iter().any(|t| t.pid == task.pid);
         if !already_in_queue {
-            log::debug!("Pushing {} as runnable", task.pid.as_usize());
+            // log::debug!("Pushing {} as runnable", task.pid.as_usize());
             queue.push_back(task);
         } else {
-            log::warn!(
-                "Attempted to push {} as runnable, but it was already runnable",
-                task.pid.as_usize()
-            );
+            // log::warn!(
+            //     "Attempted to push {} as runnable, but it was already runnable",
+            //     task.pid.as_usize()
+            // );
         }
     }
 
@@ -93,13 +93,13 @@ impl Scheduler {
             .retain(|(t, _)| t.pid != task.pid);
         let already_in_queue = queue.iter().any(|t| t.pid == task.pid);
         if !already_in_queue {
-            log::debug!("Pushing {} as waiting", task.pid.as_usize());
+            // log::debug!("Pushing {} as waiting", task.pid.as_usize());
             queue.push_back(task);
         } else {
-            log::warn!(
-                "Attempted to push {} as awaiting, but it was already awaiting",
-                task.pid.as_usize()
-            );
+            // log::warn!(
+            //     "Attempted to push {} as awaiting, but it was already awaiting",
+            //     task.pid.as_usize()
+            // );
         }
     }
 
@@ -112,18 +112,18 @@ impl Scheduler {
         let already_in_queue = queue.iter().any(|(t, _)| t.pid == task.pid);
         if !already_in_queue {
             let deadline = arch::time::get_uptime_ticks() + duration;
-            log::debug!(
-                "Pushing {} as waiting with duration {} ms",
-                task.pid.as_usize(),
-                duration
-            );
+            // log::debug!(
+            //     "Pushing {} as waiting with duration {} ms",
+            //     task.pid.as_usize(),
+            //     duration
+            // );
             queue.push_back((task, deadline));
         } else {
-            log::warn!(
-                "Attempted to push {} as awaiting with duration {} ms, but it was already awaiting",
-                task.pid.as_usize(),
-                duration
-            );
+            // log::warn!(
+            //     "Attempted to push {} as awaiting with duration {} ms, but it was already awaiting",
+            //     task.pid.as_usize(),
+            //     duration
+            // );
         }
     }
 
@@ -134,11 +134,11 @@ impl Scheduler {
             if let Some((task, deadline)) = queue.pop_front() {
                 if deadline <= time {
                     // time's up!
-                    log::debug!(
-                        "Deadline of {} ms reached for PID {}.",
-                        deadline,
-                        task.pid.as_usize()
-                    );
+                    // log::debug!(
+                    //     "Deadline of {} ms reached for PID {}.",
+                    //     deadline,
+                    //     task.pid.as_usize()
+                    // );
                     drop(queue);
                     self.push_runnable(task);
                     queue = self.deadline_awaiting_queue.lock();

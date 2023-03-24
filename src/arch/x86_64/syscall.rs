@@ -1,6 +1,6 @@
 use x86::msr::{rdmsr, wrmsr};
 
-use crate::userland::syscall::{errno_to_isize, SyscallHandler};
+use crate::userland::syscall::{errno_to_isize, SyscallHandler, QUIET_SYSCALLS};
 
 use super::gdt::{KERNEL_CS_IDX, USER_DS_IDX};
 use super::idt::InterruptFrame;
@@ -144,7 +144,17 @@ fn handle_syscall(
         frame: unsafe { &mut *frame },
     };
 
-    let retval = errno_to_isize(&handler.dispatch(a1, a2, a3, a4, a5, a6, n));
+    let res = handler.dispatch(a1, a2, a3, a4, a5, a6, n);
+    if let Err(ref err) = res {
+        if !QUIET_SYSCALLS.contains(&n) {
+            log::error!(
+                "Syscall handler returned Err {:?} with msg: {:?}",
+                err.errno(),
+                err.msg()
+            );
+        }
+    }
+    let retval = errno_to_isize(&res);
     handler.frame.rax = retval as usize;
     retval
 }

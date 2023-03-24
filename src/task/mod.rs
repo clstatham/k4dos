@@ -213,7 +213,7 @@ impl Task {
         group.lock().add(Arc::downgrade(&t));
         TTY.get()
             .unwrap()
-            .set_foreground_process_group(Arc::downgrade(&group));
+            .set_foreground_group(Arc::downgrade(&group));
         Ok(t)
     }
 

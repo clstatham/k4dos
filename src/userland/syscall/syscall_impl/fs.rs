@@ -130,7 +130,7 @@ fn create(path: &Path, flags: OpenFlags, _mode: FileMode) -> KResult<INode> {
 
     let (_parent_dir, name) = path
         .parent_and_basename()
-        .ok_or_else(|| errno!(Errno::EEXIST, "create(): invalid path"))?;
+        .ok_or(errno!(Errno::EEXIST, "create(): invalid path"))?;
 
     let current = current_task();
     let root = current.root_fs.lock();
@@ -203,32 +203,38 @@ impl<'a> SyscallHandler<'a> {
         Ok(0)
     }
 
+}
+
+impl<'a> SyscallHandler<'a> {
     pub fn sys_poll(&mut self, fds: VirtAddr, nfds: c_nfds, timeout: c_int) -> KResult<isize> {
-        // if timeout > 0 {
-        //     log::warn!("Ignoring timeout of {} ms.", timeout);
-        // }
-        let timeout = if timeout > 0 {
+        let timeout = if timeout >= 0 {
             Some(timeout as usize)
         } else {
             None
         };
 
         POLL_WAIT_QUEUE.sleep_signalable_until(timeout, || {
-            // todo: check timeout
-
             let mut ready_fds = 0;
             let fds_len = (nfds as usize) * (size_of::<FileDesc>() + 2 * size_of::<c_short>());
             let mut reader = UserBufferReader::from(UserBuffer::from_vaddr(fds, fds_len));
             for _ in 0..nfds {
                 let fd = reader.read::<FileDesc>()?;
-                // log::debug!("fd: {:?}", fd);
+                log::debug!("fd: {:?}", fd);
                 let events = bitflags_from_user!(PollStatus, reader.read::<c_short>()?);
-                // log::debug!("events: {:?}", events);
+                
                 if fd < 0 || events.is_empty() {
-                    return Err(errno!(Errno::EINVAL));
+                    return Err(errno!(Errno::EINVAL, "sys_poll(): invalid fd or events was NULL"));
                 } else {
-                    let status = current_task().opened_files.lock().get(fd)?.poll()?;
-                    // log::debug!("status: {:?}", status);
+                    log::debug!("events: {:?}", events);
+                    let current = current_task();
+                    let opened_files = current.opened_files.lock();
+                    let status = opened_files.get(fd)?.poll()?;
+                    // let revents = if let Ok(file) = opened_files.get(fd) {
+                    //     file.poll()? & events
+                    // } else {
+                    //     PollStatus::POLLNVAL
+                    // };
+                    log::debug!("status: {:?}", status);
                     let revents = events & status;
                     if !revents.is_empty() {
                         ready_fds += 1;
@@ -251,10 +257,10 @@ impl<'a> SyscallHandler<'a> {
     }
 
     pub fn sys_read(&mut self, fd: FileDesc, vaddr: VirtAddr, len: usize) -> KResult<isize> {
-        // vaddr.access_ok(len as isize)?;
         let opened_file = current_task().get_opened_file_by_fd(fd)?;
         let ubuf = UserBufferMut::from_vaddr(vaddr, len);
         let read_len = opened_file.read(ubuf)?;
+        // log::debug!("read {}", read_len);
         Ok(read_len as isize)
     }
 

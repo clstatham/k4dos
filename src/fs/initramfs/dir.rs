@@ -6,11 +6,9 @@ use alloc::{
 
 use crate::{
     errno,
-    fs::{alloc_inode_no, DirEntry, Directory, FileMode, FileType, FsNode, INode, Stat, S_IFDIR},
+    fs::{alloc_inode_no, DirEntry, Directory, FileMode, FileType, FsNode, INode, Stat, S_IFDIR, FileRef},
     util::{errno::Errno, lock::IrqMutex, KResult},
 };
-
-use super::file::InitRamFsFile;
 
 pub struct DirInner {
     pub children: Vec<INode>,
@@ -47,10 +45,9 @@ impl InitRamFsDir {
         dir
     }
 
-    pub fn add_file(&self, name: String) -> Arc<InitRamFsFile> {
-        let file = Arc::new(InitRamFsFile::new(name, alloc_inode_no()));
+    pub fn add_file(&self, file: FileRef) {
+        // let file = Arc::new(InitRamFsFile::new(name, alloc_inode_no()));
         self.inner.lock().children.push(INode::File(file.clone()));
-        file
     }
 
     pub fn parent_dir(&self) -> Option<Arc<InitRamFsDir>> {

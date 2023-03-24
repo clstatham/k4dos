@@ -50,7 +50,7 @@ impl<T: ?Sized> BlockingMutex<T> {
 
     pub fn try_lock(&self) -> KResult<BlockingMutexGuard<'_, T>> {
         if self.inner.is_locked() {
-            Err(kerrmsg!("Cannot relock IrqMutex")) // todo: more verbose error message
+            Err(kerrmsg!("Cannot relock BlockingMutex")) // todo: more verbose error message
         } else {
             self.lock()
         }

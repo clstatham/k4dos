@@ -112,9 +112,9 @@ pub struct UserCStr {
 
 impl UserCStr {
     pub fn new(vaddr: VirtAddr, max_len: usize) -> KResult<UserCStr> {
+        vaddr.read_ok::<u8>()?;
         let mut tmp = alloc::vec![0; max_len];
         // vaddr.access_ok(max_len as isize)?;
-        vaddr.read_ok::<u8>()?;
         // SAFE: we've validated the length of the string, and confirmed that it won't run into kernel memory
         let read_len = unsafe { user_strncpy(tmp.as_mut_ptr(), vaddr.as_ptr(), max_len) };
         let string = core::str::from_utf8(&tmp[..read_len])
