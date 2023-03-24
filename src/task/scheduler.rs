@@ -283,9 +283,9 @@ impl Scheduler {
             self.awaiting_queue.lock().retain(|t| t.pid != task.pid);
             JOIN_WAIT_QUEUE.queue.lock().retain(|t| t.pid != task.pid);
             POLL_WAIT_QUEUE.queue.lock().retain(|t| t.pid != task.pid);
-            if let Some(parent) = task.parent.lock().upgrade() {
-                parent.children.lock().retain(|t| t.pid != task.pid);
-            }
+            // if let Some(parent) = task.parent.lock().upgrade() {
+            //     parent.children.lock().retain(|t| t.pid != task.pid);
+            // }
             if let Some(group) = task.group.borrow_mut().upgrade() {
                 group.lock().gc_dropped_processes();
             }

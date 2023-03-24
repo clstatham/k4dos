@@ -155,6 +155,9 @@ impl<'a> SyscallHandler<'a> {
         let (got_pid, status_val) = JOIN_WAIT_QUEUE.sleep_signalable_until(None, || {
             let current = current_task();
             let children = current.children.lock();
+            if children.is_empty() {
+                return Err(errno!(Errno::ECHILD))
+            }
             for child in children.iter() {
                 if pid.as_usize() as isize > 0 && pid != child.pid() {
                     continue;
@@ -176,7 +179,7 @@ impl<'a> SyscallHandler<'a> {
             Ok(None)
         })?;
 
-        // log::debug!("wait4: status = {status_val}");
+        log::debug!("wait4: status = {status_val}");
         current_task()
             .children
             .lock()
