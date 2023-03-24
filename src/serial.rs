@@ -19,9 +19,9 @@ lazy_static! {
     pub static ref SERIAL1: IrqMutex<SerialPort> = {
         let mut serial_port = unsafe { SerialPort::new(SERIAL1_IOPORT) };
         serial_port.init();
-        unsafe {
-            outb(SERIAL1_IOPORT + 1, 0b101);
-        }
+        // unsafe {
+        //     outb(SERIAL1_IOPORT + 1, 0b101);
+        // }
         IrqMutex::new(serial_port)
     };
 }

@@ -3,7 +3,7 @@ use core::ops::{Index, IndexMut};
 use alloc::vec::Vec;
 use arrayvec::ArrayVec;
 use buddy_system_allocator::LockedHeap;
-use limine::{LimineMemmapEntry, LimineMemoryMapEntryType, NonNullPtr};
+use multiboot2::MemoryMapTag;
 use spin::Once;
 
 use super::addr::{PhysAddr, VirtAddr};
@@ -74,21 +74,21 @@ pub fn free_kernel_pages(pages: &mut AllocatedPages) -> KResult<()> {
     Ok(())
 }
 
-pub fn init(memmap: &mut [NonNullPtr<LimineMemmapEntry>]) -> KResult<()> {
+pub fn init(memmap: &MemoryMapTag) -> KResult<()> {
     let mut frame_alloc = FrameAllocator::new_static();
-    for entry in memmap {
-        let entry = unsafe { &*entry.as_ptr() };
-        if entry.typ == LimineMemoryMapEntryType::KernelAndModules
-            || entry.typ == LimineMemoryMapEntryType::Usable
-        {
-            let start = entry.base as usize;
-            let end = start + entry.len as usize;
+    for entry in memmap.memory_areas() {
+        // let entry = unsafe { &*entry.as_ptr() };
+        // if entry.typ == LimineMemoryMapEntryType::KernelAndModules
+            // || entry.typ == LimineMemoryMapEntryType::Usable
+        // {
+            let start = entry.start_address() as usize;
+            let end = start + entry.size() as usize;
             let frames = FrameRange::new(
                 Frame::containing_address(PhysAddr::new(start)),
                 Frame::containing_address(PhysAddr::new(end)),
             );
             unsafe { frame_alloc.insert_free_region(frames) };
-        }
+        // }
     }
     KERNEL_FRAME_ALLOCATOR.call_once(|| IrqMutex::new(frame_alloc));
 

@@ -1,10 +1,11 @@
-use limine::*;
+use core::arch::global_asm;
+
+use multiboot2::BootInformation;
 use x86::{
     controlregs::{self, Cr0, Cr4, Xcr0},
     cpuid::CpuId,
 };
 use x86_64::instructions::{hlt, interrupts};
-use xmas_elf::ElfFile;
 
 use crate::{
     fs::{self, initramfs::get_root, path::Path, tty::TTY},
@@ -12,8 +13,8 @@ use crate::{
         self,
         allocator::{KERNEL_FRAME_ALLOCATOR, KERNEL_PAGE_ALLOCATOR},
     },
-    serial::serial1_recv,
-    task::{get_scheduler, Task},
+    // serial::serial1_recv,
+    task::{get_scheduler, Task}, serial::serial1_recv,
 };
 
 pub mod cpu_local;
@@ -23,24 +24,27 @@ pub mod syscall;
 pub mod task;
 pub mod time;
 
-static HHDM: LimineHhdmRequest = LimineHhdmRequest::new(0);
-static MEMMAP: LimineMemmapRequest = LimineMemmapRequest::new(0);
-static KERNEL_FILE: LimineKernelFileRequest = LimineKernelFileRequest::new(0);
-static STACK: LimineStackSizeRequest = LimineStackSizeRequest::new(0).stack_size(0x1000 * 32); // 32 pages
+global_asm!(include_str!("boot.S"));
 
-pub fn arch_main() {
+// static HHDM: LimineHhdmRequest = LimineHhdmRequest::new(0);
+// static MEMMAP: LimineMemmapRequest = LimineMemmapRequest::new(0);
+// static KERNEL_FILE: LimineKernelFileRequest = LimineKernelFileRequest::new(0);
+// static STACK: LimineStackSizeRequest = LimineStackSizeRequest::new(0).stack_size(0x1000 * 32); // 32 pages
+
+pub fn arch_main(boot_info: BootInformation) {
     interrupts::disable();
-    unsafe {
-        let stack = STACK.get_response().as_ptr();
-        core::ptr::read_volatile(stack.unwrap());
-    }
+    // unsafe {
+    //     let stack = STACK.get_response().as_ptr();
+    //     core::ptr::read_volatile(stack.unwrap());
+    // }
 
-    let memmap = MEMMAP.get_response().get_mut().unwrap().memmap_mut();
+    // let memmap = MEMMAP.get_response().get_mut().unwrap().memmap_mut();
+    let memmap = boot_info.memory_map_tag().unwrap();
 
-    crate::PHYSICAL_OFFSET.store(
-        HHDM.get_response().get().unwrap().offset as usize,
-        core::sync::atomic::Ordering::SeqCst,
-    );
+    // crate::PHYSICAL_OFFSET.store(
+    //     HHDM.get_response().get().unwrap().offset as usize,
+    //     core::sync::atomic::Ordering::SeqCst,
+    // );
 
     crate::logging::init();
     log::info!("Logger initialized.");
@@ -48,14 +52,14 @@ pub fn arch_main() {
     log::info!("Setting up time structures.");
     time::init();
 
-    let kernel_file = KERNEL_FILE.get_response().get().unwrap();
-    let kernel_file = kernel_file.kernel_file.get().unwrap();
+    // let kernel_file = KERNEL_FILE.get_response().get().unwrap();
+    // let kernel_file = kernel_file.kernel_file.get().unwrap();
 
-    crate::backtrace::KERNEL_ELF.call_once(|| {
-        let start = kernel_file.base.as_ptr().unwrap();
-        let elf_slice = unsafe { core::slice::from_raw_parts(start, kernel_file.length as usize) };
-        ElfFile::new(elf_slice).unwrap()
-    });
+    // crate::backtrace::KERNEL_ELF.call_once(|| {
+    //     let start = kernel_file.base.as_ptr().unwrap();
+    //     let elf_slice = unsafe { core::slice::from_raw_parts(start, kernel_file.length as usize) };
+    //     ElfFile::new(elf_slice).unwrap()
+    // });
 
     log::info!("Initializing FPU mechanisms.");
     let features = CpuId::new().get_feature_info().unwrap();

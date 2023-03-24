@@ -15,7 +15,7 @@ use crate::{
     mem::addr::VirtAddr,
     task::{current_task, get_scheduler, group::TaskGroup, signal::SIGINT, wait_queue::WaitQueue},
     userland::buffer::{UserBuffer, UserBufferMut, UserBufferReader, UserBufferWriter},
-    util::{ctypes::c_int, errno::Errno, error::KResult, lock::IrqMutex, ringbuffer::RingBuffer},
+    util::{ctypes::c_int, errno::Errno, error::KResult, lock::IrqMutex, ringbuffer::RingBuffer}, vga_text,
 };
 
 use super::{
@@ -201,7 +201,7 @@ impl LineDiscipline {
                             pg.lock().signal(SIGINT);
                         }
                     }
-                    0x7f if termios.is_cooked() => {
+                    0x08 if termios.is_cooked() => {
                         if !current_line.is_empty() {
                             current_line.pop();
                             callback(LineControl::Backspace);
@@ -297,6 +297,7 @@ impl Tty {
             match ctrl {
                 LineControl::Backspace => {
                     serial1_print!("\x08 \x08");
+                    // vga_text::backspace();
                 }
                 LineControl::Echo(ch) => {
                     self.write(0, UserBuffer::from_slice(&[ch]), &OpenOptions::readwrite()).ok();
@@ -405,7 +406,7 @@ impl File for Tty {
         let mut reader = UserBufferReader::from(buf);
         while reader.remaining_len() > 0 {
             let copied_len = reader.read_bytes(&mut tmp)?;
-            serial1_print!("{}", String::from_utf8_lossy(&tmp[..copied_len]));
+            serial1_print!("{}", core::str::from_utf8(&tmp[..copied_len]).unwrap());
             total_len += copied_len;
         }
         if total_len > 0 {
@@ -416,12 +417,12 @@ impl File for Tty {
 
     fn poll(&self) -> KResult<PollStatus> {
         let mut status = PollStatus::empty();
-        if self.discipline.is_readable() {
+        // if self.discipline.is_readable() {
             status |= PollStatus::POLLIN;
-        }
-        if self.discipline.is_writable() {
+        // }
+        // if self.discipline.is_writable() {
             status |= PollStatus::POLLOUT;
-        }
+        // }
         Ok(status)
     }
 }

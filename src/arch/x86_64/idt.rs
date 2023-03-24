@@ -1,17 +1,18 @@
 use lazy_static::lazy_static;
 
+use pc_keyboard::{Keyboard, layouts::Us104Key, ScancodeSet1, HandleControl, DecodedKey};
 use pic8259::ChainedPics;
 use spin::Mutex;
 
 use x86::io::outb;
 use x86_64::{
     registers::control::Cr3,
-    structures::idt::{InterruptDescriptorTable, PageFaultErrorCode},
+    structures::idt::{InterruptDescriptorTable, PageFaultErrorCode}, instructions::port::Port,
 };
 
 use crate::{
     mem::addr::VirtAddr,
-    task::{current_task, get_scheduler}, backtrace,
+    task::{current_task, get_scheduler}, backtrace, util::IrqMutex, fs::tty::TTY,
 };
 
 pub const PIC_1_OFFSET: u8 = 32;
@@ -24,6 +25,7 @@ pub static PICS: Mutex<ChainedPics> =
     Mutex::new(unsafe { ChainedPics::new(PIC_1_OFFSET, PIC_2_OFFSET) });
 
 pub const TIMER_IRQ: u8 = PIC_1_OFFSET;
+pub const KEYBOARD_IRQ: u8 = PIC_1_OFFSET + 1;
 pub const COM2_IRQ: u8 = PIC_1_OFFSET + 3;
 // pub const ERROR_IRQ: u8 = 34;
 // pub const SPURIOUS_IRQ: u8 = 35;
@@ -82,6 +84,7 @@ lazy_static! {
 
             // idt[TIMER_IDT_IDX as usize].set_handler_fn(timer_handler);
             idt[TIMER_IRQ as usize].set_handler_addr(x86_64::VirtAddr::new(timer_handler as u64));
+            idt[KEYBOARD_IRQ as usize].set_handler_addr(x86_64::VirtAddr::new(keyboard_handler as u64));
             idt[COM2_IRQ as usize].set_handler_addr(x86_64::VirtAddr::new(com2_handler as u64));
             // idt[ERROR_IRQ as usize].set_handler_fn(lapic_error_handler);
             // idt[SPURIOUS_IRQ as usize].set_handler_fn(lapic_spurious_handler);
@@ -213,11 +216,10 @@ interrupt_handler!(vmm_communication_exception_handler, 0x1D, has_error!());
 interrupt_handler!(security_exception_handler, 0x1E, has_error!());
 
 interrupt_handler!(timer_handler, 32, no_error!());
+interrupt_handler!(keyboard_handler, 33, no_error!());
 interrupt_handler!(com2_handler, 35, no_error!());
 
 use x86::irq::*;
-
-use super::time;
 
 #[no_mangle]
 extern "C" fn x64_handle_interrupt(vector: u8, stack_frame: *mut InterruptErrorFrame) {
@@ -227,10 +229,14 @@ extern "C" fn x64_handle_interrupt(vector: u8, stack_frame: *mut InterruptErrorF
     match vector {
         TIMER_IRQ => {
             // log::info!("tick");
-            time::pit_irq();
+            super::time::pit_irq();
             let sched = get_scheduler();
             notify_eoi(TIMER_IRQ);
             sched.preempt();
+        }
+        KEYBOARD_IRQ => {
+            do_keyboard_input();
+            notify_eoi(KEYBOARD_IRQ);
         }
         COM2_IRQ => {
             notify_eoi(COM2_IRQ);
@@ -434,28 +440,24 @@ pub fn init() {
 //     notify_eoi(0);
 // }
 
-// extern "x86-interrupt" fn keyboard_handler(_stack_frame: InterruptStackFrame) {
-//     lazy_static! {
-//         static ref KEYBOARD: IrqMutex<Keyboard<Us104Key, ScancodeSet1>> = IrqMutex::new(
-//             Keyboard::new(ScancodeSet1::new(), Us104Key, HandleControl::Ignore)
-//         );
-//     }
+fn do_keyboard_input() {
+    lazy_static! {
+        static ref KEYBOARD: IrqMutex<Keyboard<Us104Key, ScancodeSet1>> = IrqMutex::new(
+            Keyboard::new(ScancodeSet1::new(), Us104Key, HandleControl::Ignore)
+        );
+    }
 
-//     let mut port = Port::new(0x60);
-//     let scancode: u8 = unsafe { port.read() };
-//     let mut keyboard = KEYBOARD.lock();
-//     if let Ok(Some(key_evt)) = keyboard.add_byte(scancode) {
-//         if let Some(key) = keyboard.process_keyevent(key_evt) {
-//             let c = match key {
-//                 DecodedKey::Unicode(c) => c,
-//                 DecodedKey::RawKey(_code) => '?',
-//             };
+    let mut port = Port::new(0x60);
+    let scancode: u8 = unsafe { port.read() };
+    let mut keyboard = KEYBOARD.lock();
+    if let Ok(Some(key_evt)) = keyboard.add_byte(scancode) {
+        if let Some(key) = keyboard.process_keyevent(key_evt) {
+            let c = match key {
+                DecodedKey::Unicode(c) => c,
+                DecodedKey::RawKey(_code) => '?',
+            };
 
-//             // todo: PTY emulation!
-//             crate::terminal_print!("{}", c);
-//             // TTY.get().unwrap().input_char(c as u8);
-//         }
-//     }
-
-//     notify_eoi(0);
-// }
+            TTY.get().unwrap().input_char(c as u8);
+        }
+    }
+}

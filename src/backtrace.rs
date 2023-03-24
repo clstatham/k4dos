@@ -144,17 +144,17 @@ extern "C" fn rust_panic(info: &PanicInfo) -> ! {
     let panic_msg = info.message().unwrap_or(default_panic);
 
     serial0_println!("Panicked at '{}'", panic_msg);
-    serial1_println!("Panicked at '{}'", panic_msg);
+    // serial1_println!("Panicked at '{}'", panic_msg);
     if let Some(panic_location) = info.location() {
         serial0_println!("{}", panic_location);
-        serial1_println!("{}", panic_location);
+        // serial1_println!("{}", panic_location);
     }
 
     serial0_println!("");
-    match unwind_stack() {
-        Ok(()) => {}
-        Err(e) => serial0_println!("Error unwinding stack: {:?}", e.msg()),
-    }
+    // match unwind_stack() {
+    //     Ok(()) => {}
+    //     Err(e) => serial0_println!("Error unwinding stack: {:?}", e.msg()),
+    // }
 
     crate::hcf();
 }

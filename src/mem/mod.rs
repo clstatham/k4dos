@@ -20,15 +20,15 @@ pub mod consts;
 pub mod paging;
 
 pub fn remap_kernel() -> KResult<AddressSpace> {
-    let mut active = AddressSpace::current();
+    let active = AddressSpace::current();
     log::info!("Active page table at {:?}", active.cr3());
-    let mut active_p4 = active.mapper();
-    let active_p4 = active_p4.p4();
-    let mut new_space = AddressSpace::new()?;
-    let mut new_p4 = new_space.mapper();
-    let new_p4 = new_p4.p4();
-    new_p4[0] = active_p4[0];
-    new_p4[1] = active_p4[1];
+    // let mut active_p4 = active.mapper();
+    // let active_p4 = active_p4.p4();
+    let new_space = AddressSpace::new()?;
+    // let mut new_p4 = new_space.mapper();
+    // let new_p4 = new_p4.p4();
+    // new_p4[0] = active_p4[0];
+    // new_p4[1] = active_p4[1];
     // and that's all we gotta do, because Limine and Offset Page Tables RULE!
 
     new_space.switch();

@@ -319,13 +319,13 @@ impl Scheduler {
         // let awaiting_queue = self.awaiting_queue.lock();
 
         if let Some(duration) = duration {
-            self.push_deadline_awaiting(current, duration);
+            self.push_deadline_awaiting(current.clone(), duration);
         } else {
-            self.push_awaiting(current);
+            self.push_awaiting(current.clone());
         }
         self.preempt();
 
-        let current = self.current_task();
+        // let current = self.current_task();
 
         if current.has_pending_signals() {
             Err(errno!(Errno::EINTR, "sleep(): pending signals"))

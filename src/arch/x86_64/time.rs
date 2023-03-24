@@ -1,6 +1,6 @@
 use core::sync::atomic::{AtomicUsize, Ordering};
 
-use limine::LimineBootTimeRequest;
+// use limine::LimineBootTimeRequest;
 use x86::io::{inb, outb};
 
 use crate::{userland::syscall::syscall_impl::time::TimeSpec, util::IrqMutex};
@@ -8,24 +8,24 @@ use crate::{userland::syscall::syscall_impl::time::TimeSpec, util::IrqMutex};
 const PIT_FREQUENCY_HZ: usize = 1000;
 pub const PIT_DIVIDEND: usize = 1193182;
 
-static BOOT_TIME: LimineBootTimeRequest = LimineBootTimeRequest::new(0);
+// static BOOT_TIME: LimineBootTimeRequest = LimineBootTimeRequest::new(0);
 
 static UPTIME_RAW: AtomicUsize = AtomicUsize::new(0);
 static UPTIME_SEC: AtomicUsize = AtomicUsize::new(0);
 
-pub static EPOCH: AtomicUsize = AtomicUsize::new(usize::MAX);
-pub static RT_CLOCK: IrqMutex<TimeSpec> = IrqMutex::new(TimeSpec {
-    tv_sec: 0,
-    tv_nsec: 0,
-});
+// pub static EPOCH: AtomicUsize = AtomicUsize::new(usize::MAX);
+// pub static RT_CLOCK: IrqMutex<TimeSpec> = IrqMutex::new(TimeSpec {
+//     tv_sec: 0,
+//     tv_nsec: 0,
+// });
 
 pub fn get_uptime_ticks() -> usize {
     UPTIME_SEC.load(Ordering::SeqCst)
 }
 
-pub fn get_rt_clock() -> TimeSpec {
-    RT_CLOCK.lock().clone()
-}
+// pub fn get_rt_clock() -> TimeSpec {
+//     RT_CLOCK.lock().clone()
+// }
 
 pub fn get_pit_count() -> u16 {
     unsafe {
@@ -57,24 +57,24 @@ pub fn set_pit_frequency(frequency: usize) {
 }
 
 pub fn pit_irq() {
-    {
-        let interval = TimeSpec {
-            tv_sec: 0,
-            tv_nsec: (1000000000 / PIT_FREQUENCY_HZ) as isize,
-        };
-        let mut clk = RT_CLOCK.lock();
+    // {
+    //     let interval = TimeSpec {
+    //         tv_sec: 0,
+    //         tv_nsec: (1000000000 / PIT_FREQUENCY_HZ) as isize,
+    //     };
+    //     let mut clk = RT_CLOCK.lock();
 
-        if clk.tv_nsec + interval.tv_nsec > 999999999 {
-            let diff = (clk.tv_nsec + interval.tv_nsec) - 1000000000;
+    //     if clk.tv_nsec + interval.tv_nsec > 999999999 {
+    //         let diff = (clk.tv_nsec + interval.tv_nsec) - 1000000000;
 
-            clk.tv_nsec = diff;
-            clk.tv_sec += 1;
-        } else {
-            clk.tv_nsec += interval.tv_nsec;
-        }
+    //         clk.tv_nsec = diff;
+    //         clk.tv_sec += 1;
+    //     } else {
+    //         clk.tv_nsec += interval.tv_nsec;
+    //     }
 
-        clk.tv_sec += interval.tv_sec;
-    }
+    //     clk.tv_sec += interval.tv_sec;
+    // }
 
     let value = UPTIME_RAW.fetch_add(1, Ordering::Relaxed);
     if value % PIT_FREQUENCY_HZ == 0 {
@@ -84,11 +84,11 @@ pub fn pit_irq() {
 }
 
 pub fn init() {
-    EPOCH.store(
-        BOOT_TIME.get_response().get().unwrap().boot_time as usize,
-        Ordering::SeqCst,
-    );
-    RT_CLOCK.lock().tv_sec = EPOCH.load(Ordering::SeqCst) as isize;
+    // EPOCH.store(
+    //     BOOT_TIME.get_response().get().unwrap().boot_time as usize,
+    //     Ordering::SeqCst,
+    // );
+    // RT_CLOCK.lock().tv_sec = EPOCH.load(Ordering::SeqCst) as isize;
 
     set_pit_frequency(PIT_FREQUENCY_HZ);
 }

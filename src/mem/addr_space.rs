@@ -3,16 +3,16 @@ use x86_64::{
     structures::paging::{PageTableFlags, PhysFrame},
 };
 
-use crate::util::KResult;
+use crate::{util::KResult, vga_text};
 
 use super::{
-    addr::PhysAddr,
+    addr::{PhysAddr, VirtAddr},
     allocator::alloc_kernel_frames,
     consts::PAGE_TABLE_ENTRIES,
     paging::{
         mapper::Mapper,
         table::{active_table, PageTable},
-        units::{AllocatedFrames, Frame, FrameRange},
+        units::{AllocatedFrames, Frame, FrameRange, Page},
     },
 };
 
@@ -40,10 +40,16 @@ impl AddressSpace {
                 page_table[i] = active_table[i];
             }
 
+            // page_table[0] = active_table[0];
+
             frame
         };
 
-        Ok(Self { cr3 })
+        let mut this = Self { cr3 };
+        let mut mapper = this.mapper();
+        mapper.map_to_single(Page::containing_address(VirtAddr::new(vga_text::VGA_BUFFER_START_PADDR)), Frame::containing_address(PhysAddr::new(vga_text::VGA_BUFFER_START_PADDR)), PageTableFlags::PRESENT | PageTableFlags::WRITABLE | PageTableFlags::NO_EXECUTE | PageTableFlags::USER_ACCESSIBLE)?;
+
+        Ok(this)
     }
 
     pub fn current() -> Self {

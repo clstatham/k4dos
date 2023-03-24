@@ -1,0 +1,29 @@
+{
+    "llvm-target": "x86_64-unknown-none-elf",
+    "target-endian": "little",
+    "target-pointer-width": "64",
+    "target-c-int-width": "32",
+    "data-layout": "e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16:32:64-S128",
+    "arch": "x86_64",
+    "os": "none",
+    "env": "",
+    "vendor": "unknown",
+    "linker": "rust-lld",
+    "linker-flavor": "ld.lld",
+    "pre-link-args": {
+        "ld.lld": [
+            "--script=.cargo/linker.ld",
+            "-Map",
+            "kados.map"
+        ]
+    },
+    "features": "-mmx,-sse,+soft-float",
+    "executables": true,
+    "relocation-model": "pic",
+    "code-model": "kernel",
+    "disable-redzone": true,
+    "frame-pointer": "always",
+    "no-default-libraries": true,
+    "position-independent-executables": false,
+    "tls-model": "global-dynamic"
+}

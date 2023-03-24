@@ -425,7 +425,7 @@ impl Vmem {
         let dump_and_exit = || {
             log::error!("{:#x?}", stack_frame);
             self.log();
-            backtrace::unwind_stack().unwrap();
+            // backtrace::unwind_stack().unwrap();
             get_scheduler().send_signal_to(current_task(), SIGSEGV);
             get_scheduler().exit_current(1)
         };

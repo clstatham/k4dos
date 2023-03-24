@@ -18,6 +18,8 @@
 extern crate alloc;
 
 #[macro_use]
+pub mod vga_text;
+#[macro_use]
 pub mod serial;
 pub mod arch;
 pub mod backtrace;
@@ -28,21 +30,25 @@ pub mod task;
 pub mod userland;
 pub mod util;
 
+
 use core::sync::atomic::AtomicUsize;
 
 use mem::addr::VirtAddr;
+use multiboot2::BootInformation;
 use x86_64::instructions::hlt;
 
-pub static PHYSICAL_OFFSET: AtomicUsize = AtomicUsize::new(0);
+// pub static PHYSICAL_OFFSET: AtomicUsize = AtomicUsize::new(0);
 
 #[inline]
 pub fn phys_offset() -> VirtAddr {
-    VirtAddr::new(PHYSICAL_OFFSET.load(core::sync::atomic::Ordering::Acquire))
+    // VirtAddr::new(PHYSICAL_OFFSET.load(core::sync::atomic::Ordering::Acquire))
+    VirtAddr::new(0xffff800000000000)
 }
 
 #[no_mangle]
-pub extern "C" fn _start() -> ! {
-    arch::arch_main();
+pub extern "C" fn kernel_main(magic: u64, boot_info_addr: usize) -> ! {
+    let boot_info = unsafe { multiboot2::load(boot_info_addr) }.unwrap();
+    arch::arch_main(boot_info);
 
     hcf();
 }
