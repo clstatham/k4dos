@@ -223,23 +223,3 @@ halt:
     cli
     hlt
     jmp halt
-
-.global user_strncpy
-user_strncpy:
-    mov rcx, rdx
-    test rcx, rcx
-    jz finishcopy
-copychar:
-    mov al, [rsi]
-
-    test al, al
-    jz finishcopy
-
-    mov [rdi], al
-    add rdi, 1
-    add rsi, 1
-    loop copychar
-finishcopy:
-    sub rdx, rcx
-    mov rax, rdx
-    ret
