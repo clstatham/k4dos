@@ -2,7 +2,7 @@ use lazy_static::lazy_static;
 
 use uart_16550::SerialPort;
 use x86::io::inb;
-use x86::io::outb;
+
 
 use crate::util::lock::IrqMutex;
 

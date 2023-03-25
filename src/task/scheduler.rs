@@ -1,4 +1,4 @@
-use core::sync::atomic::{AtomicBool, Ordering};
+
 
 use alloc::{
     collections::{BTreeMap, VecDeque},
@@ -6,7 +6,7 @@ use alloc::{
     vec::Vec,
 };
 use spin::RwLock;
-use x86_64::instructions::{hlt, interrupts::enable_and_hlt};
+use x86_64::instructions::{interrupts::enable_and_hlt};
 
 use crate::{
     arch::{

@@ -30,10 +30,10 @@ pub mod task;
 pub mod userland;
 pub mod util;
 
-use core::sync::atomic::AtomicUsize;
+
 
 use mem::addr::VirtAddr;
-use multiboot2::BootInformation;
+
 use x86_64::instructions::hlt;
 
 // pub static PHYSICAL_OFFSET: AtomicUsize = AtomicUsize::new(0);
@@ -45,7 +45,7 @@ pub fn phys_offset() -> VirtAddr {
 }
 
 #[no_mangle]
-pub extern "C" fn kernel_main(magic: u64, boot_info_addr: usize) -> ! {
+pub extern "C" fn kernel_main(_magic: u64, boot_info_addr: usize) -> ! {
     let boot_info = unsafe { multiboot2::load(boot_info_addr) }.unwrap();
     arch::arch_main(boot_info);
 

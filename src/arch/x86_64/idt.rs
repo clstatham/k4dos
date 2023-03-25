@@ -1,4 +1,4 @@
-use core::sync::atomic::Ordering;
+
 
 use lazy_static::lazy_static;
 
@@ -17,7 +17,7 @@ use crate::{
     backtrace,
     fs::tty::TTY,
     mem::addr::VirtAddr,
-    task::{current_task, get_scheduler},
+    task::{get_scheduler},
     util::IrqMutex,
 };
 

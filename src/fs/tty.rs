@@ -16,15 +16,13 @@ use crate::{
     task::{current_task, get_scheduler, group::TaskGroup, signal::SIGINT, wait_queue::WaitQueue},
     userland::buffer::{UserBuffer, UserBufferMut, UserBufferReader, UserBufferWriter},
     util::{ctypes::c_int, errno::Errno, error::KResult, lock::IrqMutex, ringbuffer::RingBuffer},
-    vga_text,
 };
 
 use super::{
-    alloc_inode_no,
-    initramfs::{dir::InitRamFsDir, get_root, symlink::InitRamFsSymlink},
+    initramfs::{dir::InitRamFsDir, get_root},
     opened_file::OpenOptions,
     path::Path,
-    File, FileMode, FileRef, FsNode, INode, PollStatus, Stat, SymlinkRef, POLL_WAIT_QUEUE, S_IFCHR,
+    File, FileMode, FileRef, FsNode, INode, PollStatus, Stat, POLL_WAIT_QUEUE, S_IFCHR,
 };
 
 pub static TTY: Once<Arc<Tty>> = Once::new();

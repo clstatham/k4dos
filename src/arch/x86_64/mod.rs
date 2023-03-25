@@ -1,4 +1,4 @@
-use core::{arch::global_asm, sync::atomic::Ordering};
+use core::{arch::global_asm};
 
 use alloc::sync::Arc;
 use multiboot2::BootInformation;

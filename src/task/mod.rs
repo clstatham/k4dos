@@ -10,7 +10,7 @@ use alloc::{
 use atomic_refcell::AtomicRefCell;
 use crossbeam_utils::atomic::AtomicCell;
 use spin::Once;
-use x86_64::{instructions::interrupts, structures::idt::PageFaultErrorCode};
+use x86_64::{structures::idt::PageFaultErrorCode};
 
 use crate::{
     arch::{
@@ -19,9 +19,7 @@ use crate::{
     },
     fs::{
         initramfs::{get_root, root::RootFs},
-        opened_file::{FileDesc, OpenFlags, OpenOptions, OpenedFile, OpenedFileTable},
-        path::Path,
-        tty::TTY,
+        opened_file::{FileDesc, OpenedFile, OpenedFileTable},
         FileRef,
     },
     mem::addr::VirtAddr,
