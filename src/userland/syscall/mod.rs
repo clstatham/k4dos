@@ -27,9 +27,7 @@ pub mod syscall_impl;
 
 pub fn errno_to_isize(res: &KResult<isize>) -> isize {
     match res {
-        Ok(retval) => {
-            *retval
-        }
+        Ok(retval) => *retval,
         Err(err) => {
             let errno = err.errno().unwrap() as i32;
             -errno as isize
@@ -75,7 +73,7 @@ impl<'a> SyscallHandler<'a> {
                 a6
             );
         }
-        
+
         let res = match n {
             SYS_ARCH_PRCTL => self.sys_arch_prctl(a1 as i32, VirtAddr::new(a2)),
             SYS_SET_TID_ADDRESS => self.sys_set_tid_address(VirtAddr::new(a1)),
@@ -168,7 +166,7 @@ impl<'a> SyscallHandler<'a> {
                 enter_pid.as_usize()
             );
         }
-        
+
         res
     }
 }

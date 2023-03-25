@@ -81,7 +81,6 @@ pub enum SigAction {
     Handler { handler: fn() },
 }
 
-// TODO: Fill correct default actions
 pub const DEFAULT_ACTIONS: [SigAction; SIGMAX as usize] = [
     /* (unused) */ SigAction::Ignore,
     /* SIGHUP */ SigAction::Terminate,

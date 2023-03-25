@@ -167,10 +167,7 @@ pub unsafe fn init() {
     let mut star = 0u64;
     star |= (user_ds_offset - 8) << 48;
     star |= kernel_cs_offset << 32;
-    wrmsr(
-        x86::msr::IA32_STAR,
-        star,
-    );
+    wrmsr(x86::msr::IA32_STAR, star);
     wrmsr(x86::msr::IA32_LSTAR, syscall_entry as *const u8 as u64);
     wrmsr(x86::msr::IA32_FMASK, 0x200);
 

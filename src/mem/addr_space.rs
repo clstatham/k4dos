@@ -45,7 +45,14 @@ impl AddressSpace {
 
         let mut this = Self { cr3 };
         let mut mapper = this.mapper();
-        mapper.map_to_single(Page::containing_address(VirtAddr::new(vga_text::VGA_BUFFER_START_PADDR)), Frame::containing_address(PhysAddr::new(vga_text::VGA_BUFFER_START_PADDR)), PageTableFlags::PRESENT | PageTableFlags::WRITABLE | PageTableFlags::NO_EXECUTE | PageTableFlags::USER_ACCESSIBLE)?;
+        mapper.map_to_single(
+            Page::containing_address(VirtAddr::new(vga_text::VGA_BUFFER_START_PADDR)),
+            Frame::containing_address(PhysAddr::new(vga_text::VGA_BUFFER_START_PADDR)),
+            PageTableFlags::PRESENT
+                | PageTableFlags::WRITABLE
+                | PageTableFlags::NO_EXECUTE
+                | PageTableFlags::USER_ACCESSIBLE,
+        )?;
 
         Ok(this)
     }

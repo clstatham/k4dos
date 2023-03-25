@@ -336,7 +336,6 @@ impl OpenedFileTable {
     }
 
     pub fn open_pipe(&mut self, options: OpenOptions) -> KResult<Arc<Pipe>> {
-        // todo: use `options`
         let write_fd = self.alloc_fd(None)?;
         let read_fd = self.alloc_fd(Some(write_fd + 1))?;
         let pipe = Arc::new(Pipe::new(read_fd, write_fd));
@@ -371,7 +370,7 @@ impl OpenedFileTable {
             .into(),
             options,
         )?;
-        
+
         Ok(pipe)
     }
 }

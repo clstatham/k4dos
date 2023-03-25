@@ -2,19 +2,23 @@ use core::sync::atomic::Ordering;
 
 use lazy_static::lazy_static;
 
-use pc_keyboard::{Keyboard, layouts::Us104Key, ScancodeSet1, HandleControl, DecodedKey};
+use pc_keyboard::{layouts::Us104Key, DecodedKey, HandleControl, Keyboard, ScancodeSet1};
 use pic8259::ChainedPics;
 use spin::Mutex;
 
 use x86::io::outb;
 use x86_64::{
+    instructions::port::Port,
     registers::control::Cr3,
-    structures::idt::{InterruptDescriptorTable, PageFaultErrorCode}, instructions::port::Port,
+    structures::idt::{InterruptDescriptorTable, PageFaultErrorCode},
 };
 
 use crate::{
+    backtrace,
+    fs::tty::TTY,
     mem::addr::VirtAddr,
-    task::{current_task, get_scheduler}, backtrace, util::IrqMutex, fs::tty::TTY,
+    task::{current_task, get_scheduler},
+    util::IrqMutex,
 };
 
 pub const PIC_1_OFFSET: u8 = 32;
@@ -302,12 +306,12 @@ extern "C" fn x64_handle_interrupt(vector: u8, stack_frame: *mut InterruptErrorF
             let current = get_scheduler().current_task_opt();
             if let Some(current) = current {
                 if current
-                .handle_page_fault(
-                    VirtAddr::new(accessed_address as usize),
-                    *stack_frame,
-                    error_code,
-                )
-                .is_err()
+                    .handle_page_fault(
+                        VirtAddr::new(accessed_address as usize),
+                        *stack_frame,
+                        error_code,
+                    )
+                    .is_err()
                 {
                     log::error!(
                         "\nEXCEPTION: USER PAGE FAULT while accessing {:#x}\n\
@@ -336,7 +340,6 @@ extern "C" fn x64_handle_interrupt(vector: u8, stack_frame: *mut InterruptErrorF
                 log::error!("Faulted access address {:#x}", accessed_address,);
                 panic!()
             }
-            
         }
         X87_FPU_VECTOR => {
             log::error!("\nEXCEPTION: x87 FLOATING POINT\n{:#x?}", stack_frame);

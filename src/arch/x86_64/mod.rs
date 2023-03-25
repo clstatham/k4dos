@@ -9,12 +9,19 @@ use x86::{
 use x86_64::instructions::{hlt, interrupts};
 
 use crate::{
-    fs::{self, initramfs::get_root, path::Path, tty::TTY, opened_file::{OpenedFile, OpenFlags, OpenOptions}},
+    fs::{
+        self,
+        initramfs::get_root,
+        opened_file::{OpenFlags, OpenOptions, OpenedFile},
+        path::Path,
+        tty::TTY,
+    },
     mem::{
         self,
         allocator::{KERNEL_FRAME_ALLOCATOR, KERNEL_PAGE_ALLOCATOR},
     },
-    task::{get_scheduler, Task, current_task}, serial::serial1_recv,
+    serial::serial1_recv,
+    task::{current_task, get_scheduler, Task},
 };
 
 pub mod cpu_local;
@@ -105,8 +112,6 @@ pub fn arch_main(boot_info: BootInformation) {
 
     let sched = get_scheduler();
 
-    
-
     fs::null::init();
     fs::tty::init();
 
@@ -134,40 +139,48 @@ pub fn startup_init() {
 
     let current = current_task();
     let mut files = current.opened_files.lock();
- 
+
     let console = get_root()
         .unwrap()
         .lookup_path(Path::new("/dev/console"), true)
         .unwrap();
 
     // stdin
-    files.open_with_fd(
-        0,
-        Arc::new(OpenedFile::new(
-            console.clone(),
-            OpenFlags::O_RDONLY.into(),
+    files
+        .open_with_fd(
             0,
-        )),
-        OpenOptions::new(true, false),
-    ).unwrap();
+            Arc::new(OpenedFile::new(
+                console.clone(),
+                OpenFlags::O_RDONLY.into(),
+                0,
+            )),
+            OpenOptions::new(true, false),
+        )
+        .unwrap();
     // stdout
-    files.open_with_fd(
-        1,
-        Arc::new(OpenedFile::new(
-            console.clone(),
-            OpenFlags::O_WRONLY.into(),
-            0,
-        )),
-        OpenOptions::new(true, false),
-    ).unwrap();
+    files
+        .open_with_fd(
+            1,
+            Arc::new(OpenedFile::new(
+                console.clone(),
+                OpenFlags::O_WRONLY.into(),
+                0,
+            )),
+            OpenOptions::new(true, false),
+        )
+        .unwrap();
     // stderr
-    files.open_with_fd(
-        2,
-        Arc::new(OpenedFile::new(console, OpenFlags::O_WRONLY.into(), 0)),
-        OpenOptions::new(true, false),
-    ).unwrap();
+    files
+        .open_with_fd(
+            2,
+            Arc::new(OpenedFile::new(console, OpenFlags::O_WRONLY.into(), 0)),
+            OpenOptions::new(true, false),
+        )
+        .unwrap();
     drop(files);
-    current.exec(file, &[exe.as_bytes()], &[b"FOO=bar"]).unwrap();
+    current
+        .exec(file, &[exe.as_bytes()], &[b"FOO=bar"])
+        .unwrap();
 }
 
 fn poll_serial1() {

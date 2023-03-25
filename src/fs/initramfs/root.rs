@@ -14,10 +14,18 @@ use super::dir::InitRamFsDir;
 
 const MAX_SYMLINK_FOLLOW_DEPTH: usize = 20;
 
-#[derive(Clone)]
 pub struct RootFs {
     root_path: Arc<PathComponent>,
     cwd_path: Arc<PathComponent>,
+}
+
+impl Clone for RootFs {
+    fn clone(&self) -> Self {
+        Self {
+            root_path: Arc::new(self.root_path.as_ref().clone()),
+            cwd_path: Arc::new(self.cwd_path.as_ref().clone()),
+        }
+    }
 }
 
 impl RootFs {

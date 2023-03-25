@@ -6,7 +6,10 @@ use alloc::{
 
 use crate::{
     errno,
-    fs::{alloc_inode_no, DirEntry, Directory, FileMode, FileType, FsNode, INode, Stat, S_IFDIR, FileRef},
+    fs::{
+        alloc_inode_no, DirEntry, Directory, FileMode, FileRef, FileType, FsNode, INode, Stat,
+        S_IFDIR,
+    },
     util::{errno::Errno, lock::IrqMutex, KResult},
 };
 

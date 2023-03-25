@@ -215,12 +215,7 @@ pub trait File: FsNode {
     }
 
     /// `read(2)`.
-    fn read(
-        &self,
-        _offset: usize,
-        _buf: UserBufferMut,
-        _options: &OpenOptions,
-    ) -> KResult<usize> {
+    fn read(&self, _offset: usize, _buf: UserBufferMut, _options: &OpenOptions) -> KResult<usize> {
         Err(errno!(Errno::EBADF, "read(): not implemented"))
     }
 

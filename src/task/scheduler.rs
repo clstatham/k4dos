@@ -12,7 +12,8 @@ use crate::{
     arch::{
         self,
         idt::InterruptFrame,
-        task::{arch_context_switch, ArchTask}, startup_init,
+        startup_init,
+        task::{arch_context_switch, ArchTask},
     },
     errno,
     fs::POLL_WAIT_QUEUE,

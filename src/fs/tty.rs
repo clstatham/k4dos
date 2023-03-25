@@ -15,12 +15,16 @@ use crate::{
     mem::addr::VirtAddr,
     task::{current_task, get_scheduler, group::TaskGroup, signal::SIGINT, wait_queue::WaitQueue},
     userland::buffer::{UserBuffer, UserBufferMut, UserBufferReader, UserBufferWriter},
-    util::{ctypes::c_int, errno::Errno, error::KResult, lock::IrqMutex, ringbuffer::RingBuffer}, vga_text,
+    util::{ctypes::c_int, errno::Errno, error::KResult, lock::IrqMutex, ringbuffer::RingBuffer},
+    vga_text,
 };
 
 use super::{
-    initramfs::{get_root, dir::InitRamFsDir, symlink::InitRamFsSymlink}, opened_file::OpenOptions, path::Path, File, FsNode, INode, PollStatus,
-    Stat, POLL_WAIT_QUEUE, S_IFCHR, FileMode, FileRef, alloc_inode_no, SymlinkRef,
+    alloc_inode_no,
+    initramfs::{dir::InitRamFsDir, get_root, symlink::InitRamFsSymlink},
+    opened_file::OpenOptions,
+    path::Path,
+    File, FileMode, FileRef, FsNode, INode, PollStatus, Stat, SymlinkRef, POLL_WAIT_QUEUE, S_IFCHR,
 };
 
 pub static TTY: Once<Arc<Tty>> = Once::new();
@@ -166,10 +170,13 @@ impl LineDiscipline {
 
     fn is_current_foreground(&self) -> bool {
         let pg = &*self.foreground_group.lock();
-        current_task().belongs_to_group(pg) || pg.upgrade().is_none() 
+        current_task().belongs_to_group(pg) || pg.upgrade().is_none()
     }
 
-    pub fn write<F>(&self, buf: UserBuffer<'_>, callback: F) -> KResult<usize> where F: Fn(LineControl) {
+    pub fn write<F>(&self, buf: UserBuffer<'_>, callback: F) -> KResult<usize>
+    where
+        F: Fn(LineControl),
+    {
         let termios = self.termios.lock();
         let mut current_line = self.current_line.lock();
         let mut ringbuf = self.buf.lock();
@@ -232,11 +239,7 @@ impl LineDiscipline {
 
     pub fn read(&self, dst: UserBufferMut<'_>, options: &OpenOptions) -> KResult<usize> {
         let mut writer = UserBufferWriter::from(dst);
-        let timeout = if options.nonblock {
-            Some(0)
-        } else {
-            None
-        };
+        let timeout = if options.nonblock { Some(0) } else { None };
         self.wait_queue.sleep_signalable_until(timeout, || {
             // todo: figure out how to get this working
             // if !self.is_current_foreground() {
@@ -274,20 +277,24 @@ pub struct Tty {
 
 impl Tty {
     pub fn new(name: &str) -> Self {
-        Self { name: name.to_owned(), discipline: LineDiscipline::new() }
+        Self {
+            name: name.to_owned(),
+            discipline: LineDiscipline::new(),
+        }
     }
 
     pub fn input_char(&self, ch: u8) {
-        self.discipline.write(UserBuffer::from_slice(&[ch]), |ctrl| {
-            match ctrl {
+        self.discipline
+            .write(UserBuffer::from_slice(&[ch]), |ctrl| match ctrl {
                 LineControl::Backspace => {
                     serial1_print!("\x08 \x08");
                 }
                 LineControl::Echo(ch) => {
-                    self.write(0, UserBuffer::from_slice(&[ch]), &OpenOptions::readwrite()).ok();
+                    self.write(0, UserBuffer::from_slice(&[ch]), &OpenOptions::readwrite())
+                        .ok();
                 }
-            }
-        }).ok();
+            })
+            .ok();
     }
 
     pub fn set_foreground_group(&self, pg: Weak<IrqMutex<TaskGroup>>) {
@@ -330,7 +337,10 @@ impl File for Tty {
                 *self.discipline.termios.lock() = *termios;
             }
             TIOCGPGRP => {
-                let group = self.discipline.foreground_group().ok_or(errno!(Errno::ENOENT, "ioctl(): no foreground process group for tty"))?;
+                let group = self.discipline.foreground_group().ok_or(errno!(
+                    Errno::ENOENT,
+                    "ioctl(): no foreground process group for tty"
+                ))?;
                 let id = group.lock().pgid();
                 let arg = VirtAddr::new(arg);
                 arg.write(id)?;
@@ -351,7 +361,7 @@ impl File for Tty {
                 let arg = VirtAddr::new(arg);
                 arg.write(winsize)?;
             }
-            _ => return Err(errno!(Errno::ENOSYS, "ioctl(): command not found"))
+            _ => return Err(errno!(Errno::ENOSYS, "ioctl(): command not found")),
         }
 
         Ok(0)
@@ -365,12 +375,7 @@ impl File for Tty {
         })
     }
 
-    fn read(
-            &self,
-            _offset: usize,
-            buf: UserBufferMut,
-            options: &OpenOptions,
-        ) -> KResult<usize> {
+    fn read(&self, _offset: usize, buf: UserBufferMut, options: &OpenOptions) -> KResult<usize> {
         let read_len = self.discipline.read(buf, options)?;
         if read_len > 0 {
             get_scheduler().wake_all(&POLL_WAIT_QUEUE);
@@ -378,12 +383,7 @@ impl File for Tty {
         Ok(read_len)
     }
 
-    fn write(
-            &self,
-            _offset: usize,
-            buf: UserBuffer<'_>,
-            _options: &OpenOptions,
-        ) -> KResult<usize> {
+    fn write(&self, _offset: usize, buf: UserBuffer<'_>, _options: &OpenOptions) -> KResult<usize> {
         let mut tmp = [0; 32];
         let mut total_len = 0;
         let mut reader = UserBufferReader::from(buf);
@@ -401,10 +401,10 @@ impl File for Tty {
     fn poll(&self) -> KResult<PollStatus> {
         let mut status = PollStatus::empty();
         // if self.discipline.is_readable() {
-            status |= PollStatus::POLLIN;
+        status |= PollStatus::POLLIN;
         // }
         // if self.discipline.is_writable() {
-            status |= PollStatus::POLLOUT;
+        status |= PollStatus::POLLOUT;
         // }
         Ok(status)
     }
@@ -436,21 +436,17 @@ impl FsNode for PtyMaster {
 
 impl File for PtyMaster {
     fn read(
-            &self,
-            _offset: usize,
-            buf: UserBufferMut<'_>,
-            options: &OpenOptions,
-        ) -> KResult<usize> {
+        &self,
+        _offset: usize,
+        buf: UserBufferMut<'_>,
+        options: &OpenOptions,
+    ) -> KResult<usize> {
         let mut writer = UserBufferWriter::from(buf);
-        let timeout = if options.nonblock {
-            Some(0)
-        } else {
-            None
-        };
+        let timeout = if options.nonblock { Some(0) } else { None };
         let read_len = self.wait_queue.sleep_signalable_until(timeout, || {
             let mut buf_lock = self.buf.lock();
             if buf_lock.is_empty() {
-                return Ok(None)
+                return Ok(None);
             }
 
             let copy_len = core::cmp::min(buf_lock.len(), writer.remaining_len());
@@ -466,12 +462,7 @@ impl File for PtyMaster {
         Ok(read_len)
     }
 
-    fn write(
-            &self,
-            _offset: usize,
-            buf: UserBuffer<'_>,
-            _options: &OpenOptions,
-        ) -> KResult<usize> {
+    fn write(&self, _offset: usize, buf: UserBuffer<'_>, _options: &OpenOptions) -> KResult<usize> {
         let written_len = self.discipline.write(buf, |ctrl| {
             let mut master_buf = self.buf.lock();
             match ctrl {
@@ -534,12 +525,7 @@ impl FsNode for PtySlave {
 }
 
 impl File for PtySlave {
-    fn read(
-            &self,
-            _offset: usize,
-            buf: UserBufferMut,
-            options: &OpenOptions,
-        ) -> KResult<usize> {
+    fn read(&self, _offset: usize, buf: UserBufferMut, options: &OpenOptions) -> KResult<usize> {
         let read_len = self.master.discipline.read(buf, options)?;
         if read_len > 0 {
             get_scheduler().wake_all(&POLL_WAIT_QUEUE);
@@ -547,12 +533,7 @@ impl File for PtySlave {
         Ok(read_len)
     }
 
-    fn write(
-            &self,
-            _offset: usize,
-            buf: UserBuffer<'_>,
-            _options: &OpenOptions,
-        ) -> KResult<usize> {
+    fn write(&self, _offset: usize, buf: UserBuffer<'_>, _options: &OpenOptions) -> KResult<usize> {
         let mut written_len = 0;
         let mut master_buf = self.master.buf.lock();
         let mut reader = UserBufferReader::from(buf);
@@ -644,21 +625,16 @@ impl File for Ptmx {
         })
     }
 
-    fn read(
-            &self,
-            _offset: usize,
-            _buf: UserBufferMut,
-            _options: &OpenOptions,
-        ) -> KResult<usize> {
+    fn read(&self, _offset: usize, _buf: UserBufferMut, _options: &OpenOptions) -> KResult<usize> {
         unreachable!()
     }
 
     fn write(
-            &self,
-            _offset: usize,
-            _buf: UserBuffer<'_>,
-            _options: &OpenOptions,
-        ) -> KResult<usize> {
+        &self,
+        _offset: usize,
+        _buf: UserBuffer<'_>,
+        _options: &OpenOptions,
+    ) -> KResult<usize> {
         unreachable!()
     }
 

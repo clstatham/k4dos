@@ -28,7 +28,7 @@ use crate::{
 use super::{
     cpu_local::get_tss,
     gdt::{KERNEL_CS_IDX, KERNEL_DS_IDX, USER_DS_IDX},
-    idt::{InterruptFrame, InterruptErrorFrame},
+    idt::{InterruptErrorFrame, InterruptFrame},
 };
 
 fn xsave(fpu: &mut Box<[u8]>) {
@@ -108,7 +108,8 @@ unsafe extern "C" fn fork_init() -> ! {
 
 #[naked]
 unsafe extern "C" fn context_switch(_prev: &mut core::ptr::Unique<Context>, _next: &Context) {
-    core::arch::asm!("
+    core::arch::asm!(
+        "
         pushfq
         push rbp
         push rbx
@@ -130,7 +131,9 @@ unsafe extern "C" fn context_switch(_prev: &mut core::ptr::Unique<Context>, _nex
 
         ret
 
-    ", options(noreturn))
+    ",
+        options(noreturn)
+    )
 }
 
 #[derive(Clone, Debug, Default)]

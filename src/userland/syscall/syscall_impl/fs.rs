@@ -74,9 +74,7 @@ impl<'a> SyscallHandler<'a> {
         let buf_val = buf.value();
         let ubuf = UserBufferMut::from_vaddr(buf, len);
         let mut writer = UserBufferWriter::from(ubuf);
-        writer
-            .write_bytes(cwd.as_str().as_bytes())
-            .unwrap(); // this currently never returns Err; may change
+        writer.write_bytes(cwd.as_str().as_bytes()).unwrap(); // this currently never returns Err; may change
         Ok(buf_val as isize)
     }
 
@@ -198,7 +196,6 @@ impl<'a> SyscallHandler<'a> {
 
         Ok(0)
     }
-
 }
 
 impl<'a> SyscallHandler<'a> {
@@ -217,9 +214,12 @@ impl<'a> SyscallHandler<'a> {
                 let fd = reader.read::<FileDesc>()?;
                 // log::debug!("fd: {:?}", fd);
                 let events = bitflags_from_user!(PollStatus, reader.read::<c_short>()?);
-                
+
                 if fd < 0 || events.is_empty() {
-                    return Err(errno!(Errno::EINVAL, "sys_poll(): invalid fd or events was NULL"));
+                    return Err(errno!(
+                        Errno::EINVAL,
+                        "sys_poll(): invalid fd or events was NULL"
+                    ));
                 } else {
                     // log::debug!("events: {:?}", events);
                     let current = current_task();

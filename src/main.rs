@@ -30,7 +30,6 @@ pub mod task;
 pub mod userland;
 pub mod util;
 
-
 use core::sync::atomic::AtomicUsize;
 
 use mem::addr::VirtAddr;
