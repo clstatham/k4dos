@@ -1,8 +1,10 @@
 /target
 /initramfs
+/initramfs_old
 /extern
 /kados_syscall/target
 *.objdump
 *.map
 strace_vi.txt
 kados.map
+/extern_old
