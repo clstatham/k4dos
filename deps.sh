@@ -3,10 +3,12 @@
 set -e
 
 if [[ -z "$@" ]]; then
-    echo "Usage: setup-externals.sh [COMMANDS]..."
+    echo "Usage: deps.sh [COMMANDS]..."
     echo "Available commands:"
     echo "download       Downloads Busybox"
     echo "menuconfig     Configures Busybox with menuconfig"
+    echo "allnoconfig    Configures Busybox with allnoconfig"
+    echo "defconfig      Configures Busybox with its default config (currently doesn't build!)"
     echo "clean          Cleans the output directory"
     echo "build          Builds Busybox"
     echo "makeimg        Creates the initramfs image for K4DOS"
@@ -23,11 +25,11 @@ if [[ $@ =~ "download" ]];
 then
     echo "Downloading Busybox."
     git clone git://busybox.net/busybox.git
-    echo "Installing musl with pacman."
+    echo "Installing musl with pacman and creating symlinks. (will sudo)"
     sudo pacman -S musl
     sudo ln -s /usr/bin/ar /usr/bin/musl-ar
     sudo ln -s /usr/bin/strip /usr/bin/musl-strip
-    echo "Now run 'setup-externals.sh menuconfig' and load kados.config, located in the same directory as this script"
+    echo "Now run 'deps.sh menuconfig' and load kados.config, located in the same directory as this script"
 fi
 
 
