@@ -4,9 +4,7 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     // Get the name of the package.
     let kernel_name = env::var("CARGO_PKG_NAME")?;
 
-    // Tell rustc to pass the linker script to the linker.
-    // println!("cargo:rustc-link-arg-bin={kernel_name}=--script=conf/linker.ld");
-
+    // Add linker args.
     println!("cargo:rustc-link-arg-bin={kernel_name}=--gc-sections");
 
     // Have cargo rerun this script if the linker script or CARGO_PKG_ENV changes.
