@@ -174,7 +174,7 @@ impl VirtAddr {
     pub fn read_ok<T: Sized>(&self) -> KResult<()> {
         // let ptr = self.as_ptr::<T>();
         if self.addr == 0 {
-            return Err(errno!(Errno::EINVAL, "read_ok(): null VirtAddr"));
+            return Err(errno!(Errno::EFAULT, "read_ok(): null VirtAddr"));
         }
         if self.addr % align_of::<T>() != 0 {
             return Err(errno!(Errno::EACCES, "read_ok(): unaligned VirtAddr"));
@@ -201,7 +201,7 @@ impl VirtAddr {
 
     pub fn write<T: Sized>(&self, t: T) -> KResult<()> {
         if self.addr == 0 {
-            return Err(errno!(Errno::EINVAL, "write(): null VirtAddr"));
+            return Err(errno!(Errno::EFAULT, "write(): null VirtAddr"));
         }
         if self.addr % align_of::<T>() != 0 {
             return Err(errno!(Errno::EACCES, "write(): unaligned VirtAddr"));
@@ -212,7 +212,7 @@ impl VirtAddr {
 
     pub fn write_bytes(&self, bytes: &[u8]) -> KResult<usize> {
         if self.addr == 0 {
-            return Err(errno!(Errno::EINVAL, "write_bytes(): null VirtAddr"));
+            return Err(errno!(Errno::EFAULT, "write_bytes(): null VirtAddr"));
         }
         unsafe {
             core::slice::from_raw_parts_mut(self.as_mut_ptr(), bytes.len()).copy_from_slice(bytes)
@@ -222,7 +222,7 @@ impl VirtAddr {
 
     pub fn fill(&mut self, value: u8, len: usize) -> KResult<usize> {
         if self.addr == 0 {
-            return Err(errno!(Errno::EINVAL, "fill(): null VirtAddr"));
+            return Err(errno!(Errno::EFAULT, "fill(): null VirtAddr"));
         }
         unsafe { (self.value() as *mut u8).write_bytes(value, len) };
         Ok(len)

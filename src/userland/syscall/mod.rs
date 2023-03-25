@@ -80,7 +80,6 @@ impl<'a> SyscallHandler<'a> {
             );
         }
         
-
         let res = match n {
             SYS_ARCH_PRCTL => self.sys_arch_prctl(a1 as i32, VirtAddr::new(a2)),
             SYS_SET_TID_ADDRESS => self.sys_set_tid_address(VirtAddr::new(a1)),
@@ -201,6 +200,9 @@ macro_rules! bitflags_from_user {
 }
 
 fn resolve_path(uaddr: usize) -> KResult<PathBuf> {
+    // if uaddr == 0 {
+    //     Err(errno!(Errno::EFAULT, "resolve_path(): null address"))
+    // }
     Ok(Path::new(UserCStr::new(VirtAddr::new(uaddr), 512)?.as_str()).into())
 }
 

@@ -43,6 +43,6 @@ qemu-system-x86_64 \
     -D target/log.txt -d int,guest_errors -no-reboot -no-shutdown \
     -s -S \
     -serial mon:stdio \
-    -serial pty \
+    -serial mon:pty \
     -m 1G \
     -cdrom $KERNEL.iso

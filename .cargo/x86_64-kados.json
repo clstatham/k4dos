@@ -12,9 +12,7 @@
     "linker-flavor": "ld.lld",
     "pre-link-args": {
         "ld.lld": [
-            "--script=.cargo/linker.ld",
-            "-Map",
-            "kados.map"
+            "--script=.cargo/linker.ld"
         ]
     },
     "features": "-mmx,-sse,+soft-float",

@@ -1,16 +1,18 @@
+use core::sync::atomic::{AtomicBool, Ordering};
+
 use alloc::{
     collections::{BTreeMap, VecDeque},
     sync::Arc,
     vec::Vec,
 };
 use spin::RwLock;
-use x86_64::instructions::hlt;
+use x86_64::instructions::{hlt, interrupts::enable_and_hlt};
 
 use crate::{
     arch::{
         self,
         idt::InterruptFrame,
-        task::{arch_context_switch, ArchTask},
+        task::{arch_context_switch, ArchTask}, startup_init,
     },
     errno,
     fs::POLL_WAIT_QUEUE,
@@ -58,10 +60,14 @@ impl Scheduler {
             exited_tasks: Arc::new(IrqMutex::new(Vec::new())),
         };
         let idle_thread = Task::new_idle(&mut s);
+        let init_task = Task::new_kernel(&s, startup_init, false);
+        s.push_runnable(init_task);
         let preempt_task = Task::new_kernel(&s, preempt, false);
         let reaper_task = Task::new_kernel(&s, reap, true);
+        // let preempt_check_task = Task::new_kernel(&s, check_can_preempt, false);
         s.idle_thread = Some(idle_thread);
         s.preempt_task = Some(preempt_task);
+        // s.push_runnable(preempt_check_task);
         s.push_runnable(reaper_task);
         Arc::new(s)
     }
@@ -408,7 +414,7 @@ fn reap() {
     let scheduler = get_scheduler();
     loop {
         scheduler.reap_dead();
-        hlt();
+        enable_and_hlt();
     }
 }
 

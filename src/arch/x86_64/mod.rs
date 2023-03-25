@@ -1,5 +1,6 @@
-use core::arch::global_asm;
+use core::{arch::global_asm, sync::atomic::Ordering};
 
+use alloc::sync::Arc;
 use multiboot2::BootInformation;
 use x86::{
     controlregs::{self, Cr0, Cr4, Xcr0},
@@ -8,13 +9,13 @@ use x86::{
 use x86_64::instructions::{hlt, interrupts};
 
 use crate::{
-    fs::{self, initramfs::get_root, path::Path, tty::TTY},
+    fs::{self, initramfs::get_root, path::Path, tty::TTY, opened_file::{OpenedFile, OpenFlags, OpenOptions}},
     mem::{
         self,
         allocator::{KERNEL_FRAME_ALLOCATOR, KERNEL_PAGE_ALLOCATOR},
     },
     // serial::serial1_recv,
-    task::{get_scheduler, Task}, serial::serial1_recv,
+    task::{get_scheduler, Task, current_task}, serial::serial1_recv,
 };
 
 pub mod cpu_local;
@@ -129,6 +130,30 @@ pub fn arch_main(boot_info: BootInformation) {
 
     let sched = get_scheduler();
 
+    
+
+    fs::null::init();
+    fs::tty::init();
+
+    log::info!("Welcome to K4DOS!");
+
+    {
+        // let task = Task::new_init(file, sched, &[exe.as_bytes()], &[b"FOO=bar"]).unwrap();
+        
+        let task = Task::new_kernel(sched, poll_serial1, true);
+        sched.push_runnable(task);
+    }
+
+    loop {
+        interrupts::enable_and_hlt();
+        // sched.preempt();
+        // if sched.can_preempt.load(Ordering::SeqCst) {
+        //     sched.preempt();
+        // }
+    }
+}
+
+pub fn startup_init() {
     let exe = "/bin/sh";
     let file = get_root()
         .unwrap()
@@ -138,21 +163,42 @@ pub fn arch_main(boot_info: BootInformation) {
         .unwrap()
         .clone();
 
-    fs::null::init();
-    fs::tty::init();
+    let current = current_task();
+    let mut files = current.opened_files.lock();
+ 
+    let console = get_root()
+        .unwrap()
+        .lookup_path(Path::new("/dev/console"), true)
+        .unwrap();
 
-    log::info!("Welcome to K4DOS!");
-
-    {
-        let task = Task::new_init(file, sched, &[exe.as_bytes()], &[b"FOO=bar"]).unwrap();
-        sched.push_runnable(task);
-        let task = Task::new_kernel(sched, poll_serial1, true);
-        sched.push_runnable(task);
-    }
-
-    loop {
-        interrupts::enable_and_hlt();
-    }
+    // stdin
+    files.open_with_fd(
+        0,
+        Arc::new(OpenedFile::new(
+            console.clone(),
+            OpenFlags::O_RDONLY.into(),
+            0,
+        )),
+        OpenOptions::new(true, false),
+    ).unwrap();
+    // stdout
+    files.open_with_fd(
+        1,
+        Arc::new(OpenedFile::new(
+            console.clone(),
+            OpenFlags::O_WRONLY.into(),
+            0,
+        )),
+        OpenOptions::new(true, false),
+    ).unwrap();
+    // stderr
+    files.open_with_fd(
+        2,
+        Arc::new(OpenedFile::new(console, OpenFlags::O_WRONLY.into(), 0)),
+        OpenOptions::new(true, false),
+    ).unwrap();
+    drop(files);
+    current.exec(file, &[exe.as_bytes()], &[b"FOO=bar"]).unwrap();
 }
 
 fn poll_serial1() {

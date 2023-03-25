@@ -28,7 +28,7 @@ use crate::{
 use super::{
     cpu_local::get_tss,
     gdt::{KERNEL_CS_IDX, KERNEL_DS_IDX, USER_DS_IDX},
-    idt::InterruptFrame,
+    idt::{InterruptFrame, InterruptErrorFrame},
 };
 
 fn xsave(fpu: &mut Box<[u8]>) {
@@ -66,7 +66,8 @@ pub fn arch_context_switch(prev: &mut ArchTask, next: &mut ArchTask) {
         // log::debug!("Next context: {:#x?}", *next.context.as_ref());
 
         next.address_space.switch();
-        context_switch(prev.context.as_mut(), next.context.as_mut())
+        // interrupts::disable(); // why doesn't this work instead of the FIXME in fork()?
+        context_switch(&mut prev.context, next.context.as_ref())
     }
     // unreachable!("context_switch returned?");
 }
@@ -77,6 +78,7 @@ unsafe extern "C" fn iretq_init() -> ! {
         "
     cli
     
+    add rsp, 8
     ",
         crate::pop_regs!(),
         "
@@ -93,7 +95,8 @@ unsafe extern "C" fn fork_init() -> ! {
         concat!(
             "
         cli
-
+        
+        add rsp, 8
         ",
             crate::pop_regs!(),
             "
@@ -106,65 +109,87 @@ unsafe extern "C" fn fork_init() -> ! {
     )
 }
 
-use memoffset::offset_of;
 #[naked]
-unsafe extern "sysv64" fn context_switch(_prev: &mut Context, _next: &mut Context) {
-    core::arch::asm!("\
-        mov [rdi + {off_rbx}], rbx
-        mov rbx, [rsi + {off_rbx}]
-
-        mov [rdi + {off_r12}], r12
-        mov r12, [rsi + {off_r12}]
-
-        mov [rdi + {off_r13}], r13
-        mov r13, [rsi + {off_r13}]
-
-        mov [rdi + {off_r14}], r14
-        mov r14, [rsi + {off_r14}]
-
-        mov [rdi + {off_r15}], r15
-        mov r15, [rsi + {off_r15}]
-
-        mov [rdi + {off_rbp}], rbp
-        mov rbp, [rsi + {off_rbp}]
-
-        mov [rdi + {off_rsp}], rsp
-        mov rsp, [rsi + {off_rsp}]
-
+unsafe extern "C" fn context_switch(_prev: &mut core::ptr::Unique<Context>, _next: &Context) {
+    core::arch::asm!("
         pushfq
-        pop qword ptr [rdi + {off_rflags}]
+        push rbp
+        push rbx
+        push r12
+        push r13
+        push r14
+        push r15
 
-        push qword ptr [rsi + {off_rflags}]
+        mov [rdi], rsp
+        mov rsp, rsi
+
+        pop r15
+        pop r14
+        pop r13
+        pop r12
+        pop rbx
+        pop rbp
         popfq
-        
-        jmp {hook}
-    ", 
-    // pushfq
-        // pop qword ptr [rdi + {off_rflags}]
 
-        // push qword ptr [rsi + {off_rflags}]
-        // popfq
-    off_rflags = const(offset_of!(Context, rflags)),
-    // off_rip = const(offset_of!(Context, rip)),
-    off_rbx = const(offset_of!(Context, rbx)),
-    off_r12 = const(offset_of!(Context, r12)),
-    off_r13 = const(offset_of!(Context, r13)),
-    off_r14 = const(offset_of!(Context, r14)),
-    off_r15 = const(offset_of!(Context, r15)),
-    off_rbp = const(offset_of!(Context, rbp)),
-    off_rsp = const(offset_of!(Context, rsp)),
-    hook = sym switch_finish_hook,
-    options(noreturn))
+        ret
+
+    ", options(noreturn))
 }
+// use memoffset::offset_of;
+// #[naked]
+// unsafe extern "sysv64" fn context_switch(_prev: &mut Context, _next: &mut Context) {
+//     core::arch::asm!("\
+//         mov [rdi + {off_rbx}], rbx
+//         mov rbx, [rsi + {off_rbx}]
 
-unsafe extern "C" fn switch_finish_hook() {}
+//         mov [rdi + {off_r12}], r12
+//         mov r12, [rsi + {off_r12}]
+
+//         mov [rdi + {off_r13}], r13
+//         mov r13, [rsi + {off_r13}]
+
+//         mov [rdi + {off_r14}], r14
+//         mov r14, [rsi + {off_r14}]
+
+//         mov [rdi + {off_r15}], r15
+//         mov r15, [rsi + {off_r15}]
+
+//         mov [rdi + {off_rbp}], rbp
+//         mov rbp, [rsi + {off_rbp}]
+
+//         mov [rdi + {off_rsp}], rsp
+//         mov rsp, [rsi + {off_rsp}]
+
+//         pushfq
+//         pop qword ptr [rdi + {off_rflags}]
+
+//         push qword ptr [rsi + {off_rflags}]
+//         popfq
+        
+//         jmp {hook}
+//     ", 
+//     // pushfq
+//         // pop qword ptr [rdi + {off_rflags}]
+
+//         // push qword ptr [rsi + {off_rflags}]
+//         // popfq
+//     off_rflags = const(offset_of!(Context, rflags)),
+//     // off_rip = const(offset_of!(Context, rip)),
+//     off_rbx = const(offset_of!(Context, rbx)),
+//     off_r12 = const(offset_of!(Context, r12)),
+//     off_r13 = const(offset_of!(Context, r13)),
+//     off_r14 = const(offset_of!(Context, r14)),
+//     off_r15 = const(offset_of!(Context, r15)),
+//     off_rbp = const(offset_of!(Context, rbp)),
+//     off_rsp = const(offset_of!(Context, rsp)),
+//     hook = sym switch_finish_hook,
+//     options(noreturn))
+// }
+
 
 #[derive(Clone, Debug, Default)]
 #[repr(C)]
 pub struct Context {
-    // rip: usize,
-    rsp: usize,
-    // cr3: usize,
     r15: usize,
     r14: usize,
     r13: usize,
@@ -174,55 +199,7 @@ pub struct Context {
     rbp: usize,
 
     rflags: usize,
-}
-
-#[repr(C)]
-struct UserlandEntryRegs {
-    rcx: usize,
-    r11: usize,
-    rsp: usize,
-}
-
-#[naked]
-// unsafe extern "C" fn enter_usermode(rip: usize, rsp: usize, rflags: usize) -> ! {
-unsafe extern "C" fn enter_usermode() -> ! {
-    core::arch::asm!(concat!(
-        "
-        cli
-        swapgs
-        // push rdi
-        // push rsi
-        // push rdx
-
-        pop rcx
-        pop r11
-        pop rsp
-
-        mov r15, {user_ds}
-        mov ds, r15d
-        mov es, r15d
-        mov fs, r15d
-        mov gs, r15d
-
-        xor rax, rax
-        xor rbx, rbx
-        xor rdx, rdx
-        xor rsi, rsi
-        xor rbp, rbp
-        xor r8, r8
-        xor r9, r9
-        xor r10, r10
-        xor r12, r12
-        xor r13, r13
-        xor r14, r14
-        xor r15, r15
-
-        
-        sysretq
-    "),
-        user_ds = const((USER_DS_IDX as usize) << 3 | 3),
-        options(noreturn)
-    )
+    rip: usize,
 }
 
 #[naked]
@@ -233,11 +210,7 @@ unsafe extern "C" fn exec_entry(rcx: usize, rsp: usize, r11: usize) -> ! {
             cli
             swapgs
 
-            // push rdi
-            // push rsi
-            // push rdx
-
-            mov rcx, rdx
+            mov r11, rdx
             mov rcx, rdi
             mov rsp, rsi
 
@@ -260,8 +233,6 @@ unsafe extern "C" fn exec_entry(rcx: usize, rsp: usize, r11: usize) -> ! {
             xor r14, r14
             xor r15, r15
 
-            
-            
             sysretq
             ",
             user_ds = const((USER_DS_IDX as u64) << 3 | 3),
@@ -317,22 +288,22 @@ impl ArchTask {
         let mut stack_ptr = switch_stack.as_mut_ptr::<u8>() as usize;
         let mut stack = Stack::new(&mut stack_ptr);
 
-        let kframe = unsafe { stack.offset::<InterruptFrame>() };
-        *kframe = InterruptFrame::default();
-        kframe.ss = (KERNEL_DS_IDX as usize) << 3;
-        kframe.cs = (KERNEL_CS_IDX as usize) << 3;
-        kframe.rip = entry_point.value();
-        kframe.rsp = task_stack as usize;
-        kframe.rflags = if enable_interrupts { 0x200 } else { 0 };
+        let kframe = unsafe { stack.offset::<InterruptErrorFrame>() };
+        *kframe = InterruptErrorFrame::default();
+        kframe.frame.ss = (KERNEL_DS_IDX as usize) << 3;
+        kframe.frame.cs = (KERNEL_CS_IDX as usize) << 3;
+        kframe.frame.rip = entry_point.value();
+        kframe.frame.rsp = task_stack as usize;
+        kframe.frame.rflags = if enable_interrupts { 0x200 } else { 0 };
 
-        unsafe { stack.push(iretq_init as usize) };
-        let kframe_rsp = stack.top();
+        // unsafe { stack.push(iretq_init as usize) };
+        // let kframe_rsp = stack.top();
 
         let context = unsafe { stack.offset::<Context>() };
         *context = Context::default();
         // context.rip = iretq_init as usize;
-        context.rsp = kframe_rsp;
-        context.rflags = kframe.rflags;
+        context.rip = iretq_init as usize;
+        // context.rflags = kframe.frame.rflags;
         // context.cr3 = unsafe { controlregs::cr3() as usize };
         Self {
             context: unsafe { core::ptr::Unique::new_unchecked(context) },
@@ -346,120 +317,6 @@ impl ArchTask {
         }
     }
 
-    // #[allow(unreachable_code)]
-    pub fn new_binary(file: FileRef, argv: &[&[u8]], envp: &[&[u8]]) -> KResult<(Self, Vmem)> {
-        interrupts::disable();
-        let mut userland_entry = elf::load_elf(file)?;
-
-        let switch_stack = Self::alloc_switch_stack().unwrap();
-
-        let current = AddressSpace::current();
-
-        userland_entry.addr_space.switch();
-
-        userland_entry.vmem.map_area(
-            VirtAddr::new(USER_STACK_BOTTOM),
-            VirtAddr::new(USER_STACK_TOP),
-            MMapFlags::empty(),
-            MMapProt::PROT_READ | MMapProt::PROT_WRITE | MMapProt::PROT_EXEC,
-            MMapKind::Anonymous,
-            &mut userland_entry.addr_space.mapper(),
-        )?;
-
-        // first the kernel stack for the context switch
-
-        let mut stack_ptr = switch_stack.as_mut_ptr::<u8>() as usize;
-        let mut stack = Stack::new(&mut stack_ptr);
-
-        let kframe = unsafe { stack.offset::<UserlandEntryRegs>() };
-        // *kframe = InterruptFrame::default();
-        // kframe.ss = (USER_DS_IDX as u64) << 3 | 3;
-        // kframe.cs = (USER_CS_IDX as u64) << 3 | 3;
-        // kframe.rip = userland_entry.entry_point.value() as u64;
-        kframe.rcx = userland_entry.entry_point.value();
-        kframe.r11 = 0x200;
-
-        // kframe.rsp = (USER_STACK_TOP - core::mem::size_of::<usize>()) as u64;
-        // kframe.rflags = if enable_interrupts { 0x200 } else { 0 };
-        // kframe.rflags = 0x200;
-        unsafe { stack.push(enter_usermode as usize) };
-        let kframe_stack = stack.top();
-        let context = unsafe { stack.offset::<Context>() };
-        *context = Context::default();
-        // context.rip = enter_usermode as usize;
-        context.rflags = 0x200;
-        context.rsp = kframe_stack;
-        // context.cr3 = userland_entry.addr_space.cr3().value();
-        // log::debug!("Binary process context: {:#x?}", *context);
-        // now we set up the userland stack
-
-        let mut stack_addr = USER_STACK_TOP - core::mem::size_of::<usize>();
-        let mut stack = Stack::new(&mut stack_addr);
-
-        fn push_strs(strs: &[&[u8]], stack: &mut Stack) -> Vec<usize> {
-            let mut tops = Vec::new();
-            for slice in strs.iter() {
-                unsafe {
-                    stack.push(0u8);
-                    stack.push_bytes(slice);
-                }
-                tops.push(stack.top());
-            }
-            tops
-        }
-
-        let envp_tops = push_strs(envp, &mut stack);
-        let argv_tops = push_strs(argv, &mut stack);
-
-        stack.align_down(16);
-
-        let size = envp.len() + 1 + argv.len() + 1 + 1;
-        if size % 2 == 1 {
-            unsafe {
-                stack.push(0u64);
-            }
-        }
-
-        unsafe {
-            stack.push(0usize);
-            stack.push(AuxvType::AtNull);
-            stack.push(userland_entry.hdr);
-
-            stack.push(0u64);
-            // stack.push(envp_tops.as_slice());
-            for envp_top in envp_tops {
-                stack.push(envp_top);
-            }
-            stack.push(0u64);
-            // stack.push(argv_tops.as_slice());
-            for argv_top in argv_tops.iter() {
-                stack.push(*argv_top);
-            }
-            stack.push(argv_tops.len());
-        }
-
-        // core::mem::drop(argv_tops);
-        // core::mem::drop(envp_tops);
-        assert_eq!(stack.top() % 16, 0);
-
-        kframe.rsp = stack.top();
-        let fpu_storage = Self::alloc_fpu_storage();
-        current.switch();
-        Ok((
-            Self {
-                context: unsafe { core::ptr::Unique::new_unchecked(context) },
-                kernel_stack: alloc::vec![0u8; KERNEL_STACK_SIZE].into_boxed_slice(),
-                user: true,
-                address_space: userland_entry.addr_space,
-                fsbase: userland_entry.fsbase.unwrap_or(VirtAddr::null()),
-                gsbase: unsafe { VirtAddr::new(rdmsr(IA32_GS_BASE) as usize) },
-                // gsbase: VirtAddr::null(),
-                fpu_storage: Some(fpu_storage),
-            },
-            userland_entry.vmem,
-        ))
-    }
-
     pub fn exec(
         &mut self,
         vmem: &mut Vmem,
@@ -471,13 +328,12 @@ impl ArchTask {
         let userland_entry = elf::load_elf(file)?;
 
         // let switch_stack = alloc::vec![0u8; KERNEL_STACK_SIZE].into_boxed_slice();
-        let switch_stack = Self::alloc_switch_stack().unwrap();
+        // let switch_stack = Self::alloc_switch_stack().unwrap();
 
         self.kernel_stack = alloc::vec![0u8; KERNEL_STACK_SIZE].into_boxed_slice();
         self.fsbase = userland_entry.fsbase.unwrap_or(VirtAddr::null());
         self.gsbase = unsafe { VirtAddr::new(rdmsr(IA32_GS_BASE) as usize) };
 
-        // let current = AddressSpace::current();
         self.user = true;
         self.address_space = userland_entry.addr_space;
 
@@ -497,19 +353,22 @@ impl ArchTask {
 
         // first the kernel stack for the context switch
 
-        let mut stack_ptr = switch_stack.as_mut_ptr::<u8>() as usize;
-        let mut stack = Stack::new(&mut stack_ptr);
+        // let mut stack_ptr = switch_stack.as_mut_ptr::<u8>() as usize;
+        // let mut stack = Stack::new(&mut stack_ptr);
 
-        let kframe = unsafe { stack.offset::<UserlandEntryRegs>() };
-        // *kframe = InterruptFrame::default();
-        // kframe.ss = (USER_DS_IDX as u64) << 3 | 3;
-        // kframe.cs = (USER_CS_IDX as u64) << 3 | 3;
-        // kframe.rip = userland_entry.entry_point.value() as u64;
-        kframe.rcx = userland_entry.entry_point.value();
-        kframe.r11 = 0x200;
+        // let kframe = unsafe { stack.offset::<UserlandEntryRegs>() };
+        // // *kframe = InterruptFrame::default();
+        // // kframe.ss = (USER_DS_IDX as u64) << 3 | 3;
+        // // kframe.cs = (USER_CS_IDX as u64) << 3 | 3;
+        // // kframe.rip = userland_entry.entry_point.value() as u64;
+        // kframe.rcx = userland_entry.entry_point.value();
+        // kframe.r11 = 0x200;
 
-        let context = unsafe { stack.offset::<Context>() };
-        *context = Context::default();
+        // let context = unsafe { stack.offset::<Context>() };
+        // *context = Context::default();
+        // let mut context = Context::default();
+        
+        // context.rflags = 0x200;
 
         let mut stack_addr = USER_STACK_TOP - core::mem::size_of::<usize>();
         let mut stack = Stack::new(&mut stack_addr);
@@ -545,8 +404,8 @@ impl ArchTask {
 
             stack.push(0u64);
             // stack.push(envp_tops.as_slice());
-            for envp_top in envp_tops {
-                stack.push(envp_top);
+            for envp_top in envp_tops.iter() {
+                stack.push(*envp_top);
             }
             stack.push(0u64);
             // stack.push(argv_tops.as_slice());
@@ -556,40 +415,43 @@ impl ArchTask {
             stack.push(argv_tops.len());
         }
 
-        // core::mem::drop(argv_tops);
-        // core::mem::drop(envp_tops);
+        core::mem::drop(argv_tops);
+        core::mem::drop(envp_tops);
         assert_eq!(stack.top() % 16, 0);
 
-        kframe.rsp = stack.top();
-        context.rsp = kframe.rsp;
+        // kframe.rsp = stack.top();
         self.fpu_storage = Some(Self::alloc_fpu_storage());
-
-        self.context = unsafe { core::ptr::Unique::new_unchecked(context) };
+        // context.rip = userland_entry.entry_point.value();
+        self.context = core::ptr::Unique::dangling();
+        // unsafe {
+        //     *self.context.as_mut() = context;
+        // }
         unsafe {
-            exec_entry(kframe.rcx, kframe.rsp, kframe.r11);
+            exec_entry(userland_entry.entry_point.value(), stack.top(), 0x200);
         }
         // unreachable!();
         // Ok(())
     }
 
-    pub fn fork(&self, syscall_frame: &InterruptFrame) -> KResult<Self> {
+    pub fn fork(&self) -> KResult<Self> {
         assert!(self.user, "Cannot fork a kernel task");
 
         let address_space = AddressSpace::current().fork(true)?;
         unsafe { tlb::flush_all() };
 
         let switch_stack = Self::alloc_switch_stack()?.as_mut_ptr::<u8>();
-        // let mut old_rsp = unsafe { self.context.as_ref().rsp };
-        // let mut old_stack = Stack::new(&mut old_rsp);
+        let mut old_rsp = self.kernel_stack.as_ptr() as usize + self.kernel_stack.len();
+        let mut old_stack = Stack::new(&mut old_rsp);
 
         let mut new_rsp = switch_stack as usize;
         let mut new_stack = Stack::new(&mut new_rsp);
 
         unsafe {
-            let new_frame = new_stack.offset::<InterruptFrame>();
-            // let old_frame = old_stack.offset::<InterruptFrame>();
+            let new_frame = new_stack.offset::<InterruptErrorFrame>();
+            let old_frame = old_stack.offset::<InterruptErrorFrame>();
             // log::debug!("Old frame: {:#x?}", syscall_frame);
-            *new_frame = *syscall_frame;
+            *new_frame = *old_frame;
+            // new_frame.frame = *syscall_frame;
             // new_frame.cs = syscall_frame.cs;
             // new_frame.r10 = syscall_frame.r10;
             // new_frame.r11 = syscall_frame.r11;
@@ -609,16 +471,18 @@ impl ArchTask {
             // new_frame.rip = syscall_frame.rip;
             // new_frame.rflags = syscall_frame.rflags;
 
-            new_frame.rax = 0x0; // fork return value
+            new_frame.frame.rax = 0x0; // fork return value
 
-            new_stack.push(fork_init as usize);
+            // // fixme: having interrupts enabled between the context switch and fork_init being called will clobber the stack
+            new_frame.frame.rflags = old_frame.frame.rflags & !0x200;
+
+            // new_stack.push(fork_init as usize);
         }
-        let kframe_rsp = new_stack.top();
+        // let kframe_rsp = new_stack.top();
 
         let context = unsafe { new_stack.offset::<Context>() };
-        *context = unsafe { self.context.as_ref() }.clone();
-        // *context = Context::default();
-        context.rsp = kframe_rsp;
+        *context = Context::default();
+        context.rip = fork_init as usize;
         let mut fpu_storage = Self::alloc_fpu_storage();
         fpu_storage.copy_from_slice(self.fpu_storage.as_ref().unwrap().as_slice());
         Ok(Self {
@@ -649,28 +513,28 @@ impl ArchTask {
         let mut new_rsp = switch_stack as usize;
         let mut new_stack = Stack::new(&mut new_rsp);
 
-        let new_frame = unsafe { new_stack.offset::<InterruptFrame>() };
-        *new_frame = InterruptFrame::default();
+        let new_frame = unsafe { new_stack.offset::<InterruptErrorFrame>() };
+        *new_frame = InterruptErrorFrame::default();
         // *new_frame = *syscall_frame;
 
-        new_frame.cs = syscall_frame.cs;
-        new_frame.ss = syscall_frame.ss;
+        new_frame.frame.cs = syscall_frame.cs;
+        new_frame.frame.ss = syscall_frame.ss;
 
-        new_frame.r8 = r8;
-        new_frame.r9 = r9;
-        new_frame.rdi = args.value();
+        new_frame.frame.r8 = r8;
+        new_frame.frame.r9 = r9;
+        new_frame.frame.rdi = args.value();
 
-        new_frame.rip = entry_point.value();
-        new_frame.rsp = user_stack.value();
-        new_frame.rflags = 0x200;
+        new_frame.frame.rip = entry_point.value();
+        new_frame.frame.rsp = user_stack.value();
+        new_frame.frame.rflags = 0x200;
 
-        unsafe { new_stack.push(fork_init as usize) };
-        let kframe_rsp = new_stack.top();
+        // unsafe { new_stack.push(fork_init as usize) };
+        // let kframe_rsp = new_stack.top();
         let context = unsafe { new_stack.offset::<Context>() };
         *context = Context::default();
         // *context = unsafe { self.context.as_ref() }.clone();
-        context.rsp = kframe_rsp;
-        // context.rip = fork_init as usize;
+        // context.rsp = kframe_rsp;
+        context.rip = fork_init as usize;
 
         let mut fpu_storage = Self::alloc_fpu_storage();
         fpu_storage.copy_from_slice(self.fpu_storage.as_ref().unwrap().as_slice());

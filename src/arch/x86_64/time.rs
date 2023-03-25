@@ -20,7 +20,7 @@ static UPTIME_SEC: AtomicUsize = AtomicUsize::new(0);
 // });
 
 pub fn get_uptime_ticks() -> usize {
-    UPTIME_SEC.load(Ordering::SeqCst)
+    UPTIME_RAW.load(Ordering::SeqCst)
 }
 
 // pub fn get_rt_clock() -> TimeSpec {

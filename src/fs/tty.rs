@@ -361,8 +361,8 @@ impl File for Tty {
                 let winsize = WinSize {
                     ws_row: 24,
                     ws_col: 80,
-                    ws_xpixel: 640,
-                    ws_ypixel: 480,
+                    ws_xpixel: 0,
+                    ws_ypixel: 0,
                 };
                 let arg = VirtAddr::new(arg);
                 arg.write(winsize)?;

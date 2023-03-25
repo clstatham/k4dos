@@ -10,7 +10,7 @@ use alloc::{
 use atomic_refcell::AtomicRefCell;
 use crossbeam_utils::atomic::AtomicCell;
 use spin::Once;
-use x86_64::structures::idt::PageFaultErrorCode;
+use x86_64::{structures::idt::PageFaultErrorCode, instructions::interrupts};
 
 use crate::{
     arch::{
@@ -65,7 +65,7 @@ impl TaskId {
     }
 
     fn allocate() -> Self {
-        static NEXT_PID: AtomicUsize = AtomicUsize::new(2);
+        static NEXT_PID: AtomicUsize = AtomicUsize::new(1);
         Self::new(NEXT_PID.fetch_add(1, Ordering::AcqRel))
     }
 
@@ -153,71 +153,72 @@ impl Task {
         t
     }
 
-    pub fn new_init(
-        file: FileRef,
-        sched: &Arc<Scheduler>,
-        argv: &[&[u8]],
-        envp: &[&[u8]],
-    ) -> KResult<Arc<Task>> {
-        let pid = TaskId::new(1);
+    // pub fn new_init(
+    //     file: FileRef,
+    //     sched: &Arc<Scheduler>,
+    //     argv: &[&[u8]],
+    //     envp: &[&[u8]],
+    // ) -> KResult<Arc<Task>> {
+    //     let pid = TaskId::new(1);
 
-        let console = get_root()
-            .unwrap()
-            .lookup_path(Path::new("/dev/console"), true)
-            .unwrap();
+    //     let console = get_root()
+    //         .unwrap()
+    //         .lookup_path(Path::new("/dev/console"), true)
+    //         .unwrap();
 
-        let mut files = OpenedFileTable::new();
-        // stdin
-        files.open_with_fd(
-            0,
-            Arc::new(OpenedFile::new(
-                console.clone(),
-                OpenFlags::O_RDONLY.into(),
-                0,
-            )),
-            OpenOptions::empty(),
-        )?;
-        // stdout
-        files.open_with_fd(
-            1,
-            Arc::new(OpenedFile::new(
-                console.clone(),
-                OpenFlags::O_WRONLY.into(),
-                0,
-            )),
-            OpenOptions::empty(),
-        )?;
-        // stderr
-        files.open_with_fd(
-            2,
-            Arc::new(OpenedFile::new(console, OpenFlags::O_WRONLY.into(), 0)),
-            OpenOptions::empty(),
-        )?;
-        let group = sched.find_or_create_group(1);
-        let (arch, vmem) = ArchTask::new_binary(file, argv, envp)?;
-        let t = Arc::new_cyclic(|sref| Self {
-            sref: sref.clone(),
-            arch: UnsafeCell::new(arch),
-            state: AtomicCell::new(TaskState::Runnable),
-            pid,
-            parent: IrqMutex::new(Weak::new()),
-            group: AtomicRefCell::new(Arc::downgrade(&group)),
-            children: Arc::new(IrqMutex::new(Vec::new())),
-            root_fs: Arc::new(IrqMutex::new(get_root().unwrap().clone())),
-            opened_files: Arc::new(IrqMutex::new(files)),
-            vmem: Arc::new(IrqMutex::new(vmem)),
-            signaled_frame: AtomicCell::new(None),
-            signals: Arc::new(IrqMutex::new(SignalDelivery::new())),
-            sigset: Arc::new(IrqMutex::new(SigSet::ZERO)),
-        });
-        group.lock().add(Arc::downgrade(&t));
-        TTY.get()
-            .unwrap()
-            .set_foreground_group(Arc::downgrade(&group));
-        Ok(t)
-    }
+    //     let mut files = OpenedFileTable::new();
+    //     // stdin
+    //     files.open_with_fd(
+    //         0,
+    //         Arc::new(OpenedFile::new(
+    //             console.clone(),
+    //             OpenFlags::O_RDONLY.into(),
+    //             0,
+    //         )),
+    //         OpenOptions::new(true, false),
+    //     )?;
+    //     // stdout
+    //     files.open_with_fd(
+    //         1,
+    //         Arc::new(OpenedFile::new(
+    //             console.clone(),
+    //             OpenFlags::O_WRONLY.into(),
+    //             0,
+    //         )),
+    //         OpenOptions::new(true, false),
+    //     )?;
+    //     // stderr
+    //     files.open_with_fd(
+    //         2,
+    //         Arc::new(OpenedFile::new(console, OpenFlags::O_WRONLY.into(), 0)),
+    //         OpenOptions::new(true, false),
+    //     )?;
+    //     let group = sched.find_or_create_group(1);
+    //     let (arch, vmem) = ArchTask::new_binary(file, argv, envp)?;
+    //     let t = Arc::new_cyclic(|sref| Self {
+    //         sref: sref.clone(),
+    //         arch: UnsafeCell::new(arch),
+    //         state: AtomicCell::new(TaskState::Runnable),
+    //         pid,
+    //         parent: IrqMutex::new(Weak::new()),
+    //         group: AtomicRefCell::new(Arc::downgrade(&group)),
+    //         children: Arc::new(IrqMutex::new(Vec::new())),
+    //         root_fs: Arc::new(IrqMutex::new(get_root().unwrap().clone())),
+    //         opened_files: Arc::new(IrqMutex::new(files)),
+    //         vmem: Arc::new(IrqMutex::new(vmem)),
+    //         signaled_frame: AtomicCell::new(None),
+    //         signals: Arc::new(IrqMutex::new(SignalDelivery::new())),
+    //         sigset: Arc::new(IrqMutex::new(SigSet::ZERO)),
+    //     });
+    //     group.lock().add(Arc::downgrade(&t));
+    //     TTY.get()
+    //         .unwrap()
+    //         .set_foreground_group(Arc::downgrade(&group));
+    //     Ok(t)
+    // }
 
     pub fn exec(&self, file: FileRef, argv: &[&[u8]], envp: &[&[u8]]) -> KResult<()> {
+        // interrupts::disable();
         {
             self.opened_files.lock().close_cloexec_files();
             self.vmem
@@ -259,8 +260,8 @@ impl Task {
         new
     }
 
-    pub fn fork(&self, frame: &InterruptFrame) -> Arc<Task> {
-        let arch = UnsafeCell::new(self.arch_mut().fork(frame).unwrap());
+    pub fn fork(&self) -> Arc<Task> {
+        let arch = UnsafeCell::new(self.arch_mut().fork().unwrap());
         self.make_child(arch)
     }
 

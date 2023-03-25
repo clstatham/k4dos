@@ -1,3 +1,5 @@
+use core::sync::atomic::Ordering;
+
 use lazy_static::lazy_static;
 
 use pc_keyboard::{Keyboard, layouts::Us104Key, ScancodeSet1, HandleControl, DecodedKey};
@@ -314,7 +316,7 @@ extern "C" fn x64_handle_interrupt(vector: u8, stack_frame: *mut InterruptErrorF
                 error_code
             );
             if stack_frame.frame.is_user_mode() {
-                backtrace::unwind_user_stack_from(stack_frame.frame.rbp).unwrap();
+                // backtrace::unwind_user_stack_from(stack_frame.frame.rbp).unwrap();
                 get_scheduler().exit_current(1);
             }
             panic!()
@@ -327,16 +329,32 @@ extern "C" fn x64_handle_interrupt(vector: u8, stack_frame: *mut InterruptErrorF
             // unsafe {
             //     core::arch::asm!("swapgs");
             // }
-            if current_task()
+            let current = get_scheduler().current_task_opt();
+            if let Some(current) = current {
+                if current
                 .handle_page_fault(
                     VirtAddr::new(accessed_address as usize),
                     *stack_frame,
                     error_code,
                 )
                 .is_err()
-            {
+                {
+                    log::error!(
+                        "\nEXCEPTION: USER PAGE FAULT while accessing {:#x}\n\
+                        error code: {:?}\ncr3: {:#x}\n{:#x?}",
+                        accessed_address,
+                        error_code,
+                        cr3.start_address().as_u64(),
+                        stack_frame,
+                    );
+                    let rip = stack_frame.frame.rip;
+                    log::error!("Exception IP {:#x}", rip);
+                    log::error!("Faulted access address {:#x}", accessed_address,);
+                    panic!()
+                }
+            } else {
                 log::error!(
-                    "\nEXCEPTION: PAGE FAULT while accessing {:#x}\n\
+                    "\nEXCEPTION: KERNEL PAGE FAULT while accessing {:#x}\n\
                     error code: {:?}\ncr3: {:#x}\n{:#x?}",
                     accessed_address,
                     error_code,
@@ -348,6 +366,7 @@ extern "C" fn x64_handle_interrupt(vector: u8, stack_frame: *mut InterruptErrorF
                 log::error!("Faulted access address {:#x}", accessed_address,);
                 panic!()
             }
+            
         }
         X87_FPU_VECTOR => {
             log::error!("\nEXCEPTION: x87 FLOATING POINT\n{:#x?}", stack_frame);
@@ -429,6 +448,7 @@ pub fn init() {
     }
 
     unmask_irq(TIMER_IRQ);
+    unmask_irq(KEYBOARD_IRQ);
     unmask_irq(COM2_IRQ);
 }
 

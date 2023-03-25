@@ -3,3 +3,6 @@
 /extern
 /kados_syscall/target
 *.objdump
+*.map
+strace_vi.txt
+kados.map

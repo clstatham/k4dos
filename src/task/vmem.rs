@@ -465,8 +465,7 @@ impl Vmem {
             } else if reason.contains(PageFaultErrorCode::CAUSED_BY_WRITE) {
                 if !area.prot.contains(MMapProt::PROT_WRITE) {
                     log::error!("User segmentation fault: illegal write");
-                    get_scheduler().send_signal_to(current_task(), SIGSEGV);
-                    get_scheduler().exit_current(1);
+                    dump_and_exit()
                 }
                 // COW
                 let new_frame = alloc_kernel_frames(1)?;
