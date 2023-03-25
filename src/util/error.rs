@@ -17,8 +17,6 @@ pub enum KError {
 impl KError {
     pub fn msg(&self) -> Option<&'static str> {
         match self {
-            // KError::Error { .. } => None,
-            // KError::ErrorWithMessage { msg, .. } => Some(msg),
             KError::Message { msg } => Some(msg),
             KError::Errno { msg, .. } => *msg,
         }

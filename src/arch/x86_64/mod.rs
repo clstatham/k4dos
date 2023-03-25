@@ -14,7 +14,6 @@ use crate::{
         self,
         allocator::{KERNEL_FRAME_ALLOCATOR, KERNEL_PAGE_ALLOCATOR},
     },
-    // serial::serial1_recv,
     task::{get_scheduler, Task, current_task}, serial::serial1_recv,
 };
 
@@ -27,40 +26,16 @@ pub mod time;
 
 global_asm!(include_str!("boot.S"));
 
-// static HHDM: LimineHhdmRequest = LimineHhdmRequest::new(0);
-// static MEMMAP: LimineMemmapRequest = LimineMemmapRequest::new(0);
-// static KERNEL_FILE: LimineKernelFileRequest = LimineKernelFileRequest::new(0);
-// static STACK: LimineStackSizeRequest = LimineStackSizeRequest::new(0).stack_size(0x1000 * 32); // 32 pages
-
 pub fn arch_main(boot_info: BootInformation) {
     interrupts::disable();
-    // unsafe {
-    //     let stack = STACK.get_response().as_ptr();
-    //     core::ptr::read_volatile(stack.unwrap());
-    // }
 
-    // let memmap = MEMMAP.get_response().get_mut().unwrap().memmap_mut();
     let memmap = boot_info.memory_map_tag().unwrap();
-
-    // crate::PHYSICAL_OFFSET.store(
-    //     HHDM.get_response().get().unwrap().offset as usize,
-    //     core::sync::atomic::Ordering::SeqCst,
-    // );
 
     crate::logging::init();
     log::info!("Logger initialized.");
 
     log::info!("Setting up time structures.");
     time::init();
-
-    // let kernel_file = KERNEL_FILE.get_response().get().unwrap();
-    // let kernel_file = kernel_file.kernel_file.get().unwrap();
-
-    // crate::backtrace::KERNEL_ELF.call_once(|| {
-    //     let start = kernel_file.base.as_ptr().unwrap();
-    //     let elf_slice = unsafe { core::slice::from_raw_parts(start, kernel_file.length as usize) };
-    //     ElfFile::new(elf_slice).unwrap()
-    // });
 
     log::info!("Initializing FPU mechanisms.");
     let features = CpuId::new().get_feature_info().unwrap();
@@ -138,18 +113,12 @@ pub fn arch_main(boot_info: BootInformation) {
     log::info!("Welcome to K4DOS!");
 
     {
-        // let task = Task::new_init(file, sched, &[exe.as_bytes()], &[b"FOO=bar"]).unwrap();
-        
         let task = Task::new_kernel(sched, poll_serial1, true);
         sched.push_runnable(task);
     }
 
     loop {
         interrupts::enable_and_hlt();
-        // sched.preempt();
-        // if sched.can_preempt.load(Ordering::SeqCst) {
-        //     sched.preempt();
-        // }
     }
 }
 

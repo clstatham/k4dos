@@ -86,7 +86,6 @@ impl<'a> SyscallHandler<'a> {
     pub fn sys_exit(&mut self, status: c_int) -> KResult<isize> {
         get_scheduler().exit_current(status);
         Ok(0)
-        // unreachable!("sys_exit(): exit_current() returned")
     }
 
     pub fn sys_set_tid_address(&mut self, _addr: VirtAddr) -> KResult<isize> {
@@ -185,12 +184,9 @@ impl<'a> SyscallHandler<'a> {
             .lock()
             .retain(|p| p.pid() != got_pid);
 
-        // if let Ok(mut status) = status {
         if status.value() != 0 {
             status.write::<c_int>(status_val)?;
         }
-
-        // }
 
         Ok(got_pid.as_usize() as isize)
     }
@@ -202,16 +198,6 @@ fn arch_prctl(current_task: Arc<Task>, code: i32, addr: VirtAddr) -> KResult<()>
     match code {
         ARCH_SET_FS => {
             current_task.arch_mut().set_fsbase(addr);
-            // unsafe {
-            //     wrfsbase(value as u64);
-            // }
-            // let vmem = current.vmem();
-            // let mut vmem = vmem.as_ref().unwrap().lock();
-            // let fsbase_page = UserPage::containing_address(uaddr);
-            // let range = UserPageRange::new(fsbase_page, fsbase_page + 1);
-            // if vmem.is_range_free(&range) {
-            //     vmem.allocate_new_area(range, VirtualMemoryType::Other, PageTableFlags::WRITABLE | PageTableFlags::NO_EXECUTE, None)?;
-            // }
         }
         _ => return Err(errno!(Errno::EINVAL, "arch_prctl(): unknown code")),
     }

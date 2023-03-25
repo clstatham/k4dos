@@ -20,29 +20,14 @@ use crate::{
 pub const PIC_1_OFFSET: u8 = 32;
 pub const PIC_2_OFFSET: u8 = PIC_1_OFFSET + 8;
 
-// pub const TIMER_IDT_IDX: u8 = 32;
-// pub const KEYBOARD_IDT_IDX: u8 = 33;
-
 pub static PICS: Mutex<ChainedPics> =
     Mutex::new(unsafe { ChainedPics::new(PIC_1_OFFSET, PIC_2_OFFSET) });
 
 pub const TIMER_IRQ: u8 = PIC_1_OFFSET;
 pub const KEYBOARD_IRQ: u8 = PIC_1_OFFSET + 1;
 pub const COM2_IRQ: u8 = PIC_1_OFFSET + 3;
-// pub const ERROR_IRQ: u8 = 34;
-// pub const SPURIOUS_IRQ: u8 = 35;
 
 lazy_static! {
-    // pub static ref LAPIC: SpinLock<LocalApic> = SpinLock::new(
-    //     LocalApicBuilder::new()
-    //         .timer_vector(TIMER_IRQ as usize)
-    //         .error_vector(ERROR_IRQ as usize)
-    //         .spurious_vector(SPURIOUS_IRQ as usize)
-    //         .set_xapic_base(unsafe { xapic_base() })
-    //         .build()
-    //         .unwrap()
-    // );
-
     pub static ref IDT: InterruptDescriptorTable = {
         let mut idt = InterruptDescriptorTable::new();
         #[allow(clippy::fn_to_numeric_cast)]
@@ -84,12 +69,9 @@ lazy_static! {
             idt.security_exception
             .set_handler_addr(x86_64::VirtAddr::new(security_exception_handler as u64));
 
-            // idt[TIMER_IDT_IDX as usize].set_handler_fn(timer_handler);
             idt[TIMER_IRQ as usize].set_handler_addr(x86_64::VirtAddr::new(timer_handler as u64));
             idt[KEYBOARD_IRQ as usize].set_handler_addr(x86_64::VirtAddr::new(keyboard_handler as u64));
             idt[COM2_IRQ as usize].set_handler_addr(x86_64::VirtAddr::new(com2_handler as u64));
-            // idt[ERROR_IRQ as usize].set_handler_fn(lapic_error_handler);
-            // idt[SPURIOUS_IRQ as usize].set_handler_fn(lapic_spurious_handler);
         }
 
 
@@ -141,7 +123,6 @@ pub struct InterruptErrorFrame {
 
 pub fn notify_eoi(index: u8) {
     unsafe { PICS.lock().notify_end_of_interrupt(index) }
-    // unsafe { LAPIC.lock().end_of_interrupt() }
 }
 
 macro_rules! interrupt_handler {
@@ -230,7 +211,6 @@ extern "C" fn x64_handle_interrupt(vector: u8, stack_frame: *mut InterruptErrorF
 
     match vector {
         TIMER_IRQ => {
-            // log::info!("tick");
             super::time::pit_irq();
             let sched = get_scheduler();
             notify_eoi(TIMER_IRQ);
@@ -243,12 +223,6 @@ extern "C" fn x64_handle_interrupt(vector: u8, stack_frame: *mut InterruptErrorF
         COM2_IRQ => {
             notify_eoi(COM2_IRQ);
         }
-        // SPURIOUS_IRQ => {
-        //     notify_eoi(0);
-        // }
-        // ERROR_IRQ => {
-        //     panic!("LOCAL APIC ERROR: {:#x?}", stack_frame)
-        // }
         DIVIDE_ERROR_VECTOR => {
             log::error!("\nEXCEPTION: DIVIDE ERROR\n{:#x?}", stack_frame);
             panic!()
@@ -316,7 +290,7 @@ extern "C" fn x64_handle_interrupt(vector: u8, stack_frame: *mut InterruptErrorF
                 error_code
             );
             if stack_frame.frame.is_user_mode() {
-                // backtrace::unwind_user_stack_from(stack_frame.frame.rbp).unwrap();
+                backtrace::unwind_user_stack_from(stack_frame.frame.rbp).unwrap();
                 get_scheduler().exit_current(1);
             }
             panic!()
@@ -325,10 +299,6 @@ extern "C" fn x64_handle_interrupt(vector: u8, stack_frame: *mut InterruptErrorF
             let accessed_address = x86_64::registers::control::Cr2::read_raw();
             let cr3 = x86_64::registers::control::Cr3::read_raw().0;
             let error_code = PageFaultErrorCode::from_bits_truncate(error_code as u64);
-            // if error_code.contains(PageFaultErrorCode::USER_MODE) {
-            // unsafe {
-            //     core::arch::asm!("swapgs");
-            // }
             let current = get_scheduler().current_task_opt();
             if let Some(current) = current {
                 if current
@@ -442,8 +412,6 @@ pub fn unmask_irq(irq: u8) {
 pub fn init() {
     IDT.load();
     unsafe {
-        // let mut lock = LAPIC.lock();
-        // lock.enable();
         PICS.lock().initialize();
     }
 
@@ -451,14 +419,6 @@ pub fn init() {
     unmask_irq(KEYBOARD_IRQ);
     unmask_irq(COM2_IRQ);
 }
-
-// extern "x86-interrupt" fn lapic_error_handler(stack_frame: InterruptStackFrame) {
-//     panic!("LOCAL APIC ERROR: {:#x?}", stack_frame)
-// }
-
-// extern "x86-interrupt" fn lapic_spurious_handler(_stack_frame: InterruptStackFrame) {
-//     notify_eoi(0);
-// }
 
 fn do_keyboard_input() {
     lazy_static! {

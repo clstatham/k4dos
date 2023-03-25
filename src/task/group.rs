@@ -50,7 +50,6 @@ impl TaskGroup {
 
     pub fn signal(&mut self, signal: Signal) {
         for task in self.tasks.iter() {
-            // task.upgrade().unwrap().send_signal(signal);
             get_scheduler().send_signal_to(task.upgrade().unwrap(), signal);
         }
     }

@@ -28,13 +28,9 @@ pub mod syscall_impl;
 pub fn errno_to_isize(res: &KResult<isize>) -> isize {
     match res {
         Ok(retval) => {
-            // log::trace!("Syscall returned Ok");
             *retval
         }
         Err(err) => {
-            // if let Some(msg) = err.msg {
-
-            // }
             let errno = err.errno().unwrap() as i32;
             -errno as isize
         }
@@ -188,7 +184,6 @@ macro_rules! bitflags_from_user {
                     concat!("unsupported bitflags for ", stringify!($st), ": {:#x}"),
                     bits
                 );
-                // $st::from_bits_truncate(bits)
 
                 Err($crate::errno!(
                     $crate::util::errno::Errno::ENOSYS,
@@ -199,10 +194,8 @@ macro_rules! bitflags_from_user {
     }};
 }
 
+#[inline]
 fn resolve_path(uaddr: usize) -> KResult<PathBuf> {
-    // if uaddr == 0 {
-    //     Err(errno!(Errno::EFAULT, "resolve_path(): null address"))
-    // }
     Ok(Path::new(UserCStr::new(VirtAddr::new(uaddr), 512)?.as_str()).into())
 }
 

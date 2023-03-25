@@ -25,7 +25,6 @@ pub fn alloc_kernel_frames(count: usize) -> KResult<AllocatedFrames> {
         .get()
         .ok_or(kerrmsg!("KERNEL_FRAME_ALLOCATOR not initialized"))?
         .try_lock()?
-        // .ok_or(kerror!("Failed to lock KERNEL_FRAME_ALLOCATOR"))?
         .allocate(count)
 }
 
@@ -34,7 +33,6 @@ pub fn alloc_kernel_frames_at(start: Frame, count: usize) -> KResult<AllocatedFr
         .get()
         .ok_or(kerrmsg!("KERNEL_FRAME_ALLOCATOR not initialized"))?
         .try_lock()?
-        // .ok_or(kerror!("Failed to lock KERNEL_FRAME_ALLOCATOR"))?
         .allocate_at(start, count)
 }
 
@@ -43,7 +41,6 @@ pub fn alloc_kernel_pages(count: usize) -> KResult<AllocatedPages> {
         .get()
         .ok_or(kerrmsg!("KERNEL_PAGE_ALLOCATOR not initialized"))?
         .try_lock()?
-        // .ok_or(kerror!("Failed to lock KERNEL_FRAME_ALLOCATOR"))?
         .allocate(count)
 }
 
@@ -52,7 +49,6 @@ pub fn alloc_kernel_pages_at(start: Page, count: usize) -> KResult<AllocatedPage
         .get()
         .ok_or(kerrmsg!("KERNEL_PAGE_ALLOCATOR not initialized"))?
         .try_lock()?
-        // .ok_or(kerror!("Failed to lock KERNEL_FRAME_ALLOCATOR"))?
         .allocate_at(start, count)
 }
 
@@ -77,18 +73,13 @@ pub fn free_kernel_pages(pages: &mut AllocatedPages) -> KResult<()> {
 pub fn init(memmap: &MemoryMapTag) -> KResult<()> {
     let mut frame_alloc = FrameAllocator::new_static();
     for entry in memmap.memory_areas() {
-        // let entry = unsafe { &*entry.as_ptr() };
-        // if entry.typ == LimineMemoryMapEntryType::KernelAndModules
-            // || entry.typ == LimineMemoryMapEntryType::Usable
-        // {
-            let start = entry.start_address() as usize;
-            let end = start + entry.size() as usize;
-            let frames = FrameRange::new(
-                Frame::containing_address(PhysAddr::new(start)),
-                Frame::containing_address(PhysAddr::new(end)),
-            );
-            unsafe { frame_alloc.insert_free_region(frames) };
-        // }
+        let start = entry.start_address() as usize;
+        let end = start + entry.size() as usize;
+        let frames = FrameRange::new(
+            Frame::containing_address(PhysAddr::new(start)),
+            Frame::containing_address(PhysAddr::new(end)),
+        );
+        unsafe { frame_alloc.insert_free_region(frames) };
     }
     KERNEL_FRAME_ALLOCATOR.call_once(|| IrqMutex::new(frame_alloc));
 
@@ -229,7 +220,6 @@ macro_rules! allocator_impl {
             /// # Safety
             /// Caller must ensure the given memory region is not in use by anything else.
             pub unsafe fn insert_free_region(&mut self, range: $range) {
-                // self.assert_range_free(&R::new(start, end)).expect("tried to insert free range that wasn't free");
                 self.free_chunks.push(range)
             }
 
@@ -336,7 +326,6 @@ macro_rules! allocator_impl {
                             chunk.start() != merge1.start() && chunk.start() != merge2.start()
                         }),
                     }
-                    // self.free_chunks.retain(f);
                     if merge1.merge_with(merge2).is_err() {
                         panic!("Error merging chunks");
                     }

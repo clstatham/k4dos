@@ -172,7 +172,6 @@ impl IndexMut<usize> for PageTable {
 
 impl Debug for PageTable {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        // self.entries[..].fmt(f)
         writeln!(
             f,
             "PageTable[{:?}]",

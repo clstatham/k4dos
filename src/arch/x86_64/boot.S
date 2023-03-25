@@ -111,12 +111,6 @@ set_up_page_tables:
     lea eax, [p3_table + 0x3]
     mov dword ptr [edi], eax
     mov dword ptr [edi + 4], 0
-    
-    // ; Set up recursive paging at the second to last entry
-    // lea edi, [p4_table + 510 * 8]
-    // lea eax, [p4_table + 0x3]
-    // mov dword ptr [edi], eax
-    // mov dword ptr [edi + 4], 0
 
     lea edi, [p3_table]
     lea eax, [p2_table + 0x3]

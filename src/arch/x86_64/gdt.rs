@@ -30,7 +30,6 @@ lazy_static! {
         let mut gdt = GlobalDescriptorTable::new();
         let kernel_code_sel = gdt.add_entry(Descriptor::kernel_code_segment());
         let kernel_data_sel = gdt.add_entry(Descriptor::kernel_data_segment());
-        // let kernel_tls_sel = gdt.add_entry(Descriptor::kernel_data_segment());
         (gdt, [kernel_code_sel, kernel_data_sel])
     };
 }
@@ -71,8 +70,6 @@ pub fn init() {
     let kernel_cs_sel = gdt.add_entry(Descriptor::kernel_code_segment());
     // kernel data
     let kernel_ds_sel = gdt.add_entry(Descriptor::kernel_data_segment());
-    // // kernel tls
-    // let kernel_tls_sel = gdt.add_entry(Descriptor::kernel_data_segment());
     // TSS
     let tss_sel = gdt.add_entry(Descriptor::tss_segment(tss));
     // user data (syscall)
@@ -80,17 +77,6 @@ pub fn init() {
     // user code
     let _user_cs_sel = gdt.add_entry(Descriptor::user_code_segment());
 
-    // // user tls
-    // let user_tls_sel = gdt.add_entry(Descriptor::user_data_segment());
-
-    // log::debug!("kernel_cs: ({:#x}) {:?}", kernel_cs_sel.0, kernel_cs_sel);
-    // log::debug!("kernel_ds: ({:#x}) {:?}", kernel_ds_sel.0, kernel_ds_sel);
-    // log::debug!("tss:       ({:#x}) {:?}", tss_sel.0, tss_sel);
-    // log::debug!("user_cs:   ({:#x}) {:?}", user_cs_sel.0, user_cs_sel);
-    // log::debug!("user_ds:   ({:#x}) {:?}", user_ds_sel.0, user_ds_sel);
-
-    // get_kpcr().cpu_local.gdt = gdt;
-    // get_kpcr().cpu_local.gdt.load();
     gdt.load();
 
     unsafe {

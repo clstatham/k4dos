@@ -169,7 +169,6 @@ pub unsafe fn init() {
     star |= kernel_cs_offset << 32;
     wrmsr(
         x86::msr::IA32_STAR,
-        // (user_ds_offset << 48) | (kernel_cs_offset << 32),
         star,
     );
     wrmsr(x86::msr::IA32_LSTAR, syscall_entry as *const u8 as u64);

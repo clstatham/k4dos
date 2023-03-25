@@ -65,20 +65,13 @@ pub fn load_elf(file: FileRef) -> KResult<UserlandEntry> {
     let mut vmem = Vmem::new();
     let mut addr_space = AddressSpace::new()?;
 
-    // let user_heap_bottom = align_up(end_of_image, PAGE_SIZE);
-    // let random_bytes = gen_stack_canary();
     let load_offset =
         if elf.file.header.pt2.type_().as_type() == xmas_elf::header::Type::SharedObject {
             0x40000000
         } else {
-            // 0x00400000
             0
         };
 
-    // let mut symbols = BTreeMap::new();
-    // elf.for_each_symbol(|entry| {
-    //     symbols.insert(entry.shndx(), elf.file.section_header(entry.shndx()).unwrap());
-    // }).ok();
     let entry_point = VirtAddr::new(elf.entry_point() as usize + load_offset);
 
     log::debug!("Entry point: {:?}", entry_point);
@@ -97,7 +90,6 @@ pub fn load_elf(file: FileRef) -> KResult<UserlandEntry> {
 
     current.switch();
     let p2 = elf.file.header.pt2;
-    // log::debug!("{:?}", p2);
     log::debug!("Base address at {:?}", VirtAddr::new(loader.base_addr));
     let hdr = [
         (AuxvType::AtPhdr, p2.ph_offset() as usize + loader.base_addr),
@@ -122,7 +114,6 @@ struct KadosElfLoader<'a> {
     base_addr: usize,
     load_offset: usize,
     file: FileRef,
-    // symbols: BTreeMap<u16, SectionHeader<'a>>,
     entry_point: VirtAddr,
 }
 
@@ -144,9 +135,6 @@ impl<'a> ElfLoader for KadosElfLoader<'a> {
                 }
                 let flags = MMapFlags::empty();
                 let mut prot = MMapProt::PROT_WRITE;
-                // if header.flags().is_write() {
-                //     flags.insert(PageTableFlags::WRITABLE);
-                // }
                 if header.flags().is_execute() {
                     prot.insert(MMapProt::PROT_EXEC);
                 }
@@ -207,13 +195,6 @@ impl<'a> ElfLoader for KadosElfLoader<'a> {
         area.prot = prot;
         Ok(())
     }
-
-    // fn make_readonly(&mut self, base: elfloader::VAddr, size: usize) -> Result<(), elfloader::ElfLoaderErr> {
-    //     let start = VirtAddr::new(base as usize);
-    //     let end = start + size;
-    //     let area_id = self.vmem.area_containing(start, end).unwrap();
-    //     // todo
-    // }
 
     fn tls(
         &mut self,

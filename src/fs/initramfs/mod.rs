@@ -160,11 +160,7 @@ impl InitRamFs {
 
             if path.is_empty() {
                 return Err(errno!(Errno::EINVAL, "parse(): empty path"));
-                // image.skip(1)?;
-                // image.skip_until_alignment(4)?;
-                // continue;
             }
-            // log::trace!("initramfs: {} ({} bytes)", path, filesize);
             image.skip(1)?;
             image.skip_until_alignment(4)?;
 
@@ -174,7 +170,6 @@ impl InitRamFs {
                 mut components_peekable: Peekable<Components>,
                 dir: DirRef,
             ) -> Option<(DirRef, String)> {
-                // let mut components_peekable = components.peekable();
                 let next = components_peekable.next();
                 next?;
                 if components_peekable.peek().is_none() {
@@ -217,7 +212,6 @@ impl InitRamFs {
                         ..Stat::zeroed()
                     },
                 }));
-                // parent_dir.with_write(|d| d.insert(&filename, inode));
                 parent_dir.insert(inode);
             } else if mode.is_directory() {
                 let inode = INode::Dir(Arc::new(InitRamFsDir {
@@ -244,8 +238,6 @@ impl InitRamFs {
                         ..Stat::zeroed()
                     }),
                 };
-                // file.write(0, UserBuffer::from_slice(data), OpenOptions::empty())?;
-                // parent_dir.with_write(|d| d.insert(&filename, INode::File(Arc::new(file))));
                 parent_dir.insert(INode::File(Arc::new(file)));
             }
 

@@ -153,70 +153,6 @@ impl Task {
         t
     }
 
-    // pub fn new_init(
-    //     file: FileRef,
-    //     sched: &Arc<Scheduler>,
-    //     argv: &[&[u8]],
-    //     envp: &[&[u8]],
-    // ) -> KResult<Arc<Task>> {
-    //     let pid = TaskId::new(1);
-
-    //     let console = get_root()
-    //         .unwrap()
-    //         .lookup_path(Path::new("/dev/console"), true)
-    //         .unwrap();
-
-    //     let mut files = OpenedFileTable::new();
-    //     // stdin
-    //     files.open_with_fd(
-    //         0,
-    //         Arc::new(OpenedFile::new(
-    //             console.clone(),
-    //             OpenFlags::O_RDONLY.into(),
-    //             0,
-    //         )),
-    //         OpenOptions::new(true, false),
-    //     )?;
-    //     // stdout
-    //     files.open_with_fd(
-    //         1,
-    //         Arc::new(OpenedFile::new(
-    //             console.clone(),
-    //             OpenFlags::O_WRONLY.into(),
-    //             0,
-    //         )),
-    //         OpenOptions::new(true, false),
-    //     )?;
-    //     // stderr
-    //     files.open_with_fd(
-    //         2,
-    //         Arc::new(OpenedFile::new(console, OpenFlags::O_WRONLY.into(), 0)),
-    //         OpenOptions::new(true, false),
-    //     )?;
-    //     let group = sched.find_or_create_group(1);
-    //     let (arch, vmem) = ArchTask::new_binary(file, argv, envp)?;
-    //     let t = Arc::new_cyclic(|sref| Self {
-    //         sref: sref.clone(),
-    //         arch: UnsafeCell::new(arch),
-    //         state: AtomicCell::new(TaskState::Runnable),
-    //         pid,
-    //         parent: IrqMutex::new(Weak::new()),
-    //         group: AtomicRefCell::new(Arc::downgrade(&group)),
-    //         children: Arc::new(IrqMutex::new(Vec::new())),
-    //         root_fs: Arc::new(IrqMutex::new(get_root().unwrap().clone())),
-    //         opened_files: Arc::new(IrqMutex::new(files)),
-    //         vmem: Arc::new(IrqMutex::new(vmem)),
-    //         signaled_frame: AtomicCell::new(None),
-    //         signals: Arc::new(IrqMutex::new(SignalDelivery::new())),
-    //         sigset: Arc::new(IrqMutex::new(SigSet::ZERO)),
-    //     });
-    //     group.lock().add(Arc::downgrade(&t));
-    //     TTY.get()
-    //         .unwrap()
-    //         .set_foreground_group(Arc::downgrade(&group));
-    //     Ok(t)
-    // }
-
     pub fn exec(&self, file: FileRef, argv: &[&[u8]], envp: &[&[u8]]) -> KResult<()> {
         // interrupts::disable();
         {
@@ -285,7 +221,6 @@ impl Task {
         let t = Arc::new_cyclic(|sref| Self {
             sref: sref.clone(),
             arch,
-            // opened_files: self.opened_files.clone(),
             opened_files: Arc::new(IrqMutex::new(self.opened_files.lock().clone())), // todo: deeper clone
             state: AtomicCell::new(TaskState::Runnable),
             pid,
@@ -297,10 +232,8 @@ impl Task {
             signaled_frame: AtomicCell::new(None),
             sigset: Arc::new(IrqMutex::new(SigSet::ZERO)),
             vmem: self.vmem.clone(), // important: we don't fork_from here
-                                     // vmem: Arc::new(SpinLock::new(Vmem::new())),
         });
         self.add_child(t.clone());
-        // t.vmem.lock().fork_from(&self.vmem.lock());
         group.lock().add(Arc::downgrade(&t));
         get_scheduler().push_runnable(t.clone());
         t
@@ -382,14 +315,10 @@ impl Task {
         _length: usize,
     ) -> KResult<()> {
         let mut sigset = self.sigset.lock();
-        // if let Ok(old) = oldset {
         if oldset.value() != 0 {
             oldset.write_bytes(sigset.as_raw_slice())?;
         }
 
-        // }
-
-        // if let Ok(new) = set {
         if set.value() != 0 {
             let new_set = set.read::<[u8; 128]>()?;
             let new_set = SigSet::new(*new_set);
@@ -399,7 +328,6 @@ impl Task {
                 SignalMask::Set => *sigset = new_set,
             }
         }
-        // }
 
         Ok(())
     }

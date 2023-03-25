@@ -182,7 +182,6 @@ impl<'a> SyscallHandler<'a> {
         if fds == VirtAddr::null() {
             return Err(errno!(Errno::EFAULT, "sys_pipe(): null VirtAddr"));
         }
-        // let fds: &mut [FileDesc] = unsafe { core::slice::from_raw_parts_mut::<i32>(fds.as_mut_ptr(), core::mem::size_of::<i32>() * 2) };
 
         let current = current_task();
         let pipe = current
@@ -192,9 +191,6 @@ impl<'a> SyscallHandler<'a> {
 
         let write_fd = pipe.write_fd();
         let read_fd = pipe.read_fd();
-
-        // fds[0] = read_fd;
-        // fds[1] = write_fd;
 
         let mut writer = UserBufferWriter::from_vaddr(fds, size_of::<FileDesc>() * 2);
         writer.write(write_fd)?;
@@ -219,22 +215,18 @@ impl<'a> SyscallHandler<'a> {
             let mut reader = UserBufferReader::from(UserBuffer::from_vaddr(fds, fds_len));
             for _ in 0..nfds {
                 let fd = reader.read::<FileDesc>()?;
-                log::debug!("fd: {:?}", fd);
+                // log::debug!("fd: {:?}", fd);
                 let events = bitflags_from_user!(PollStatus, reader.read::<c_short>()?);
                 
                 if fd < 0 || events.is_empty() {
                     return Err(errno!(Errno::EINVAL, "sys_poll(): invalid fd or events was NULL"));
                 } else {
-                    log::debug!("events: {:?}", events);
+                    // log::debug!("events: {:?}", events);
                     let current = current_task();
                     let opened_files = current.opened_files.lock();
                     let status = opened_files.get(fd)?.poll()?;
-                    // let revents = if let Ok(file) = opened_files.get(fd) {
-                    //     file.poll()? & events
-                    // } else {
-                    //     PollStatus::POLLNVAL
-                    // };
-                    log::debug!("status: {:?}", status);
+
+                    // log::debug!("status: {:?}", status);
                     let revents = events & status;
                     if !revents.is_empty() {
                         ready_fds += 1;

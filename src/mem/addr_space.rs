@@ -40,8 +40,6 @@ impl AddressSpace {
                 page_table[i] = active_table[i];
             }
 
-            // page_table[0] = active_table[0];
-
             frame
         };
 

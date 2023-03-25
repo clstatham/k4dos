@@ -172,7 +172,6 @@ impl VirtAddr {
     }
 
     pub fn read_ok<T: Sized>(&self) -> KResult<()> {
-        // let ptr = self.as_ptr::<T>();
         if self.addr == 0 {
             return Err(errno!(Errno::EFAULT, "read_ok(): null VirtAddr"));
         }

@@ -58,17 +58,6 @@ impl<'a> UserBufferMut<'a> {
     }
 
     pub fn from_vaddr(vaddr: VirtAddr, len: usize) -> UserBufferMut<'static> {
-        // let mut mp = allocate_mapped_pages(
-        //     bytes_to_pages(len),
-        //     mapper,
-        //     PageTableFlags::USER_ACCESSIBLE | PageTableFlags::WRITABLE,
-        // )
-        // .unwrap();
-        // unsafe {
-        //     mp.as_slice_mut::<u8>(0, len)
-        //         .unwrap()
-        //         .copy_from_slice(core::slice::from_raw_parts(vaddr.as_ptr(), len));
-        // }
         UserBufferMut {
             inner: InnerMut::User { base: vaddr, len },
         }
@@ -114,7 +103,6 @@ impl UserCStr {
     pub fn new(vaddr: VirtAddr, max_len: usize) -> KResult<UserCStr> {
         vaddr.read_ok::<u8>()?;
         let mut tmp = alloc::vec![0; max_len];
-        // vaddr.access_ok(max_len as isize)?;
         // SAFE: we've validated the length of the string, and confirmed that it won't run into kernel memory
         let read_len = unsafe { user_strncpy(tmp.as_mut_ptr(), vaddr.as_ptr(), max_len) };
         let string = core::str::from_utf8(&tmp[..read_len])
@@ -173,10 +161,6 @@ impl<'a> UserBufferReader<'a> {
     }
 
     pub fn read<T: Copy + Sized>(&mut self) -> KResult<T> {
-        // let read_len = core::cmp::min(dst.len(), self.remaining_len());
-        // if read_len == 0 {
-        //     return Ok(0);
-        // }
         self.check_remaining_len(size_of::<T>())?;
 
         let val = match &self.buf.inner {

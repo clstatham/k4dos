@@ -104,7 +104,7 @@ impl<'a> Mapper<'a> {
     pub fn set_flags(&mut self, mp: &mut MappedPages, flags: PageTableFlags) {
         for page in mp.pages().iter() {
             let addr = page.start_address();
-            // these unwraps should be safe since we know the pages are alreaday mapped
+            // these unwraps should be safe since we know the pages are already mapped
             let p3 = self.p4.next_table_mut(addr.p4_index()).unwrap();
             let p2 = p3.next_table_mut(addr.p3_index()).unwrap();
             let p1 = p2.next_table_mut(addr.p2_index()).unwrap();
@@ -117,7 +117,7 @@ impl<'a> Mapper<'a> {
     pub fn unmap(&mut self, mp: &mut MappedPages) {
         for page in mp.pages().iter() {
             let addr = page.start_address();
-            // these unwraps should be safe since we know the pages are alreaday mapped
+            // these unwraps should be safe since we know the pages are already mapped
             let p3 = self.p4.next_table_mut(addr.p4_index()).unwrap();
             let p2 = p3.next_table_mut(addr.p3_index()).unwrap();
             let p1 = p2.next_table_mut(addr.p2_index()).unwrap();
@@ -128,7 +128,7 @@ impl<'a> Mapper<'a> {
 
     pub unsafe fn unmap_single(&mut self, page: Page) {
         let addr = page.start_address();
-        // these unwraps should be safe since we know the pages are alreaday mapped
+        // these unwraps should be safe since we know the pages are already mapped
         let p3 = self.p4.next_table_mut(addr.p4_index()).unwrap();
         let p2 = p3.next_table_mut(addr.p3_index()).unwrap();
         let p1 = p2.next_table_mut(addr.p2_index()).unwrap();
@@ -138,7 +138,7 @@ impl<'a> Mapper<'a> {
 
     pub unsafe fn set_flags_single(&mut self, page: Page, flags: PageTableFlags) {
         let addr = page.start_address();
-        // these unwraps should be safe since we know the pages are alreaday mapped
+        // these unwraps should be safe since we know the pages are already mapped
         let p3 = self.p4.next_table_mut(addr.p4_index()).unwrap();
         let p2 = p3.next_table_mut(addr.p3_index()).unwrap();
         let p1 = p2.next_table_mut(addr.p2_index()).unwrap();

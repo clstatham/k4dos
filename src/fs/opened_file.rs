@@ -43,16 +43,6 @@ bitflags! {
         const O_NOATIME   = 0o01000000;
         const O_PATH      = 0o010000000;
         const O_TMPFILE   = 0o020200000;
-
-        // const O_CREAT = 0x100;
-        // const O_EXCL = 0x200;
-        // const O_NOCTTY = 0x400;
-        // const O_TRUNC = 0x1000;
-        // const O_APPEND = 0x2000;
-        // const O_NONBLOCK = 0x4000;
-        // const O_CLOEXEC = 0x80000;
-        // const O_DIRECTORY = 0x200000;
-        // const O_CLOEXEC  = 0x2000000;
     }
 }
 
@@ -350,11 +340,9 @@ impl OpenedFileTable {
         let write_fd = self.alloc_fd(None)?;
         let read_fd = self.alloc_fd(Some(write_fd + 1))?;
         let pipe = Arc::new(Pipe::new(read_fd, write_fd));
-        // self.files.push(pipe.clone());
         PIPE_FS.insert(pipe.clone());
 
         self.files.resize(read_fd as usize + 1, None);
-        // let fd = self.alloc_fd(Some(read_fd + 1))?;
         self.open_with_fd(
             write_fd,
             OpenedFile::new(
@@ -383,16 +371,7 @@ impl OpenedFileTable {
             .into(),
             options,
         )?;
-
-        // self.files[write_fd as usize] = Some(LocalOpenedFile {
-        //     opened_file: Arc::new(OpenedFileType::Pipe(pipe.clone())),
-        //     close_on_exec: options.close_on_exec,
-        // });
-        // self.files[read_fd as usize] = Some(LocalOpenedFile {
-        //     opened_file: Arc::new(OpenedFileType::Pipe(pipe.clone())),
-        //     close_on_exec: options.close_on_exec,
-        // });
-
+        
         Ok(pipe)
     }
 }

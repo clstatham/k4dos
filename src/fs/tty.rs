@@ -35,24 +35,9 @@ pub fn init() {
         .as_dir()
         .unwrap()
         .insert(INode::File(tty));
-    // get_root()
-    //     .unwrap()
-    //     .lookup(Path::new("dev"), true)
-    //     .unwrap()
-    //     .as_dir()
-    //     .unwrap()
-    //     .insert(INode::Symlink(Arc::new(InitRamFsSymlink {
-    //         dst: Path::new("/dev/console").into(),
-    //         name: "tty".to_owned(),
-    //         stat: Stat {
-    //             inode_no: alloc_inode_no(),
-    //             ..tty.stat().unwrap()
-    //         }
-    //     }) as SymlinkRef));
 }
 
 bitflags! {
-    // #[derive(Default)]
     #[repr(C)]
     #[derive(Clone, Copy, Debug)]
     pub struct LFlag: u32 {
@@ -68,7 +53,6 @@ impl Default for LFlag {
 }
 
 bitflags! {
-    // #[derive(Default)]
     #[repr(C)]
     #[derive(Clone, Copy, Debug)]
     pub struct IFlag: u32 {
@@ -254,6 +238,7 @@ impl LineDiscipline {
             None
         };
         self.wait_queue.sleep_signalable_until(timeout, || {
+            // todo: figure out how to get this working
             // if !self.is_current_foreground() {
             //     return Ok(None)
             // }
@@ -297,7 +282,6 @@ impl Tty {
             match ctrl {
                 LineControl::Backspace => {
                     serial1_print!("\x08 \x08");
-                    // vga_text::backspace();
                 }
                 LineControl::Echo(ch) => {
                     self.write(0, UserBuffer::from_slice(&[ch]), &OpenOptions::readwrite()).ok();
@@ -386,7 +370,6 @@ impl File for Tty {
             _offset: usize,
             buf: UserBufferMut,
             options: &OpenOptions,
-            // len: usize,
         ) -> KResult<usize> {
         let read_len = self.discipline.read(buf, options)?;
         if read_len > 0 {
@@ -406,7 +389,7 @@ impl File for Tty {
         let mut reader = UserBufferReader::from(buf);
         while reader.remaining_len() > 0 {
             let copied_len = reader.read_bytes(&mut tmp)?;
-            serial1_print!("{}", core::str::from_utf8(&tmp[..copied_len]).unwrap());
+            serial1_print!("{}", String::from_utf8_lossy(&tmp[..copied_len]));
             total_len += copied_len;
         }
         if total_len > 0 {
@@ -457,7 +440,6 @@ impl File for PtyMaster {
             _offset: usize,
             buf: UserBufferMut<'_>,
             options: &OpenOptions,
-            // len: usize,
         ) -> KResult<usize> {
         let mut writer = UserBufferWriter::from(buf);
         let timeout = if options.nonblock {
@@ -557,7 +539,6 @@ impl File for PtySlave {
             _offset: usize,
             buf: UserBufferMut,
             options: &OpenOptions,
-            // len: usize,
         ) -> KResult<usize> {
         let read_len = self.master.discipline.read(buf, options)?;
         if read_len > 0 {
@@ -668,7 +649,6 @@ impl File for Ptmx {
             _offset: usize,
             _buf: UserBufferMut,
             _options: &OpenOptions,
-            // len: usize,
         ) -> KResult<usize> {
         unreachable!()
     }

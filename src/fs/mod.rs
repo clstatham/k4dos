@@ -220,7 +220,6 @@ pub trait File: FsNode {
         _offset: usize,
         _buf: UserBufferMut,
         _options: &OpenOptions,
-        // len: usize,
     ) -> KResult<usize> {
         Err(errno!(Errno::EBADF, "read(): not implemented"))
     }
@@ -243,14 +242,6 @@ pub trait Symlink: FsNode {
         Ok(())
     }
 }
-
-// pub fn root_path_component() -> Arc<PathComponent> {
-//     Arc::new(PathComponent {
-//         parent_dir: None,
-//         name: "".to_string(),
-//         inode: INode::Dir(get_root().unwrap().clone()),
-//     })
-// }
 
 pub trait Directory: FsNode {
     fn insert(&self, inode: INode);

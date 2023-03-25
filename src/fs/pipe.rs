@@ -115,10 +115,6 @@ impl PipeFs {
         }
     }
 
-    // pub fn pipe(&mut self, reader: Arc<Task>, writer: Arc<Task>) -> KResult<Arc<Pipe>> {
-    //     let pipe = Arc::new(Pipe::new(, write_fd))
-    // }
-
     pub fn insert(&self, pipe: Arc<Pipe>) {
         self.pipes.lock().push(pipe);
     }

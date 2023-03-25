@@ -6,7 +6,6 @@ use x86::current::rflags::{self, RFlags};
 use x86_64::instructions::interrupts;
 
 use crate::task::wait_queue::WaitQueue;
-// use crate::interrupts::SavedInterruptStatus;
 use crate::{backtrace, kerrmsg};
 
 use super::error::KResult;
@@ -57,14 +56,6 @@ impl<T: ?Sized> BlockingMutex<T> {
     }
 
     pub fn lock(&self) -> KResult<BlockingMutexGuard<'_, T>> {
-        // if self.inner.is_locked() {
-        //     serial0_println!(
-        //         "WARNING: Tried to relock IrqMutex of {}",
-        //         core::any::type_name::<T>()
-        //     );
-        //     // backtrace::backtrace();
-        //     backtrace::unwind_stack().unwrap();
-        // }
         let guard = self.queue.sleep_signalable_until(None, || {
             if let Ok(guard) = self.inner.try_lock() {
                 Ok(Some(BlockingMutexGuard {
@@ -147,8 +138,7 @@ impl<T: ?Sized> IrqMutex<T> {
                 "WARNING: Tried to relock IrqMutex of {}",
                 core::any::type_name::<T>()
             );
-            // backtrace::backtrace();
-            backtrace::unwind_stack().unwrap();
+            backtrace::unwind_stack().ok();
         }
 
         let saved_intr_status = SavedInterruptStatus::save();
