@@ -151,6 +151,7 @@ impl<'a> SyscallHandler<'a> {
             SYS_TKILL => self.sys_kill(TaskId::new(a1), a2 as c_int), // todo
             SYS_UNLINK => self.sys_unlink(&resolve_path(a1)?),
             SYS_LSEEK => self.sys_lseek(a1 as FileDesc, a2, a3.into()),
+            SYS_DUP2 => self.sys_dup2(a1 as FileDesc, a2 as FileDesc),
             _ => Err(errno!(Errno::ENOSYS, "dispatch(): syscall not implemented")),
         };
 

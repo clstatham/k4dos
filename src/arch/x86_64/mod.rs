@@ -141,7 +141,7 @@ pub fn startup_init() {
 
     let console = get_root()
         .unwrap()
-        .lookup_path(Path::new("/dev/console"), true)
+        .lookup_path(Path::new("/dev/tty"), true)
         .unwrap();
 
     // stdin

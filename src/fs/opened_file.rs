@@ -109,9 +109,6 @@ impl OpenedFile {
     }
 
     pub fn set_flags(&self, flags: OpenFlags) -> KResult<()> {
-        // if flags.contains(OpenFlags::O_NONBLOCK) {
-        //     self.options.borrow_mut().set(OpenFlags::O_NONBLOCK, value) = true;
-        // }
         *self.options.borrow_mut() = flags;
 
         Ok(())
@@ -138,6 +135,8 @@ impl OpenedFile {
     }
 
     pub fn lseek(&self, offset: usize, whence: LseekWhence) -> KResult<usize> {
+        // We perform this check before we know we need something from the inode
+        // because this should only be called on files anyway.
         let file = self.inode().as_file()?;
         match whence {
             LseekWhence::Set => self.pos.store(offset),
@@ -325,6 +324,13 @@ impl OpenedFileTable {
 
         self.alloc_fd(gte)
             .and_then(|fd| self.open_with_fd(fd, file, options).map(|_| fd))
+    }
+
+    pub fn dup2(&mut self, oldfd: FileDesc, newfd: FileDesc) -> KResult<FileDesc> {
+        let old_file = self.files.get(oldfd as usize).and_then(|file| file.as_ref().map(|file| file.opened_file.clone())).ok_or(errno!(Errno::EBADF, "dup2(): file not opened"))?;
+        let options = old_file.options();
+        self.open_with_fd(newfd, old_file, options)?;
+        Ok(newfd)
     }
 
     pub fn open_pipe(&mut self, options: OpenFlags) -> KResult<Arc<Pipe>> {

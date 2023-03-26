@@ -51,8 +51,8 @@ struct ScreenChar {
 }
 
 pub const VGA_BUFFER_START_PADDR: usize = 0xb8000;
-const BUFFER_HEIGHT: usize = 24;
-const BUFFER_WIDTH: usize = 80;
+pub const BUFFER_HEIGHT: usize = 25;
+pub const BUFFER_WIDTH: usize = 80;
 
 #[repr(transparent)]
 struct Buffer {

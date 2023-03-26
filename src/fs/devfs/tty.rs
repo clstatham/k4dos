@@ -16,7 +16,7 @@ use crate::{
     task::{current_task, get_scheduler, group::TaskGroup, signal::SIGINT, wait_queue::WaitQueue},
     userland::buffer::{UserBuffer, UserBufferMut, UserBufferReader, UserBufferWriter},
     util::{ctypes::c_int, errno::Errno, error::KResult, lock::IrqMutex, ringbuffer::RingBuffer},
-    vga_text::{self, ColorCode, Color},
+    vga_text::{self, Color, ColorCode},
 };
 
 use crate::fs::{
@@ -29,7 +29,7 @@ use crate::fs::{
 pub static TTY: Once<Arc<Tty>> = Once::new();
 
 pub fn init() {
-    let tty = Arc::new(Tty::new("console"));
+    let tty = Arc::new(Tty::new("tty"));
     TTY.call_once(|| tty.clone());
     get_root()
         .unwrap()
@@ -342,10 +342,11 @@ impl File for Tty {
                 *self.discipline.termios.lock() = *termios;
             }
             TIOCGPGRP => {
-                let group = self.discipline.foreground_group().ok_or(errno!(
-                    Errno::ENOENT,
-                    "ioctl(): no foreground process group for tty"
-                ))?;
+                // let group = self.discipline.foreground_group().ok_or(errno!(
+                //     Errno::ENOENT,
+                //     "ioctl(): no foreground process group for tty"
+                // ))?;
+                let group = self.discipline.foreground_group().unwrap_or(current_task().group.borrow().upgrade().unwrap());
                 let id = group.lock().pgid();
                 let arg = VirtAddr::new(arg);
                 arg.write(id)?;
@@ -358,8 +359,8 @@ impl File for Tty {
             }
             TIOCGWINSZ => {
                 let winsize = WinSize {
-                    ws_row: 24,
-                    ws_col: 80,
+                    ws_row: vga_text::BUFFER_HEIGHT as u16,
+                    ws_col: vga_text::BUFFER_WIDTH as u16,
                     ws_xpixel: 0,
                     ws_ypixel: 0,
                 };
@@ -414,14 +415,17 @@ impl File for Tty {
 fn parse(mut reader: UserBufferReader) -> KResult<usize> {
     let mut bytes = alloc::vec![0u8; reader.remaining_len()];
     reader.read_bytes(&mut bytes)?;
-    
+
     let mut escape_codes = bytes.split(|b| *b == 0x1b);
     if bytes[0] != 0x1b {
         // print until the first escape code
-        vga_print!("{}", core::str::from_utf8(escape_codes.next().unwrap()).unwrap());   
+        vga_print!(
+            "{}",
+            core::str::from_utf8(escape_codes.next().unwrap()).unwrap()
+        );
     }
     for chunk in escape_codes {
-        if chunk.is_empty() { 
+        if chunk.is_empty() {
             continue;
         }
         if chunk[0] != b'[' {
@@ -429,14 +433,19 @@ fn parse(mut reader: UserBufferReader) -> KResult<usize> {
         }
         let chunk = &chunk[1..];
         // iterate through the chunk until we find one of the ANSI "functions"
-        const ANSI_FUNCTIONS: &[u8] = b"ABCDEFGHJKSTsufm";
-        let (f_idx, function) = chunk.iter().enumerate().find(|(_i, byte)| ANSI_FUNCTIONS.contains(*byte)).unwrap();
+        // const ANSI_FUNCTIONS: &[u8] = b"ABCDEFGHJKSTsufm";
+        const ANSI_FUNCTIONS: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+        let res = chunk
+            .iter()
+            .enumerate()
+            .find(|(_i, byte)| ANSI_FUNCTIONS.contains(*byte));
+        let (f_idx, function) = if let Some(res) = res { res } else { unreachable!() };
         // get its arguments, if any
-        let arguments = chunk[..f_idx].split(|byte| *byte == b';').collect::<Vec<&[u8]>>();
+        let arguments = chunk[..f_idx]
+            .split(|byte| *byte == b';')
+            .collect::<Vec<&[u8]>>();
 
-        let parse_usize = |arg: &[u8]| {
-            core::str::from_utf8(arg).unwrap().parse::<usize>()
-        };
+        let parse_usize = |arg: &[u8]| core::str::from_utf8(arg).unwrap().parse::<usize>();
 
         let (x, y) = vga_text::cursor_xy();
         match *function {
@@ -472,7 +481,7 @@ fn parse(mut reader: UserBufferReader) -> KResult<usize> {
             }
             b'H' => {
                 if arguments[0].is_empty() {
-                    vga_text::set_cursor_xy((0,0));
+                    vga_text::set_cursor_xy((0, 0));
                 } else {
                     let n = parse_usize(arguments[0]).unwrap_or(0);
                     let m = parse_usize(arguments[1]).unwrap_or(0);
@@ -522,16 +531,21 @@ fn parse(mut reader: UserBufferReader) -> KResult<usize> {
                 let arg0 = parse_usize(arguments[0]).unwrap() as u8;
                 match arg0 {
                     0 => vga_text::set_color_code(ColorCode::new(Color::White, Color::Black)),
-                    1 => {}, // bold
-                    3 => {}, // italic
-                    4 => {}, // underline
+                    1 => {} // bold
+                    3 => {} // italic
+                    4 => {} // underline
                     30..=37 => {
                         let color = vga_text::get_color_code();
-                        vga_text::set_color_code(ColorCode::new(unsafe { core::mem::transmute(arg0 - 30) }, color.background()));
+                        vga_text::set_color_code(ColorCode::new(
+                            unsafe { core::mem::transmute(arg0 - 30) },
+                            color.background(),
+                        ));
                     }
                     40..=47 => {
                         let color = vga_text::get_color_code();
-                        vga_text::set_color_code(ColorCode::new(color.foreground(), unsafe { core::mem::transmute(arg0 - 40) }));
+                        vga_text::set_color_code(ColorCode::new(color.foreground(), unsafe {
+                            core::mem::transmute(arg0 - 40)
+                        }));
                     }
                     90..=97 => {
                         todo!("bright foreground color")
@@ -539,13 +553,27 @@ fn parse(mut reader: UserBufferReader) -> KResult<usize> {
                     100..=107 => {
                         todo!("bright background color")
                     }
-                    _ => todo!()
+                    _ => todo!("Unknown ANSI function: {}", core::str::from_utf8(chunk).unwrap())
                 }
             }
-            _ => unimplemented!()
+            _function if chunk[0] == b'?' => {
+                let n = parse_usize(&arguments[0][1..]).unwrap();
+                match n {
+                    /*
+                    Save cursor as in DECSC, xterm.  After
+                    saving the cursor, switch to the Alternate Screen Buffer,
+                    clearing it first.
+                     */
+                    1049 => {},
+                    n => unimplemented!("Unknown ANSI extension function: {}", n),
+                }
+            }
+            _ => {
+                unimplemented!("Unknown ANSI function: {}", core::str::from_utf8(chunk).unwrap())
+            }
         }
 
-        vga_print!("{}", core::str::from_utf8(&chunk[f_idx+1..]).unwrap());
+        vga_print!("{}", core::str::from_utf8(&chunk[f_idx + 1..]).unwrap());
     }
 
     Ok(reader.read_len())

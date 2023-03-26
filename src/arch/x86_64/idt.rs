@@ -435,12 +435,10 @@ fn do_keyboard_input() {
     let mut keyboard = KEYBOARD.lock();
     if let Ok(Some(key_evt)) = keyboard.add_byte(scancode) {
         if let Some(key) = keyboard.process_keyevent(key_evt) {
-            let c = match key {
-                DecodedKey::Unicode(c) => c,
-                DecodedKey::RawKey(_code) => '?',
-            };
-
-            TTY.get().unwrap().input_char(c as u8);
+            match key {
+                DecodedKey::Unicode(c) => TTY.get().unwrap().input_char(c as u8),
+                DecodedKey::RawKey(_code) => {},
+            }
         }
     }
 }

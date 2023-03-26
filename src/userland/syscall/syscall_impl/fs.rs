@@ -380,4 +380,23 @@ impl<'a> SyscallHandler<'a> {
         let file = current_task().get_opened_file_by_fd(fd)?;
         file.lseek(offset, whence).map(|off| off as isize)
     }
+
+    pub fn sys_dup2(&mut self, oldfd: FileDesc, newfd: FileDesc) -> KResult<isize> {
+        let current = current_task();
+        let _old = current.get_opened_file_by_fd(oldfd)?;
+        // now that we know it's valid, check if they're the same (as per the man page)
+        if newfd == oldfd {
+            return Ok(newfd as isize)
+        }
+
+        if let Ok(_existing) = current.get_opened_file_by_fd(newfd) {
+            let mut files = current.opened_files.lock();
+            files.close(newfd)?;
+        }
+
+        let mut files = current.opened_files.lock();
+        let newfd_dup = files.dup2(oldfd, newfd)?;
+        assert_eq!(newfd, newfd_dup);
+        Ok(newfd as isize)
+    }
 }
