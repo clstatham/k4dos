@@ -59,12 +59,6 @@ struct Buffer {
     chars: [[Volatile<ScreenChar>; BUFFER_WIDTH]; BUFFER_HEIGHT],
 }
 
-// pub fn remap_vga_memory(new_table: &mut PageTable) {
-//     let frame = PhysFrame::<Size4KiB>::containing_address(PhysAddr::new(0xb8000));
-//     let page = Page::<Size4KiB>::containing_address(VirtAddr::new(0xb8000));
-//     new_table.map_page(UserVirtAddr::new(page.start_address().as_u64()).unwrap(), frame.start_address(), PageAttrs::WRITABLE | PageAttrs::PRESENT);// new_table.map_page(UserVirtAddr::new(0xb8f00).unwrap(), PhysAddr::new(0xb8f00), PageAttrs::WRITABLE);
-// }
-
 pub struct Writer {
     x: usize,
     y: usize,
@@ -98,17 +92,17 @@ impl Writer {
     }
 
     fn cursor_color_hook(&mut self) {
-        let cursor = self.buffer.chars[self.y][self.x].read();
-        for y in 0..BUFFER_HEIGHT {
-            for x in 0..BUFFER_WIDTH {
-                let chr = self.buffer.chars[y][x].read();
-                if y == self.y && x == self.x {
-                    self.buffer.chars[y][x].write(ScreenChar { ascii_character: cursor.ascii_character, color_code: ColorCode::new(Color::White, Color::Cyan) });
-                } else {
-                    self.buffer.chars[y][x].write(ScreenChar { ascii_character: chr.ascii_character, color_code: self.color_code });
-                }
-            }
-        }
+        // let cursor = self.buffer.chars[self.y][self.x].read();
+        // for y in 0..BUFFER_HEIGHT {
+        //     for x in 0..BUFFER_WIDTH {
+        //         let chr = self.buffer.chars[y][x].read();
+        //         if y == self.y && x == self.x {
+        //             self.buffer.chars[y][x].write(ScreenChar { ascii_character: cursor.ascii_character, color_code: ColorCode::new(Color::White, Color::Cyan) });
+        //         } else {
+        //             self.buffer.chars[y][x].write(ScreenChar { ascii_character: chr.ascii_character, color_code: self.color_code });
+        //         }
+        //     }
+        // }
     }
 
     pub fn backspace(&mut self) {

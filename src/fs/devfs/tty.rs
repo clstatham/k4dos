@@ -392,7 +392,7 @@ impl File for Tty {
         // let mut tmp = [0; 1];
         // let mut total_len = 0;
         let reader = UserBufferReader::from(buf);
-        let total_len = parse2(reader)?;
+        let total_len = parse(reader)?;
         if total_len > 0 {
             get_scheduler().wake_all(&POLL_WAIT_QUEUE);
         }
@@ -411,10 +411,9 @@ impl File for Tty {
     }
 }
 
-fn parse2(mut reader: UserBufferReader) -> KResult<usize> {
+fn parse(mut reader: UserBufferReader) -> KResult<usize> {
     let mut bytes = alloc::vec![0u8; reader.remaining_len()];
     reader.read_bytes(&mut bytes)?;
-
     
     let mut escape_codes = bytes.split(|b| *b == 0x1b);
     if bytes[0] != 0x1b {
@@ -434,11 +433,6 @@ fn parse2(mut reader: UserBufferReader) -> KResult<usize> {
         let (f_idx, function) = chunk.iter().enumerate().find(|(_i, byte)| ANSI_FUNCTIONS.contains(*byte)).unwrap();
         // get its arguments, if any
         let arguments = chunk[..f_idx].split(|byte| *byte == b';').collect::<Vec<&[u8]>>();
-        log::debug!("Function:     {}", core::str::from_utf8(&[*function]).unwrap());
-        log::debug!("Function Idx: {}", f_idx);
-        for arg in &arguments {
-            log::debug!("Arg: {}", core::str::from_utf8(arg).unwrap());
-        }
 
         let parse_usize = |arg: &[u8]| {
             core::str::from_utf8(arg).unwrap().parse::<usize>()
