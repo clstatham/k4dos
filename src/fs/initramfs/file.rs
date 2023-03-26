@@ -1,7 +1,7 @@
-use alloc::{string::String, vec::{Vec}, vec};
+use alloc::{string::String, vec, vec::Vec};
 
 use crate::{
-    fs::{File, FileMode, FsNode, Stat, S_IFREG, opened_file::OpenFlags},
+    fs::{opened_file::OpenFlags, File, FileMode, FsNode, Stat, S_IFREG},
     userland::buffer::{UserBuffer, UserBufferMut, UserBufferReader, UserBufferWriter},
     util::{lock::IrqMutex, KResult},
 };
@@ -33,12 +33,7 @@ impl FsNode for InitRamFsFile {
 }
 
 impl File for InitRamFsFile {
-    fn read(
-        &self,
-        offset: usize,
-        buf: UserBufferMut<'_>,
-        _options: &OpenFlags,
-    ) -> KResult<usize> {
+    fn read(&self, offset: usize, buf: UserBufferMut<'_>, _options: &OpenFlags) -> KResult<usize> {
         let lock = self.data.lock();
         if offset > lock.len() {
             return Ok(0);

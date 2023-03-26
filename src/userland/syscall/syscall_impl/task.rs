@@ -89,6 +89,7 @@ impl<'a> SyscallHandler<'a> {
     }
 
     pub fn sys_set_tid_address(&mut self, _addr: VirtAddr) -> KResult<isize> {
+        // todo: use addr
         Ok(current_task().pid().as_usize() as isize)
     }
 

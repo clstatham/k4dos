@@ -1,7 +1,12 @@
 use alloc::{borrow::ToOwned, sync::Arc};
 use spin::Once;
 
-use crate::{userland::buffer::UserBufferWriter, fs::{initramfs::get_root, INode, FsNode, File, opened_file::OpenFlags, Stat, FileMode, S_IFCHR}};
+use crate::{
+    fs::{
+        initramfs::get_root, opened_file::OpenFlags, File, FileMode, FsNode, INode, Stat, S_IFCHR,
+    },
+    userland::buffer::UserBufferWriter,
+};
 
 static DEV_NULL: Once<Arc<NullDevice>> = Once::new();
 

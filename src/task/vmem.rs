@@ -246,7 +246,9 @@ impl Vmem {
 
         assert!(self.areas.is_sorted_by_key(|a| a.start_addr));
         for i in 0..self.areas.len() - 1 {
-            if self.areas[i + 1].start_addr >= minimum_start + size && self.areas[i + 1].start_addr.value() - self.areas[i].end_addr.value() >= size {
+            if self.areas[i + 1].start_addr >= minimum_start + size
+                && self.areas[i + 1].start_addr.value() - self.areas[i].end_addr.value() >= size
+            {
                 if self.areas[i].end_addr < minimum_start {
                     return Some((minimum_start, Some(i)));
                 } else {
@@ -313,7 +315,10 @@ impl Vmem {
             .enumerate()
             .find(|(_idx, area)| area.contains_addr(start_addr))
             .map(|(idx, _area)| idx)
-            .ok_or(errno!(Errno::EINVAL, "munmap(): address range not owned by task"))?;
+            .ok_or(errno!(
+                Errno::EINVAL,
+                "munmap(): address range not owned by task"
+            ))?;
         let area_clone = self.areas[area_idx].clone();
         if start_addr <= area_clone.start_addr && end_addr >= area_clone.end_addr {
             // remove the whole area and continue recursively unmapping until the whole range is unmapped

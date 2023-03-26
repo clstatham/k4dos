@@ -411,7 +411,10 @@ mapped_impl!(MappedPages, AllocatedPages);
 
 impl Debug for MappedPages {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        f.debug_struct("MappedPages").field("pages", &self.pages).field("frames", &self.frames).finish()
+        f.debug_struct("MappedPages")
+            .field("pages", &self.pages)
+            .field("frames", &self.frames)
+            .finish()
     }
 }
 

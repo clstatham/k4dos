@@ -346,7 +346,10 @@ impl File for Tty {
                 //     Errno::ENOENT,
                 //     "ioctl(): no foreground process group for tty"
                 // ))?;
-                let group = self.discipline.foreground_group().unwrap_or(current_task().group.borrow().upgrade().unwrap());
+                let group = self
+                    .discipline
+                    .foreground_group()
+                    .unwrap_or(current_task().group.borrow().upgrade().unwrap());
                 let id = group.lock().pgid();
                 let arg = VirtAddr::new(arg);
                 arg.write(id)?;
@@ -439,7 +442,11 @@ fn parse(mut reader: UserBufferReader) -> KResult<usize> {
             .iter()
             .enumerate()
             .find(|(_i, byte)| ANSI_FUNCTIONS.contains(*byte));
-        let (f_idx, function) = if let Some(res) = res { res } else { unreachable!() };
+        let (f_idx, function) = if let Some(res) = res {
+            res
+        } else {
+            unreachable!()
+        };
         // get its arguments, if any
         let arguments = chunk[..f_idx]
             .split(|byte| *byte == b';')
@@ -553,7 +560,10 @@ fn parse(mut reader: UserBufferReader) -> KResult<usize> {
                     100..=107 => {
                         todo!("bright background color")
                     }
-                    _ => todo!("Unknown ANSI function: {}", core::str::from_utf8(chunk).unwrap())
+                    _ => todo!(
+                        "Unknown ANSI function: {}",
+                        core::str::from_utf8(chunk).unwrap()
+                    ),
                 }
             }
             _function if chunk[0] == b'?' => {
@@ -564,12 +574,15 @@ fn parse(mut reader: UserBufferReader) -> KResult<usize> {
                     saving the cursor, switch to the Alternate Screen Buffer,
                     clearing it first.
                      */
-                    1049 => {},
+                    1049 => {}
                     n => unimplemented!("Unknown ANSI extension function: {}", n),
                 }
             }
             _ => {
-                unimplemented!("Unknown ANSI function: {}", core::str::from_utf8(chunk).unwrap())
+                unimplemented!(
+                    "Unknown ANSI function: {}",
+                    core::str::from_utf8(chunk).unwrap()
+                )
             }
         }
 

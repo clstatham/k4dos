@@ -73,7 +73,7 @@ impl Writer {
             b'\n' => self.new_line(),
             b'\r' => self.x = 0,
             byte => {
-                if self.x >= BUFFER_WIDTH-1 {
+                if self.x >= BUFFER_WIDTH - 1 {
                     self.new_line();
                 }
 
@@ -164,7 +164,7 @@ impl Writer {
         for col in self.x..BUFFER_WIDTH {
             self.buffer.chars[self.y][col].write(blank);
         }
-        for row in self.y+1..BUFFER_HEIGHT {
+        for row in self.y + 1..BUFFER_HEIGHT {
             self.clear_row(row);
         }
         self.cursor_color_hook();
@@ -177,7 +177,7 @@ impl Writer {
         for col in 0..self.x {
             self.buffer.chars[self.y][col].write(blank);
         }
-        for row in 0..self.y-1 {
+        for row in 0..self.y - 1 {
             self.clear_row(row);
         }
         self.cursor_color_hook();
@@ -222,7 +222,7 @@ impl Writer {
         self.cursor_color_hook();
     }
     fn move_down(&mut self) {
-        let new_y = self.y.add(1).min(BUFFER_HEIGHT-1);
+        let new_y = self.y.add(1).min(BUFFER_HEIGHT - 1);
         let mut new_x = self.x;
         while new_x > 0 && self.buffer.chars[new_y][new_x].read().ascii_character == b' ' {
             new_x -= 1;
@@ -236,7 +236,7 @@ impl Writer {
         self.cursor_color_hook();
     }
     fn move_right(&mut self) {
-        self.x = self.x.add(1).min(BUFFER_WIDTH-1);
+        self.x = self.x.add(1).min(BUFFER_WIDTH - 1);
         self.cursor_color_hook();
     }
 }
@@ -274,16 +274,16 @@ pub fn get_color_code() -> ColorCode {
 }
 
 pub fn set_cursor_x(x: usize) {
-    WRITER.lock().x = x.min(BUFFER_WIDTH-1);
+    WRITER.lock().x = x.min(BUFFER_WIDTH - 1);
 }
 
 pub fn set_cursor_y(y: usize) {
-    WRITER.lock().y = y.min(BUFFER_HEIGHT-1);
+    WRITER.lock().y = y.min(BUFFER_HEIGHT - 1);
 }
 
 pub fn set_cursor_xy(xy: (usize, usize)) {
-    set_cursor_x(xy.0.min(BUFFER_WIDTH-1));
-    set_cursor_y(xy.1.min(BUFFER_HEIGHT-1));
+    set_cursor_x(xy.0.min(BUFFER_WIDTH - 1));
+    set_cursor_y(xy.1.min(BUFFER_HEIGHT - 1));
 }
 
 pub fn cursor_xy() -> (usize, usize) {

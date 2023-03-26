@@ -1,16 +1,17 @@
 use elfloader::{ElfBinary, ElfLoader};
 use x86::random::rdrand_slice;
 
-use x86_64::structures::paging::PageTableFlags;
 use xmas_elf::program::Type;
 
 use crate::{
     errno,
     fs::{initramfs::get_root, opened_file::OpenFlags, path::Path, FileRef},
-    mem::{addr::VirtAddr, addr_space::AddressSpace, consts::PAGE_SIZE, allocator::{alloc_kernel_pages, alloc_kernel_frames}},
+    mem::{
+        addr::VirtAddr, addr_space::AddressSpace, allocator::alloc_kernel_frames, consts::PAGE_SIZE,
+    },
     task::vmem::{MMapFlags, MMapKind, MMapProt, Vmem},
     userland::buffer::UserBufferMut,
-    util::{errno::Errno, KResult, align_up},
+    util::{align_up, errno::Errno, KResult},
 };
 
 pub fn gen_stack_canary() -> [u8; 16] {
@@ -46,7 +47,12 @@ pub fn load_elf(file: FileRef) -> KResult<UserlandEntry> {
     let frames = alloc_kernel_frames(align_up(len, PAGE_SIZE) / PAGE_SIZE)?;
 
     // let mp = addr_space.mapper().map(pages, PageTableFlags::PRESENT | PageTableFlags::WRITABLE)?;
-    let buf = unsafe { core::slice::from_raw_parts_mut(frames.start_address().as_hhdm_virt().as_mut_ptr(), frames.size_in_bytes()) };
+    let buf = unsafe {
+        core::slice::from_raw_parts_mut(
+            frames.start_address().as_hhdm_virt().as_mut_ptr(),
+            frames.size_in_bytes(),
+        )
+    };
     let ubuf = UserBufferMut::from_slice(buf);
     file.read(0, ubuf, &OpenFlags::empty())?;
     current.switch();
@@ -71,7 +77,6 @@ pub fn load_elf(file: FileRef) -> KResult<UserlandEntry> {
     }
 
     let mut vmem = Vmem::new();
-    
 
     let load_offset =
         if elf.file.header.pt2.type_().as_type() == xmas_elf::header::Type::SharedObject {
@@ -83,7 +88,7 @@ pub fn load_elf(file: FileRef) -> KResult<UserlandEntry> {
     let entry_point = VirtAddr::new(elf.entry_point() as usize + load_offset);
 
     log::debug!("Entry point: {:?}", entry_point);
-    
+
     addr_space.switch();
     let mut loader = KadosElfLoader {
         vmem: &mut vmem,

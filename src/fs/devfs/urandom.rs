@@ -1,7 +1,10 @@
 use alloc::sync::Arc;
 use x86::random::rdrand_slice;
 
-use crate::{fs::{FsNode, File, initramfs::get_root, path::Path, INode}, userland::buffer::UserBufferWriter};
+use crate::{
+    fs::{initramfs::get_root, path::Path, File, FsNode, INode},
+    userland::buffer::UserBufferWriter,
+};
 
 pub fn init() {
     get_root()
@@ -22,7 +25,12 @@ impl FsNode for URandom {
 }
 
 impl File for URandom {
-    fn read(&self, _offset: usize, buf: crate::userland::buffer::UserBufferMut, _options: &crate::fs::opened_file::OpenFlags) -> crate::util::KResult<usize> {
+    fn read(
+        &self,
+        _offset: usize,
+        buf: crate::userland::buffer::UserBufferMut,
+        _options: &crate::fs::opened_file::OpenFlags,
+    ) -> crate::util::KResult<usize> {
         let mut bytes = alloc::vec![0u8; buf.len()];
         unsafe {
             rdrand_slice(&mut bytes);

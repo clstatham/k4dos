@@ -30,8 +30,6 @@ pub mod task;
 pub mod userland;
 pub mod util;
 
-
-
 use mem::addr::VirtAddr;
 
 use x86_64::instructions::hlt;

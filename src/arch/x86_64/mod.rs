@@ -1,4 +1,4 @@
-use core::{arch::global_asm};
+use core::arch::global_asm;
 
 use alloc::sync::Arc;
 use multiboot2::BootInformation;
@@ -11,10 +11,10 @@ use x86_64::instructions::{hlt, interrupts};
 use crate::{
     fs::{
         self,
+        devfs::tty::TTY,
         initramfs::get_root,
         opened_file::{OpenFlags, OpenedFile},
         path::Path,
-        devfs::tty::TTY,
     },
     mem::{
         self,
@@ -148,11 +148,7 @@ pub fn startup_init() {
     files
         .open_with_fd(
             0,
-            Arc::new(OpenedFile::new(
-                console.clone(),
-                OpenFlags::O_RDONLY,
-                0,
-            )),
+            Arc::new(OpenedFile::new(console.clone(), OpenFlags::O_RDONLY, 0)),
             OpenFlags::O_RDONLY | OpenFlags::O_CLOEXEC,
         )
         .unwrap();
@@ -160,11 +156,7 @@ pub fn startup_init() {
     files
         .open_with_fd(
             1,
-            Arc::new(OpenedFile::new(
-                console.clone(),
-                OpenFlags::O_WRONLY,
-                0,
-            )),
+            Arc::new(OpenedFile::new(console.clone(), OpenFlags::O_WRONLY, 0)),
             OpenFlags::O_WRONLY | OpenFlags::O_CLOEXEC,
         )
         .unwrap();

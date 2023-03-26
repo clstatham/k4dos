@@ -10,7 +10,7 @@ use alloc::{
 use atomic_refcell::AtomicRefCell;
 use crossbeam_utils::atomic::AtomicCell;
 use spin::Once;
-use x86_64::{structures::idt::PageFaultErrorCode};
+use x86_64::structures::idt::PageFaultErrorCode;
 
 use crate::{
     arch::{

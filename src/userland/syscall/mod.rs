@@ -2,7 +2,7 @@ use crate::{
     arch::idt::InterruptFrame,
     errno,
     fs::{
-        opened_file::{FileDesc, OpenFlags, LseekWhence},
+        opened_file::{FileDesc, OpenFlags},
         path::{Path, PathBuf},
         FileMode,
     },

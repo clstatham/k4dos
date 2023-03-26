@@ -7,7 +7,7 @@ use crate::{
     fs::{
         alloc_inode_no,
         initramfs::file::InitRamFsFile,
-        opened_file::{FileDesc, OpenFlags, LseekWhence},
+        opened_file::{FileDesc, LseekWhence, OpenFlags},
         path::Path,
         FileMode, INode, PollStatus, O_RDWR, O_WRONLY, POLL_WAIT_QUEUE,
     },
@@ -59,9 +59,7 @@ impl<'a> SyscallHandler<'a> {
                 let fd = files.dup(fd, Some(arg as i32), OpenFlags::O_CLOEXEC)?;
                 Ok(fd as isize)
             }
-            F_SETLK => {
-                Ok(0)
-            }
+            F_SETLK => Ok(0),
             _ => Err(errno!(Errno::ENOSYS, "sys_fctnl(): unknown command")),
         }
     }
@@ -140,7 +138,9 @@ fn create(path: &Path, flags: OpenFlags, _mode: FileMode) -> KResult<INode> {
         name.to_owned(),
         alloc_inode_no(),
     )));
-    root.lookup(parent_dir, true)?.as_dir()?.insert(inode.clone());
+    root.lookup(parent_dir, true)?
+        .as_dir()?
+        .insert(inode.clone());
     Ok(inode)
 }
 
@@ -187,10 +187,7 @@ impl<'a> SyscallHandler<'a> {
         }
 
         let current = current_task();
-        let pipe = current
-            .opened_files
-            .lock()
-            .open_pipe(OpenFlags::empty())?;
+        let pipe = current.opened_files.lock().open_pipe(OpenFlags::empty())?;
 
         let write_fd = pipe.write_fd();
         let read_fd = pipe.read_fd();
@@ -210,7 +207,14 @@ impl<'a> SyscallHandler<'a> {
         let root = current.root_fs.lock();
         // log::debug!("Attempting to unlink {}", path);
         let path_component = root.lookup_path(path, true)?;
-        path_component.parent_dir.as_ref().unwrap().inode.as_dir().unwrap().unlink(path_component.name.clone())?;
+        path_component
+            .parent_dir
+            .as_ref()
+            .unwrap()
+            .inode
+            .as_dir()
+            .unwrap()
+            .unlink(path_component.name.clone())?;
         Ok(0)
     }
 }
@@ -376,7 +380,12 @@ impl<'a> SyscallHandler<'a> {
         Ok(total as isize)
     }
 
-    pub fn sys_lseek(&mut self, fd: FileDesc, offset: usize, whence: LseekWhence) -> KResult<isize> {
+    pub fn sys_lseek(
+        &mut self,
+        fd: FileDesc,
+        offset: usize,
+        whence: LseekWhence,
+    ) -> KResult<isize> {
         let file = current_task().get_opened_file_by_fd(fd)?;
         file.lseek(offset, whence).map(|off| off as isize)
     }
@@ -386,7 +395,7 @@ impl<'a> SyscallHandler<'a> {
         let _old = current.get_opened_file_by_fd(oldfd)?;
         // now that we know it's valid, check if they're the same (as per the man page)
         if newfd == oldfd {
-            return Ok(newfd as isize)
+            return Ok(newfd as isize);
         }
 
         if let Ok(_existing) = current.get_opened_file_by_fd(newfd) {

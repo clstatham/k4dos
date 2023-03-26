@@ -12,11 +12,11 @@ use crate::{
 
 use self::{opened_file::OpenFlags, path::PathBuf, pipe::Pipe};
 
+pub mod devfs;
 pub mod initramfs;
 pub mod opened_file;
 pub mod path;
 pub mod pipe;
-pub mod devfs;
 
 pub type FileRef = Arc<dyn File + Send + Sync>;
 pub type DirRef = Arc<dyn Directory + Send + Sync>;
@@ -219,12 +219,7 @@ pub trait File: FsNode {
     }
 
     /// `write(2)`.
-    fn write(
-        &self,
-        _offset: usize,
-        _buf: UserBuffer<'_>,
-        _options: &OpenFlags,
-    ) -> KResult<usize> {
+    fn write(&self, _offset: usize, _buf: UserBuffer<'_>, _options: &OpenFlags) -> KResult<usize> {
         Err(errno!(Errno::EBADF, "write(): not implemented"))
     }
 }

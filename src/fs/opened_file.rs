@@ -46,7 +46,6 @@ bitflags! {
     }
 }
 
-
 pub type FileDesc = c_int;
 
 pub struct OpenedFile {
@@ -105,7 +104,9 @@ impl OpenedFile {
     }
 
     pub fn set_close_on_exec(&self, close_on_exec: bool) {
-        self.options().borrow_mut().set(OpenFlags::O_CLOEXEC, close_on_exec);
+        self.options()
+            .borrow_mut()
+            .set(OpenFlags::O_CLOEXEC, close_on_exec);
     }
 
     pub fn set_flags(&self, flags: OpenFlags) -> KResult<()> {
@@ -141,9 +142,7 @@ impl OpenedFile {
         match whence {
             LseekWhence::Set => self.pos.store(offset),
             LseekWhence::Cur => _ = self.pos.fetch_add(offset),
-            LseekWhence::End => {
-                self.pos.store(file.stat()?.size.0 as usize - offset)
-            }
+            LseekWhence::End => self.pos.store(file.stat()?.size.0 as usize - offset),
         };
         Ok(self.pos())
     }
@@ -162,7 +161,7 @@ impl From<usize> for LseekWhence {
             0 => LseekWhence::Set,
             1 => LseekWhence::Cur,
             2 => LseekWhence::End,
-            _ => panic!("Invalid LseekWhence")
+            _ => panic!("Invalid LseekWhence"),
         }
     }
 }
@@ -240,9 +239,7 @@ impl OpenedFileTable {
                 return Err(errno!(Errno::EBADF, "open_with_fd(): file already opened"))
             }
             Some(entry @ None) => {
-                *entry = Some(LocalOpenedFile {
-                    opened_file,
-                });
+                *entry = Some(LocalOpenedFile { opened_file });
             }
             None if fd >= FD_MAX => {
                 return Err(errno!(
@@ -252,9 +249,7 @@ impl OpenedFileTable {
             }
             None => {
                 self.files.resize(fd as usize + 1, None);
-                self.files[fd as usize] = Some(LocalOpenedFile {
-                    opened_file,
-                })
+                self.files[fd as usize] = Some(LocalOpenedFile { opened_file })
             }
         }
 
@@ -295,7 +290,12 @@ impl OpenedFileTable {
                     ..
                 })
             ) {
-                let cloexec = opened_file.as_ref().unwrap().opened_file.options().contains(OpenFlags::O_CLOEXEC);
+                let cloexec = opened_file
+                    .as_ref()
+                    .unwrap()
+                    .opened_file
+                    .options()
+                    .contains(OpenFlags::O_CLOEXEC);
                 if cloexec {
                     *opened_file = None;
                 }
@@ -311,12 +311,7 @@ impl OpenedFileTable {
         Ok(())
     }
 
-    pub fn dup(
-        &mut self,
-        fd: FileDesc,
-        gte: Option<i32>,
-        options: OpenFlags,
-    ) -> KResult<FileDesc> {
+    pub fn dup(&mut self, fd: FileDesc, gte: Option<i32>, options: OpenFlags) -> KResult<FileDesc> {
         let file = match self.files.get(fd as usize) {
             Some(Some(file)) => file.opened_file.clone(),
             _ => return Err(errno!(Errno::EBADF, "dup(): file not opened")),
@@ -327,7 +322,11 @@ impl OpenedFileTable {
     }
 
     pub fn dup2(&mut self, oldfd: FileDesc, newfd: FileDesc) -> KResult<FileDesc> {
-        let old_file = self.files.get(oldfd as usize).and_then(|file| file.as_ref().map(|file| file.opened_file.clone())).ok_or(errno!(Errno::EBADF, "dup2(): file not opened"))?;
+        let old_file = self
+            .files
+            .get(oldfd as usize)
+            .and_then(|file| file.as_ref().map(|file| file.opened_file.clone()))
+            .ok_or(errno!(Errno::EBADF, "dup2(): file not opened"))?;
         let options = old_file.options();
         self.open_with_fd(newfd, old_file, options)?;
         Ok(newfd)
