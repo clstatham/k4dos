@@ -16,6 +16,7 @@ use crate::{
     task::{current_task, get_scheduler, group::TaskGroup, signal::SIGINT, wait_queue::WaitQueue},
     userland::buffer::{UserBuffer, UserBufferMut, UserBufferReader, UserBufferWriter},
     util::{ctypes::c_int, errno::Errno, error::KResult, lock::IrqMutex, ringbuffer::RingBuffer},
+    vga_text::{self, ColorCode, Color},
 };
 
 use crate::fs::{
@@ -237,7 +238,11 @@ impl LineDiscipline {
 
     pub fn read(&self, dst: UserBufferMut<'_>, options: &OpenFlags) -> KResult<usize> {
         let mut writer = UserBufferWriter::from(dst);
-        let timeout = if options.contains(OpenFlags::O_NONBLOCK) { Some(0) } else { None };
+        let timeout = if options.contains(OpenFlags::O_NONBLOCK) {
+            Some(0)
+        } else {
+            None
+        };
         self.wait_queue.sleep_signalable_until(timeout, || {
             // todo: figure out how to get this working
             // if !self.is_current_foreground() {
@@ -285,7 +290,8 @@ impl Tty {
         self.discipline
             .write(UserBuffer::from_slice(&[ch]), |ctrl| match ctrl {
                 LineControl::Backspace => {
-                    serial1_print!("\x08 \x08");
+                    // serial1_print!("\x08 \x08");
+                    vga_text::backspace();
                 }
                 LineControl::Echo(ch) => {
                     self.write(0, UserBuffer::from_slice(&[ch]), &OpenFlags::empty())
@@ -383,14 +389,10 @@ impl File for Tty {
     }
 
     fn write(&self, _offset: usize, buf: UserBuffer<'_>, _options: &OpenFlags) -> KResult<usize> {
-        let mut tmp = [0; 1];
-        let mut total_len = 0;
-        let mut reader = UserBufferReader::from(buf);
-        while reader.remaining_len() > 0 {
-            let copied_len = reader.read_bytes(&mut tmp)?;
-            serial1_print!("{}", String::from_utf8_lossy(&tmp[..copied_len]));
-            total_len += copied_len;
-        }
+        // let mut tmp = [0; 1];
+        // let mut total_len = 0;
+        let reader = UserBufferReader::from(buf);
+        let total_len = parse2(reader)?;
         if total_len > 0 {
             get_scheduler().wake_all(&POLL_WAIT_QUEUE);
         }
@@ -407,6 +409,152 @@ impl File for Tty {
         // }
         Ok(status)
     }
+}
+
+fn parse2(mut reader: UserBufferReader) -> KResult<usize> {
+    let mut bytes = alloc::vec![0u8; reader.remaining_len()];
+    reader.read_bytes(&mut bytes)?;
+
+    
+    let mut escape_codes = bytes.split(|b| *b == 0x1b);
+    if bytes[0] != 0x1b {
+        // print until the first escape code
+        vga_print!("{}", core::str::from_utf8(escape_codes.next().unwrap()).unwrap());   
+    }
+    for chunk in escape_codes {
+        if chunk.is_empty() { 
+            continue;
+        }
+        if chunk[0] != b'[' {
+            continue;
+        }
+        let chunk = &chunk[1..];
+        // iterate through the chunk until we find one of the ANSI "functions"
+        const ANSI_FUNCTIONS: &[u8] = b"ABCDEFGHJKSTsufm";
+        let (f_idx, function) = chunk.iter().enumerate().find(|(_i, byte)| ANSI_FUNCTIONS.contains(*byte)).unwrap();
+        // get its arguments, if any
+        let arguments = chunk[..f_idx].split(|byte| *byte == b';').collect::<Vec<&[u8]>>();
+        log::debug!("Function:     {}", core::str::from_utf8(&[*function]).unwrap());
+        log::debug!("Function Idx: {}", f_idx);
+        for arg in &arguments {
+            log::debug!("Arg: {}", core::str::from_utf8(arg).unwrap());
+        }
+
+        let parse_usize = |arg: &[u8]| {
+            core::str::from_utf8(arg).unwrap().parse::<usize>()
+        };
+
+        let (x, y) = vga_text::cursor_xy();
+        match *function {
+            b'A' => {
+                let n = parse_usize(arguments[0]).unwrap_or(1);
+                vga_text::set_cursor_y(y.saturating_sub(n));
+            }
+            b'B' => {
+                let n = parse_usize(arguments[0]).unwrap_or(1);
+                vga_text::set_cursor_y(y.saturating_add(n));
+            }
+            b'C' => {
+                let n = parse_usize(arguments[0]).unwrap_or(1);
+                vga_text::set_cursor_x(x.saturating_add(n));
+            }
+            b'D' => {
+                let n = parse_usize(arguments[0]).unwrap_or(1);
+                vga_text::set_cursor_x(x.saturating_sub(n));
+            }
+            b'E' => {
+                let n = parse_usize(arguments[0]).unwrap_or(1);
+                vga_text::set_cursor_x(0);
+                vga_text::set_cursor_y(y.saturating_add(n));
+            }
+            b'F' => {
+                let n = parse_usize(arguments[0]).unwrap_or(1);
+                vga_text::set_cursor_x(0);
+                vga_text::set_cursor_y(y.saturating_sub(n));
+            }
+            b'G' | b'f' => {
+                let n = parse_usize(arguments[0]).unwrap();
+                vga_text::set_cursor_x(n);
+            }
+            b'H' => {
+                if arguments[0].is_empty() {
+                    vga_text::set_cursor_xy((0,0));
+                } else {
+                    let n = parse_usize(arguments[0]).unwrap_or(0);
+                    let m = parse_usize(arguments[1]).unwrap_or(0);
+                    vga_text::set_cursor_xy((n, m));
+                }
+            }
+            b'J' => {
+                if arguments.is_empty() {
+                    vga_text::clear_until_end();
+                } else {
+                    let n = parse_usize(arguments[0]).unwrap_or(0);
+                    match n {
+                        0 => vga_text::clear_until_end(),
+                        1 => vga_text::clear_until_beginning(),
+                        2 => vga_text::clear_screen(),
+                        3 => todo!("erase saved lines"),
+                        _ => unimplemented!(),
+                    }
+                }
+            }
+            b'K' => {
+                if arguments.is_empty() {
+                    vga_text::clear_until_eol();
+                } else {
+                    let n = parse_usize(arguments[0]).unwrap_or(0);
+                    match n {
+                        0 => vga_text::clear_until_eol(),
+                        1 => vga_text::clear_from_bol(),
+                        2 => vga_text::clear_line(),
+                        _ => unimplemented!(),
+                    }
+                }
+            }
+            b'S' => {
+                todo!("scroll up by N lines")
+            }
+            b'T' => {
+                todo!("scroll down by N ines")
+            }
+            b's' => {
+                todo!("save cursor position")
+            }
+            b'u' => {
+                todo!("restore cursor postion")
+            }
+            b'm' => {
+                let arg0 = parse_usize(arguments[0]).unwrap() as u8;
+                match arg0 {
+                    0 => vga_text::set_color_code(ColorCode::new(Color::White, Color::Black)),
+                    1 => {}, // bold
+                    3 => {}, // italic
+                    4 => {}, // underline
+                    30..=37 => {
+                        let color = vga_text::get_color_code();
+                        vga_text::set_color_code(ColorCode::new(unsafe { core::mem::transmute(arg0 - 30) }, color.background()));
+                    }
+                    40..=47 => {
+                        let color = vga_text::get_color_code();
+                        vga_text::set_color_code(ColorCode::new(color.foreground(), unsafe { core::mem::transmute(arg0 - 40) }));
+                    }
+                    90..=97 => {
+                        todo!("bright foreground color")
+                    }
+                    100..=107 => {
+                        todo!("bright background color")
+                    }
+                    _ => todo!()
+                }
+            }
+            _ => unimplemented!()
+        }
+
+        vga_print!("{}", core::str::from_utf8(&chunk[f_idx+1..]).unwrap());
+    }
+
+    Ok(reader.read_len())
 }
 
 pub struct PtyMaster {
@@ -434,14 +582,13 @@ impl FsNode for PtyMaster {
 }
 
 impl File for PtyMaster {
-    fn read(
-        &self,
-        _offset: usize,
-        buf: UserBufferMut<'_>,
-        options: &OpenFlags,
-    ) -> KResult<usize> {
+    fn read(&self, _offset: usize, buf: UserBufferMut<'_>, options: &OpenFlags) -> KResult<usize> {
         let mut writer = UserBufferWriter::from(buf);
-        let timeout = if options.contains(OpenFlags::O_NONBLOCK) { Some(0) } else { None };
+        let timeout = if options.contains(OpenFlags::O_NONBLOCK) {
+            Some(0)
+        } else {
+            None
+        };
         let read_len = self.wait_queue.sleep_signalable_until(timeout, || {
             let mut buf_lock = self.buf.lock();
             if buf_lock.is_empty() {
@@ -628,12 +775,7 @@ impl File for Ptmx {
         unreachable!()
     }
 
-    fn write(
-        &self,
-        _offset: usize,
-        _buf: UserBuffer<'_>,
-        _options: &OpenFlags,
-    ) -> KResult<usize> {
+    fn write(&self, _offset: usize, _buf: UserBuffer<'_>, _options: &OpenFlags) -> KResult<usize> {
         unreachable!()
     }
 
