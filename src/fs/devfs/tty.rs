@@ -18,9 +18,9 @@ use crate::{
     util::{ctypes::c_int, errno::Errno, error::KResult, lock::IrqMutex, ringbuffer::RingBuffer},
 };
 
-use super::{
+use crate::fs::{
     initramfs::{dir::InitRamFsDir, get_root},
-    opened_file::OpenOptions,
+    opened_file::OpenFlags,
     path::Path,
     File, FileMode, FileRef, FsNode, INode, PollStatus, Stat, POLL_WAIT_QUEUE, S_IFCHR,
 };
@@ -181,7 +181,7 @@ impl LineDiscipline {
         let mut written_len = 0;
         let mut reader = UserBufferReader::from(buf);
         while reader.remaining_len() > 0 {
-            let mut tmp = [0; 128];
+            let mut tmp = [0; 1];
             let copied_len = reader.read_bytes(&mut tmp)?;
             for ch in &tmp.as_slice()[..copied_len] {
                 match ch {
@@ -235,9 +235,9 @@ impl LineDiscipline {
         Ok(written_len)
     }
 
-    pub fn read(&self, dst: UserBufferMut<'_>, options: &OpenOptions) -> KResult<usize> {
+    pub fn read(&self, dst: UserBufferMut<'_>, options: &OpenFlags) -> KResult<usize> {
         let mut writer = UserBufferWriter::from(dst);
-        let timeout = if options.nonblock { Some(0) } else { None };
+        let timeout = if options.contains(OpenFlags::O_NONBLOCK) { Some(0) } else { None };
         self.wait_queue.sleep_signalable_until(timeout, || {
             // todo: figure out how to get this working
             // if !self.is_current_foreground() {
@@ -288,7 +288,7 @@ impl Tty {
                     serial1_print!("\x08 \x08");
                 }
                 LineControl::Echo(ch) => {
-                    self.write(0, UserBuffer::from_slice(&[ch]), &OpenOptions::readwrite())
+                    self.write(0, UserBuffer::from_slice(&[ch]), &OpenFlags::empty())
                         .ok();
                 }
             })
@@ -307,6 +307,7 @@ impl FsNode for Tty {
 }
 const TCGETS: usize = 0x5401;
 const TCSETS: usize = 0x5402;
+const TCSETSW: usize = 0x5403;
 
 const TIOCGPGRP: usize = 0x540f;
 const TIOCSPGRP: usize = 0x5410;
@@ -328,7 +329,7 @@ impl File for Tty {
                 let arg = VirtAddr::new(arg);
                 arg.write(termios)?;
             }
-            TCSETS => {
+            TCSETS | TCSETSW => {
                 let arg = VirtAddr::new(arg);
                 let termios = arg.read::<Termios>()?;
                 log::debug!("Termios: {:?}", termios);
@@ -373,7 +374,7 @@ impl File for Tty {
         })
     }
 
-    fn read(&self, _offset: usize, buf: UserBufferMut, options: &OpenOptions) -> KResult<usize> {
+    fn read(&self, _offset: usize, buf: UserBufferMut, options: &OpenFlags) -> KResult<usize> {
         let read_len = self.discipline.read(buf, options)?;
         if read_len > 0 {
             get_scheduler().wake_all(&POLL_WAIT_QUEUE);
@@ -381,8 +382,8 @@ impl File for Tty {
         Ok(read_len)
     }
 
-    fn write(&self, _offset: usize, buf: UserBuffer<'_>, _options: &OpenOptions) -> KResult<usize> {
-        let mut tmp = [0; 32];
+    fn write(&self, _offset: usize, buf: UserBuffer<'_>, _options: &OpenFlags) -> KResult<usize> {
+        let mut tmp = [0; 1];
         let mut total_len = 0;
         let mut reader = UserBufferReader::from(buf);
         while reader.remaining_len() > 0 {
@@ -437,10 +438,10 @@ impl File for PtyMaster {
         &self,
         _offset: usize,
         buf: UserBufferMut<'_>,
-        options: &OpenOptions,
+        options: &OpenFlags,
     ) -> KResult<usize> {
         let mut writer = UserBufferWriter::from(buf);
-        let timeout = if options.nonblock { Some(0) } else { None };
+        let timeout = if options.contains(OpenFlags::O_NONBLOCK) { Some(0) } else { None };
         let read_len = self.wait_queue.sleep_signalable_until(timeout, || {
             let mut buf_lock = self.buf.lock();
             if buf_lock.is_empty() {
@@ -460,7 +461,7 @@ impl File for PtyMaster {
         Ok(read_len)
     }
 
-    fn write(&self, _offset: usize, buf: UserBuffer<'_>, _options: &OpenOptions) -> KResult<usize> {
+    fn write(&self, _offset: usize, buf: UserBuffer<'_>, _options: &OpenFlags) -> KResult<usize> {
         let written_len = self.discipline.write(buf, |ctrl| {
             let mut master_buf = self.buf.lock();
             match ctrl {
@@ -523,7 +524,7 @@ impl FsNode for PtySlave {
 }
 
 impl File for PtySlave {
-    fn read(&self, _offset: usize, buf: UserBufferMut, options: &OpenOptions) -> KResult<usize> {
+    fn read(&self, _offset: usize, buf: UserBufferMut, options: &OpenFlags) -> KResult<usize> {
         let read_len = self.master.discipline.read(buf, options)?;
         if read_len > 0 {
             get_scheduler().wake_all(&POLL_WAIT_QUEUE);
@@ -531,13 +532,13 @@ impl File for PtySlave {
         Ok(read_len)
     }
 
-    fn write(&self, _offset: usize, buf: UserBuffer<'_>, _options: &OpenOptions) -> KResult<usize> {
+    fn write(&self, _offset: usize, buf: UserBuffer<'_>, _options: &OpenFlags) -> KResult<usize> {
         let mut written_len = 0;
         let mut master_buf = self.master.buf.lock();
         let mut reader = UserBufferReader::from(buf);
 
         while reader.remaining_len() > 0 {
-            let mut tmp = [0; 128];
+            let mut tmp = [0; 1];
             let copied_len = reader.read_bytes(&mut tmp)?;
             for ch in &tmp[..copied_len] {
                 match *ch {
@@ -609,7 +610,7 @@ impl FsNode for Ptmx {
 }
 
 impl File for Ptmx {
-    fn open(&self, _options: &OpenOptions) -> KResult<Option<super::FileRef>> {
+    fn open(&self, _options: &OpenFlags) -> KResult<Option<FileRef>> {
         let (master, slave) = PtyMaster::new()?;
         self.pts_dir.add_file(slave);
         Ok(Some(master as FileRef))
@@ -623,7 +624,7 @@ impl File for Ptmx {
         })
     }
 
-    fn read(&self, _offset: usize, _buf: UserBufferMut, _options: &OpenOptions) -> KResult<usize> {
+    fn read(&self, _offset: usize, _buf: UserBufferMut, _options: &OpenFlags) -> KResult<usize> {
         unreachable!()
     }
 
@@ -631,7 +632,7 @@ impl File for Ptmx {
         &self,
         _offset: usize,
         _buf: UserBuffer<'_>,
-        _options: &OpenOptions,
+        _options: &OpenFlags,
     ) -> KResult<usize> {
         unreachable!()
     }

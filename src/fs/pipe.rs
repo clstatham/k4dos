@@ -88,7 +88,7 @@ impl File for Pipe {
         &self,
         _offset: usize,
         buf: UserBufferMut,
-        _options: &super::opened_file::OpenOptions,
+        _options: &super::opened_file::OpenFlags,
         // len: usize,
     ) -> KResult<usize> {
         self.read_pipe(buf)
@@ -98,7 +98,7 @@ impl File for Pipe {
         &self,
         _offset: usize,
         buf: UserBuffer<'_>,
-        _options: &super::opened_file::OpenOptions,
+        _options: &super::opened_file::OpenFlags,
     ) -> KResult<usize> {
         self.write_pipe(buf)
     }

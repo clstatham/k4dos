@@ -103,6 +103,11 @@ impl Directory for InitRamFsDir {
 
         Ok(entry)
     }
+
+    fn unlink(&self, name: String) -> KResult<()> {
+        self.inner.lock().children.retain(|child| child.get_name() != name);
+        Ok(())
+    }
 }
 
 impl FsNode for InitRamFsDir {

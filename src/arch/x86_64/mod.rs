@@ -12,9 +12,9 @@ use crate::{
     fs::{
         self,
         initramfs::get_root,
-        opened_file::{OpenFlags, OpenOptions, OpenedFile},
+        opened_file::{OpenFlags, OpenedFile},
         path::Path,
-        tty::TTY,
+        devfs::tty::TTY,
     },
     mem::{
         self,
@@ -112,8 +112,7 @@ pub fn arch_main(boot_info: BootInformation) {
 
     let sched = get_scheduler();
 
-    fs::null::init();
-    fs::tty::init();
+    fs::devfs::init();
 
     log::info!("Welcome to K4DOS!");
 
@@ -151,10 +150,10 @@ pub fn startup_init() {
             0,
             Arc::new(OpenedFile::new(
                 console.clone(),
-                OpenFlags::O_RDONLY.into(),
+                OpenFlags::O_RDONLY,
                 0,
             )),
-            OpenOptions::new(true, false),
+            OpenFlags::O_RDONLY | OpenFlags::O_CLOEXEC,
         )
         .unwrap();
     // stdout
@@ -163,18 +162,18 @@ pub fn startup_init() {
             1,
             Arc::new(OpenedFile::new(
                 console.clone(),
-                OpenFlags::O_WRONLY.into(),
+                OpenFlags::O_WRONLY,
                 0,
             )),
-            OpenOptions::new(true, false),
+            OpenFlags::O_WRONLY | OpenFlags::O_CLOEXEC,
         )
         .unwrap();
     // stderr
     files
         .open_with_fd(
             2,
-            Arc::new(OpenedFile::new(console, OpenFlags::O_WRONLY.into(), 0)),
-            OpenOptions::new(true, false),
+            Arc::new(OpenedFile::new(console, OpenFlags::O_WRONLY, 0)),
+            OpenFlags::O_WRONLY | OpenFlags::O_CLOEXEC,
         )
         .unwrap();
     drop(files);

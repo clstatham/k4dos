@@ -1,7 +1,7 @@
-use alloc::{string::String, vec::Vec};
+use alloc::{string::String, vec::{Vec}, vec};
 
 use crate::{
-    fs::{opened_file::OpenOptions, File, FileMode, FsNode, Stat, S_IFREG},
+    fs::{File, FileMode, FsNode, Stat, S_IFREG, opened_file::OpenFlags},
     userland::buffer::{UserBuffer, UserBufferMut, UserBufferReader, UserBufferWriter},
     util::{lock::IrqMutex, KResult},
 };
@@ -37,7 +37,7 @@ impl File for InitRamFsFile {
         &self,
         offset: usize,
         buf: UserBufferMut<'_>,
-        _options: &OpenOptions,
+        _options: &OpenFlags,
     ) -> KResult<usize> {
         let lock = self.data.lock();
         if offset > lock.len() {
@@ -47,9 +47,14 @@ impl File for InitRamFsFile {
         writer.write_bytes(&lock[offset..])
     }
 
-    fn write(&self, offset: usize, buf: UserBuffer<'_>, _options: &OpenOptions) -> KResult<usize> {
+    fn write(&self, offset: usize, buf: UserBuffer<'_>, options: &OpenFlags) -> KResult<usize> {
         let mut reader = UserBufferReader::from(buf);
-        reader.read_bytes(&mut self.data.lock()[offset..])
+        let mut data = self.data.lock();
+        let data_len = data.len();
+        if offset + reader.remaining_len() > data_len || options.contains(OpenFlags::O_APPEND) {
+            data.extend_from_slice(&vec![0u8; offset + reader.remaining_len() - data_len]);
+        }
+        reader.read_bytes(&mut data[offset..])
     }
 
     fn stat(&self) -> KResult<Stat> {

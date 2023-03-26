@@ -10,7 +10,7 @@ use crate::{
     mem::{
         addr::VirtAddr,
         allocator::{alloc_kernel_frames, PageAllocator},
-        consts::{PAGE_SIZE, USER_STACK_TOP},
+        consts::{PAGE_SIZE, USER_STACK_TOP, USER_VALLOC_BASE},
         paging::{
             mapper::Mapper,
             units::{Page, PageRange},
@@ -202,7 +202,7 @@ impl Vmem {
 
         let size_aligned = align_up(size, PAGE_SIZE);
         if start_addr == VirtAddr::null() {
-            let start = self.find_free_space_above(VirtAddr::new(0x7000_0000_0000), size_aligned);
+            let start = self.find_free_space_above(VirtAddr::new(USER_VALLOC_BASE), size_aligned);
             if let Some((start, prev)) = start {
                 if let Some(prev_idx) = prev {
                     let prev = &mut self.areas[prev_idx];
@@ -226,6 +226,7 @@ impl Vmem {
                 return Ok(start);
             }
 
+            self.log();
             return Err(errno!(Errno::ENOMEM, "mmap(): no free space big enough"));
         }
         Err(errno!(
@@ -245,15 +246,12 @@ impl Vmem {
 
         assert!(self.areas.is_sorted_by_key(|a| a.start_addr));
         for i in 0..self.areas.len() - 1 {
-            if self.areas[i + 1].start_addr >= minimum_start + size {
-                if self.areas[i + 1].start_addr.value() - self.areas[i].end_addr.value() >= size {
-                    if self.areas[i].end_addr < minimum_start {
-                        return Some((minimum_start, Some(i)));
-                    } else {
-                        return Some((self.areas[i].end_addr, Some(i)));
-                    }
+            if self.areas[i + 1].start_addr >= minimum_start + size && self.areas[i + 1].start_addr.value() - self.areas[i].end_addr.value() >= size {
+                if self.areas[i].end_addr < minimum_start {
+                    return Some((minimum_start, Some(i)));
+                } else {
+                    return Some((self.areas[i].end_addr, Some(i)));
                 }
-                return None;
             }
         }
 
@@ -315,7 +313,7 @@ impl Vmem {
             .enumerate()
             .find(|(_idx, area)| area.contains_addr(start_addr))
             .map(|(idx, _area)| idx)
-            .unwrap();
+            .ok_or(errno!(Errno::EINVAL, "munmap(): address range not owned by task"))?;
         let area_clone = self.areas[area_idx].clone();
         if start_addr <= area_clone.start_addr && end_addr >= area_clone.end_addr {
             // remove the whole area and continue recursively unmapping until the whole range is unmapped

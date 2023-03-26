@@ -23,4 +23,4 @@ pub const USER_STACK_TOP: usize = 0x7fffffffe000;
 pub const USER_STACK_BOTTOM: usize = USER_STACK_TOP - USER_STACK_SIZE;
 
 pub const KERNEL_HEAP_START: usize = 0xFFFF_FE80_0000_0000;
-pub const KERNEL_HEAP_SIZE: usize = 100 * 1024 * 1024; // 100 MiB
+pub const KERNEL_HEAP_SIZE: usize = 100 * 1024 * 1024; // 1000 MiB

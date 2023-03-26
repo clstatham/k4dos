@@ -1,9 +1,7 @@
 use alloc::{borrow::ToOwned, sync::Arc};
 use spin::Once;
 
-use crate::userland::buffer::UserBufferWriter;
-
-use super::{initramfs::get_root, File, FsNode, INode, S_IFCHR};
+use crate::{userland::buffer::UserBufferWriter, fs::{initramfs::get_root, INode, FsNode, File, opened_file::OpenFlags, Stat, FileMode, S_IFCHR}};
 
 static DEV_NULL: Once<Arc<NullDevice>> = Once::new();
 
@@ -33,7 +31,7 @@ impl File for NullDevice {
         &self,
         _offset: usize,
         buf: crate::userland::buffer::UserBuffer<'_>,
-        _options: &super::opened_file::OpenOptions,
+        _options: &OpenFlags,
     ) -> crate::util::KResult<usize> {
         Ok(buf.len())
     }
@@ -42,18 +40,18 @@ impl File for NullDevice {
         &self,
         _offset: usize,
         buf: crate::userland::buffer::UserBufferMut,
-        _options: &super::opened_file::OpenOptions,
+        _options: &OpenFlags,
     ) -> crate::util::KResult<usize> {
         let mut writer = UserBufferWriter::from(buf);
         writer.write_bytes(&[0x05])?; // EOF
         Ok(writer.written_len())
     }
 
-    fn stat(&self) -> crate::util::KResult<super::Stat> {
-        Ok(super::Stat {
+    fn stat(&self) -> crate::util::KResult<Stat> {
+        Ok(Stat {
             inode_no: 4,
-            mode: super::FileMode(S_IFCHR),
-            ..super::Stat::zeroed()
+            mode: FileMode(S_IFCHR),
+            ..Stat::zeroed()
         })
     }
 }

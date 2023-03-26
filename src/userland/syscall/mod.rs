@@ -2,7 +2,7 @@ use crate::{
     arch::idt::InterruptFrame,
     errno,
     fs::{
-        opened_file::{FileDesc, OpenFlags},
+        opened_file::{FileDesc, OpenFlags, LseekWhence},
         path::{Path, PathBuf},
         FileMode,
     },
@@ -37,6 +37,7 @@ pub fn errno_to_isize(res: &KResult<isize>) -> isize {
 
 pub const QUIET_SYSCALLS: &[usize] = &[
     // SYS_POLL,
+    SYS_UNLINK,
 ];
 
 pub struct SyscallHandler<'a> {
@@ -79,6 +80,7 @@ impl<'a> SyscallHandler<'a> {
             SYS_SET_TID_ADDRESS => self.sys_set_tid_address(VirtAddr::new(a1)),
             SYS_WRITE => self.sys_write(a1 as FileDesc, VirtAddr::new(a2), a3),
             SYS_WRITEV => self.sys_writev(a1 as FileDesc, VirtAddr::new(a2), a3),
+            SYS_READV => self.sys_readv(a1 as FileDesc, VirtAddr::new(a2), a3),
             SYS_READ => self.sys_read(a1 as FileDesc, VirtAddr::new(a2), a3),
             SYS_IOCTL => self.sys_ioctl(a1 as FileDesc, a2, a3),
             SYS_RT_SIGPROCMASK => {
@@ -147,6 +149,8 @@ impl<'a> SyscallHandler<'a> {
             ),
             SYS_KILL => self.sys_kill(TaskId::new(a1), a2 as c_int),
             SYS_TKILL => self.sys_kill(TaskId::new(a1), a2 as c_int), // todo
+            SYS_UNLINK => self.sys_unlink(&resolve_path(a1)?),
+            SYS_LSEEK => self.sys_lseek(a1 as FileDesc, a2, a3.into()),
             _ => Err(errno!(Errno::ENOSYS, "dispatch(): syscall not implemented")),
         };
 
@@ -548,6 +552,7 @@ pub const SYS_STAT: usize = 4;
 pub const SYS_FSTAT: usize = 5;
 pub const SYS_LSTAT: usize = 6;
 pub const SYS_POLL: usize = 7;
+pub const SYS_LSEEK: usize = 8;
 pub const SYS_MMAP: usize = 9;
 pub const SYS_MPROTECT: usize = 10;
 pub const SYS_MUNMAP: usize = 11;
@@ -556,6 +561,7 @@ pub const SYS_RT_SIGACTION: usize = 13;
 pub const SYS_RT_SIGPROCMASK: usize = 14;
 pub const SYS_RT_SIGRETURN: usize = 15;
 pub const SYS_IOCTL: usize = 16;
+pub const SYS_READV: usize = 19;
 pub const SYS_WRITEV: usize = 20;
 pub const SYS_PIPE: usize = 22;
 pub const SYS_SELECT: usize = 23;
@@ -585,6 +591,7 @@ pub const SYS_GETCWD: usize = 79;
 pub const SYS_CHDIR: usize = 80;
 pub const SYS_MKDIR: usize = 83;
 pub const SYS_LINK: usize = 86;
+pub const SYS_UNLINK: usize = 87;
 pub const SYS_READLINK: usize = 89;
 pub const SYS_CHMOD: usize = 90;
 pub const SYS_CHOWN: usize = 92;

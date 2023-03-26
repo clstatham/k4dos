@@ -7,7 +7,7 @@ use crate::{
     fs::{
         alloc_inode_no,
         initramfs::file::InitRamFsFile,
-        opened_file::{FileDesc, OpenFlags, OpenOptions},
+        opened_file::{FileDesc, OpenFlags, LseekWhence},
         path::Path,
         FileMode, INode, PollStatus, O_RDWR, O_WRONLY, POLL_WAIT_QUEUE,
     },
@@ -30,6 +30,7 @@ pub const F_GETFD: c_int = 1;
 pub const F_SETFD: c_int = 2;
 pub const F_GETFL: c_int = 3;
 pub const F_SETFL: c_int = 4;
+pub const F_SETLK: c_int = 6;
 
 // Linux-specific commands.
 pub const F_LINUX_SPECIFIC_BASE: c_int = 1024;
@@ -55,8 +56,11 @@ impl<'a> SyscallHandler<'a> {
                 Ok(0)
             }
             F_DUPFD_CLOEXEC => {
-                let fd = files.dup(fd, Some(arg as i32), OpenOptions::new(false, true))?;
+                let fd = files.dup(fd, Some(arg as i32), OpenFlags::O_CLOEXEC)?;
                 Ok(fd as isize)
+            }
+            F_SETLK => {
+                Ok(0)
             }
             _ => Err(errno!(Errno::ENOSYS, "sys_fctnl(): unknown command")),
         }
@@ -126,7 +130,7 @@ fn create(path: &Path, flags: OpenFlags, _mode: FileMode) -> KResult<INode> {
         return Err(errno!(Errno::EINVAL, "create(): invalid flags"));
     }
 
-    let (_parent_dir, name) = path
+    let (parent_dir, name) = path
         .parent_and_basename()
         .ok_or(errno!(Errno::EEXIST, "create(): invalid path"))?;
 
@@ -136,7 +140,7 @@ fn create(path: &Path, flags: OpenFlags, _mode: FileMode) -> KResult<INode> {
         name.to_owned(),
         alloc_inode_no(),
     )));
-    root.lookup(path, true)?.as_dir()?.insert(inode.clone());
+    root.lookup(parent_dir, true)?.as_dir()?.insert(inode.clone());
     Ok(inode)
 }
 
@@ -152,6 +156,7 @@ impl<'a> SyscallHandler<'a> {
                 Err(err) => return Err(err),
             }
         }
+        // create(path, flags, mode).ok();
 
         let root = current.root_fs.lock();
         let mut opened_files = current.opened_files.lock();
@@ -164,7 +169,7 @@ impl<'a> SyscallHandler<'a> {
             return Err(errno!(Errno::EISDIR, "sys_open(): is a directory"));
         }
 
-        let fd = opened_files.open(path_comp, flags.into())?;
+        let fd = opened_files.open(path_comp, flags)?;
         log::trace!("Opened {} as {}.", path, fd);
         Ok(fd as isize)
     }
@@ -185,7 +190,7 @@ impl<'a> SyscallHandler<'a> {
         let pipe = current
             .opened_files
             .lock()
-            .open_pipe(OpenOptions::empty())?;
+            .open_pipe(OpenFlags::empty())?;
 
         let write_fd = pipe.write_fd();
         let read_fd = pipe.read_fd();
@@ -194,6 +199,18 @@ impl<'a> SyscallHandler<'a> {
         writer.write(write_fd)?;
         writer.write(read_fd)?;
 
+        Ok(0)
+    }
+
+    pub fn sys_unlink(&mut self, path: &Path) -> KResult<isize> {
+        if path.is_empty() {
+            return Err(errno!(Errno::ENOENT));
+        }
+        let current = current_task();
+        let root = current.root_fs.lock();
+        // log::debug!("Attempting to unlink {}", path);
+        let path_component = root.lookup_path(path, true)?;
+        path_component.parent_dir.as_ref().unwrap().inode.as_dir().unwrap().unlink(path_component.name.clone())?;
         Ok(0)
     }
 }
@@ -257,6 +274,7 @@ impl<'a> SyscallHandler<'a> {
     }
 
     pub fn sys_stat(&mut self, path: &Path, buf: VirtAddr) -> KResult<isize> {
+        log::debug!("sys_stat-ing path {}", path);
         let stat = current_task().root_fs.lock().lookup(path, true)?.stat()?;
         buf.write(stat)?;
         Ok(0)
@@ -292,6 +310,39 @@ pub struct IoVec {
 }
 
 impl<'a> SyscallHandler<'a> {
+    pub fn sys_readv(
+        &mut self,
+        fd: FileDesc,
+        iov_base: VirtAddr,
+        iov_count: usize,
+    ) -> KResult<isize> {
+        let iov_count = iov_count.min(IOV_MAX);
+
+        let file = current_task().get_opened_file_by_fd(fd)?;
+        let mut total: usize = 0;
+        for i in 0..iov_count {
+            let mut iov: IoVec = *iov_base.add(i * size_of::<IoVec>()).read::<IoVec>()?;
+
+            match total.checked_add(iov.len) {
+                Some(len) if len > isize::MAX as usize => {
+                    iov.len = isize::MAX as usize - total;
+                }
+                None => {
+                    iov.len = isize::MAX as usize - total;
+                }
+                _ => {}
+            }
+
+            if iov.len == 0 {
+                continue;
+            }
+
+            total += file.read(UserBufferMut::from_vaddr(iov.base, iov.len))?;
+        }
+
+        Ok(total as isize)
+    }
+
     pub fn sys_writev(
         &mut self,
         fd: FileDesc,
@@ -323,5 +374,10 @@ impl<'a> SyscallHandler<'a> {
         }
 
         Ok(total as isize)
+    }
+
+    pub fn sys_lseek(&mut self, fd: FileDesc, offset: usize, whence: LseekWhence) -> KResult<isize> {
+        let file = current_task().get_opened_file_by_fd(fd)?;
+        file.lseek(offset, whence).map(|off| off as isize)
     }
 }

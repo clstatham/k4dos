@@ -46,54 +46,17 @@ bitflags! {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
-pub struct OpenOptions {
-    pub nonblock: bool,
-    pub close_on_exec: bool,
-}
-
-impl OpenOptions {
-    pub fn new(nonblock: bool, close_on_exec: bool) -> OpenOptions {
-        OpenOptions {
-            nonblock,
-            close_on_exec,
-        }
-    }
-
-    pub fn empty() -> OpenOptions {
-        OpenOptions {
-            nonblock: false,
-            close_on_exec: false,
-        }
-    }
-
-    pub fn readwrite() -> OpenOptions {
-        OpenOptions {
-            nonblock: false,
-            close_on_exec: false,
-        }
-    }
-}
-
-impl From<OpenFlags> for OpenOptions {
-    fn from(value: OpenFlags) -> Self {
-        OpenOptions {
-            nonblock: value.contains(OpenFlags::O_NONBLOCK),
-            close_on_exec: value.contains(OpenFlags::O_CLOEXEC),
-        }
-    }
-}
 
 pub type FileDesc = c_int;
 
 pub struct OpenedFile {
     path: Arc<PathComponent>,
     pos: AtomicCell<usize>,
-    options: AtomicRefCell<OpenOptions>,
+    options: AtomicRefCell<OpenFlags>,
 }
 
 impl OpenedFile {
-    pub fn new(path: Arc<PathComponent>, options: OpenOptions, pos: usize) -> OpenedFile {
+    pub fn new(path: Arc<PathComponent>, options: OpenFlags, pos: usize) -> OpenedFile {
         OpenedFile {
             path,
             pos: AtomicCell::new(pos),
@@ -113,7 +76,7 @@ impl OpenedFile {
         self.pos.load()
     }
 
-    pub fn options(&self) -> OpenOptions {
+    pub fn options(&self) -> OpenFlags {
         *self.options.borrow()
     }
 
@@ -142,23 +105,20 @@ impl OpenedFile {
     }
 
     pub fn set_close_on_exec(&self, close_on_exec: bool) {
-        self.options().borrow_mut().close_on_exec = close_on_exec;
+        self.options().borrow_mut().set(OpenFlags::O_CLOEXEC, close_on_exec);
     }
 
     pub fn set_flags(&self, flags: OpenFlags) -> KResult<()> {
-        if flags.contains(OpenFlags::O_NONBLOCK) {
-            self.options.borrow_mut().nonblock = true;
-        }
+        // if flags.contains(OpenFlags::O_NONBLOCK) {
+        //     self.options.borrow_mut().set(OpenFlags::O_NONBLOCK, value) = true;
+        // }
+        *self.options.borrow_mut() = flags;
 
         Ok(())
     }
 
     pub fn get_flags(&self) -> OpenFlags {
-        if self.options.borrow_mut().close_on_exec {
-            OpenFlags::O_CLOEXEC
-        } else {
-            OpenFlags::empty()
-        }
+        *self.options.borrow()
     }
 
     pub fn poll(&self) -> KResult<PollStatus> {
@@ -176,12 +136,42 @@ impl OpenedFile {
         self.pos.fetch_add(1);
         Ok(entry)
     }
+
+    pub fn lseek(&self, offset: usize, whence: LseekWhence) -> KResult<usize> {
+        let file = self.inode().as_file()?;
+        match whence {
+            LseekWhence::Set => self.pos.store(offset),
+            LseekWhence::Cur => _ = self.pos.fetch_add(offset),
+            LseekWhence::End => {
+                self.pos.store(file.stat()?.size.0 as usize - offset)
+            }
+        };
+        Ok(self.pos())
+    }
+}
+
+#[repr(usize)]
+pub enum LseekWhence {
+    Set = 0,
+    Cur = 1,
+    End = 2,
+}
+
+impl From<usize> for LseekWhence {
+    fn from(value: usize) -> Self {
+        match value {
+            0 => LseekWhence::Set,
+            1 => LseekWhence::Cur,
+            2 => LseekWhence::End,
+            _ => panic!("Invalid LseekWhence")
+        }
+    }
 }
 
 #[derive(Clone)]
 struct LocalOpenedFile {
     opened_file: Arc<OpenedFile>,
-    close_on_exec: bool,
+    // close_on_exec: bool,
 }
 
 #[derive(Clone)]
@@ -211,7 +201,7 @@ impl OpenedFileTable {
         }
     }
 
-    pub fn open(&mut self, path: Arc<PathComponent>, options: OpenOptions) -> KResult<FileDesc> {
+    pub fn open(&mut self, path: Arc<PathComponent>, options: OpenFlags) -> KResult<FileDesc> {
         self.alloc_fd(None).and_then(|fd| {
             self.open_with_fd(
                 fd,
@@ -230,7 +220,7 @@ impl OpenedFileTable {
         &mut self,
         fd: FileDesc,
         mut opened_file: Arc<OpenedFile>,
-        options: OpenOptions,
+        options: OpenFlags,
     ) -> KResult<()> {
         if let INode::File(file) = &opened_file.path.inode {
             if let Some(new_inode) = file.open(&options)? {
@@ -253,7 +243,6 @@ impl OpenedFileTable {
             Some(entry @ None) => {
                 *entry = Some(LocalOpenedFile {
                     opened_file,
-                    close_on_exec: options.close_on_exec,
                 });
             }
             None if fd >= FD_MAX => {
@@ -266,7 +255,6 @@ impl OpenedFileTable {
                 self.files.resize(fd as usize + 1, None);
                 self.files[fd as usize] = Some(LocalOpenedFile {
                     opened_file,
-                    close_on_exec: options.close_on_exec,
                 })
             }
         }
@@ -303,11 +291,15 @@ impl OpenedFileTable {
             if matches!(
                 opened_file,
                 Some(LocalOpenedFile {
-                    close_on_exec: true,
+                    // close_on_exec: true,
+                    // opened_file
                     ..
                 })
             ) {
-                *opened_file = None;
+                let cloexec = opened_file.as_ref().unwrap().opened_file.options().contains(OpenFlags::O_CLOEXEC);
+                if cloexec {
+                    *opened_file = None;
+                }
             }
         }
     }
@@ -324,7 +316,7 @@ impl OpenedFileTable {
         &mut self,
         fd: FileDesc,
         gte: Option<i32>,
-        options: OpenOptions,
+        options: OpenFlags,
     ) -> KResult<FileDesc> {
         let file = match self.files.get(fd as usize) {
             Some(Some(file)) => file.opened_file.clone(),
@@ -335,7 +327,7 @@ impl OpenedFileTable {
             .and_then(|fd| self.open_with_fd(fd, file, options).map(|_| fd))
     }
 
-    pub fn open_pipe(&mut self, options: OpenOptions) -> KResult<Arc<Pipe>> {
+    pub fn open_pipe(&mut self, options: OpenFlags) -> KResult<Arc<Pipe>> {
         let write_fd = self.alloc_fd(None)?;
         let read_fd = self.alloc_fd(Some(write_fd + 1))?;
         let pipe = Arc::new(Pipe::new(read_fd, write_fd));

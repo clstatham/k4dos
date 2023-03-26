@@ -333,9 +333,9 @@ impl Debug for AllocatedFrames {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         write!(
             f,
-            "AllocatedFrames[{:x} ..= {:x}]",
+            "AllocatedFrames[{:x} .. {:x}]",
             self.start_address(),
-            self.inclusive_end_address()
+            self.inclusive_end_address() + 1
         )
     }
 }
@@ -344,10 +344,22 @@ impl Debug for AllocatedPages {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         write!(
             f,
-            "AllocatedPages[{:x} ..= {:x}]",
+            "AllocatedPages[{:x} .. {:x}]",
             self.start_address(),
-            self.inclusive_end_address()
+            self.inclusive_end_address() + 1
         )
+    }
+}
+
+impl Drop for AllocatedFrames {
+    fn drop(&mut self) {
+        // log::warn!("Dropping {:?}", self);
+    }
+}
+
+impl Drop for AllocatedPages {
+    fn drop(&mut self) {
+        // log::warn!("Dropping {:?}", self);
     }
 }
 
@@ -396,3 +408,15 @@ macro_rules! mapped_impl {
 }
 
 mapped_impl!(MappedPages, AllocatedPages);
+
+impl Debug for MappedPages {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("MappedPages").field("pages", &self.pages).field("frames", &self.frames).finish()
+    }
+}
+
+impl Drop for MappedPages {
+    fn drop(&mut self) {
+        // log::warn!("Dropping {:#?}", self);
+    }
+}

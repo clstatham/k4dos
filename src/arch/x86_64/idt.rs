@@ -15,7 +15,7 @@ use x86_64::{
 
 use crate::{
     backtrace,
-    fs::tty::TTY,
+    fs::devfs::tty::TTY,
     mem::addr::VirtAddr,
     task::{get_scheduler},
     util::IrqMutex,

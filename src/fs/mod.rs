@@ -10,14 +10,13 @@ use crate::{
     util::{ctypes::c_short, errno::Errno, KResult},
 };
 
-use self::{opened_file::OpenOptions, path::PathBuf, pipe::Pipe};
+use self::{opened_file::OpenFlags, path::PathBuf, pipe::Pipe};
 
 pub mod initramfs;
-pub mod null;
 pub mod opened_file;
 pub mod path;
 pub mod pipe;
-pub mod tty;
+pub mod devfs;
 
 pub type FileRef = Arc<dyn File + Send + Sync>;
 pub type DirRef = Arc<dyn Directory + Send + Sync>;
@@ -189,7 +188,7 @@ pub trait FsNode {
 
 pub trait File: FsNode {
     /// `open(2)`.
-    fn open(&self, _options: &OpenOptions) -> KResult<Option<FileRef>> {
+    fn open(&self, _options: &OpenFlags) -> KResult<Option<FileRef>> {
         Ok(None)
     }
 
@@ -215,7 +214,7 @@ pub trait File: FsNode {
     }
 
     /// `read(2)`.
-    fn read(&self, _offset: usize, _buf: UserBufferMut, _options: &OpenOptions) -> KResult<usize> {
+    fn read(&self, _offset: usize, _buf: UserBufferMut, _options: &OpenFlags) -> KResult<usize> {
         Err(errno!(Errno::EBADF, "read(): not implemented"))
     }
 
@@ -224,7 +223,7 @@ pub trait File: FsNode {
         &self,
         _offset: usize,
         _buf: UserBuffer<'_>,
-        _options: &OpenOptions,
+        _options: &OpenFlags,
     ) -> KResult<usize> {
         Err(errno!(Errno::EBADF, "write(): not implemented"))
     }
@@ -256,6 +255,8 @@ pub trait Directory: FsNode {
     }
 
     fn readdir(&self, index: usize) -> KResult<Option<DirEntry>>;
+
+    fn unlink(&self, name: String) -> KResult<()>;
 }
 
 #[derive(Clone)]
