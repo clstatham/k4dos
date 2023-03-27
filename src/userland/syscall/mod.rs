@@ -42,6 +42,9 @@ pub const QUIET_SYSCALLS: &[usize] = &[
     SYS_LSEEK,
     SYS_WRITEV,
     SYS_READV,
+    SYS_GETRANDOM,
+    SYS_WRITE,
+    SYS_READ,
 ];
 
 pub struct SyscallHandler<'a> {
@@ -159,6 +162,7 @@ impl<'a> SyscallHandler<'a> {
             SYS_CLOCK_GETTIME => self.sys_clock_gettime(a1, VirtAddr::new(a2)),
             SYS_NANOSLEEP => self.sys_nanosleep(VirtAddr::new(a1), VirtAddr::new(a2)),
             SYS_MKDIR => self.sys_mkdir(&resolve_path(a1)?, FileMode::new(a2 as u32)),
+            SYS_GETRANDOM => self.sys_getrandom(VirtAddr::new(a1), a2),
             _ => Err(errno!(Errno::ENOSYS, "dispatch(): syscall not implemented")),
         };
 

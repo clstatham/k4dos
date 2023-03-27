@@ -1,6 +1,7 @@
 use core::{mem::size_of, ops::Add};
 
 use alloc::{borrow::ToOwned, string::String, sync::Arc};
+use x86::random::rdrand_slice;
 
 use crate::{
     bitflags_from_user, errno,
@@ -120,6 +121,15 @@ impl<'a> SyscallHandler<'a> {
     pub fn sys_ioctl(&mut self, fd: FileDesc, cmd: usize, arg: usize) -> KResult<isize> {
         let opened_file = current_task().get_opened_file_by_fd(fd)?;
         opened_file.ioctl(cmd, arg)
+    }
+
+    pub fn sys_getrandom(&mut self, buf: VirtAddr, bufflen: usize) -> KResult<isize> {
+        let mut v = alloc::vec![0u8; bufflen];
+        unsafe {
+            rdrand_slice(&mut v);
+        }
+        buf.write_bytes(&v)?;
+        Ok(bufflen as isize)
     }
 }
 
