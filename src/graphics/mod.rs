@@ -11,7 +11,7 @@ use limine::LimineFramebufferResponse;
 use spin::Once;
 
 use crate::{
-    mem::addr::{PhysAddr, VirtAddr},
+    mem::addr::VirtAddr,
     util::{IrqMutex, IrqMutexGuard, KResult},
     vga_text::{BUFFER_HEIGHT, BUFFER_WIDTH},
 };

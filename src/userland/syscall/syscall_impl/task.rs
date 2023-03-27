@@ -216,12 +216,11 @@ impl<'a> SyscallHandler<'a> {
             return Err(errno!(Errno::ENOSYS, "sys_clock_gettime(): not yet implemented"))
         }
         let current = current_task();
-        let delta_ms = time::get_uptime_ticks() - current.start_time.get().unwrap();
-        let delta_sec = delta_ms / 1000;
-        let delta_ns = delta_ms % 1000 * 1000000;
+        let delta_ns = time::get_uptime_ns() - current.start_time.get().unwrap() * 1000000;
+        let delta_sec = delta_ns / 1000000000;
         let ts = TimeSpec {
             tv_sec: delta_sec as isize,
-            tv_nsec: delta_ns as isize,
+            tv_nsec: (delta_ns % 1000000000) as isize,
         };
         tp.write_volatile(ts)?;
         Ok(0)

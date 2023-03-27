@@ -33,7 +33,7 @@ pub mod util;
 #[macro_use]
 pub mod graphics;
 
-use core::sync::atomic::AtomicUsize;
+
 
 use mem::addr::VirtAddr;
 

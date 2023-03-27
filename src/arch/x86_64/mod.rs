@@ -1,7 +1,5 @@
-use core::arch::global_asm;
-
 use alloc::sync::Arc;
-use limine::{LimineBootInfoRequest, LimineHhdmRequest, LimineStackSizeRequest, LimineBootTimeRequest, LimineFramebufferRequest, LimineMemmapRequest};
+use limine::{LimineHhdmRequest, LimineStackSizeRequest, LimineBootTimeRequest, LimineFramebufferRequest, LimineMemmapRequest};
 use x86::{
     controlregs::{self, Cr0, Cr4, Xcr0},
     cpuid::CpuId,
@@ -56,7 +54,8 @@ pub fn arch_main() {
     log::info!("Logger initialized.");
 
     log::info!("Setting up time structures.");
-    time::init();
+    let boot_time = unsafe { &*BOOT_TIME.get_response().as_ptr().unwrap() }.boot_time;
+    time::init(boot_time);
 
     log::info!("Initializing FPU mechanisms.");
     let features = CpuId::new().get_feature_info().unwrap();

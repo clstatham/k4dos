@@ -114,7 +114,7 @@ impl Scheduler {
         self.waiting_queue.lock().retain(|t| t.pid != task.pid);
         let already_in_queue = queue.iter().any(|(t, _)| t.pid == task.pid);
         if !already_in_queue {
-            let deadline = arch::time::get_uptime_ticks() + duration;
+            let deadline = arch::time::get_uptime_ms() + duration;
             // log::debug!(
             //     "Pushing {} as waiting with duration {} ms",
             //     task.pid.as_usize(),
@@ -131,7 +131,7 @@ impl Scheduler {
     }
 
     fn check_deadline(&self) {
-        let time = arch::time::get_uptime_ticks();
+        let time = arch::time::get_uptime_ms();
         let mut queue = self.deadline_waiting_queue.lock();
         for _ in 0..queue.len() {
             if let Some((task, deadline)) = queue.pop_front() {
@@ -365,7 +365,7 @@ pub fn switch() {
         // log::debug!("Switching from preempt task to PID {:?}", task.pid);
         drop(queue);
         drop(current);
-        task.start_time.call_once(time::get_uptime_ticks);
+        task.start_time.call_once(|| time::get_uptime_ms());
         arch_context_switch(
             sched.preempt_task.as_ref().unwrap().arch_mut(),
             task.arch_mut(),

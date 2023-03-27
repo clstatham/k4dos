@@ -3,7 +3,7 @@ use core::ops::{Index, IndexMut};
 use alloc::vec::Vec;
 use arrayvec::ArrayVec;
 use buddy_system_allocator::LockedHeap;
-use limine::{LimineMemmapResponse, LimineMemoryMapEntryType, NonNullPtr, LimineMemmapEntry};
+use limine::{LimineMemoryMapEntryType, NonNullPtr, LimineMemmapEntry};
 use spin::Once;
 
 use super::addr::{PhysAddr, VirtAddr};
