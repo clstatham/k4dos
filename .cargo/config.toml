@@ -7,4 +7,4 @@ build-std = ["core", "compiler_builtins", "alloc"]
 build-std-features = ["compiler-builtins-mem"]
 
 [target.x86_64-kados]
-runner = ".cargo/runner.sh"
+runner = ".cargo/runner_kvm.sh"

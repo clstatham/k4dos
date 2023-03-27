@@ -29,6 +29,7 @@ lazy_static! {
 #[allow(unreachable_code)]
 pub fn _print0(args: ::core::fmt::Arguments) {
     use core::fmt::Write;
+    #[cfg(debug_assertions)]
     x86_64::instructions::interrupts::without_interrupts(|| {
         SERIAL0
             .lock()
@@ -58,6 +59,7 @@ macro_rules! serial0_println {
 #[allow(unreachable_code)]
 pub fn _print1(args: ::core::fmt::Arguments) {
     use core::fmt::Write;
+    #[cfg(debug_assertions)]
     x86_64::instructions::interrupts::without_interrupts(|| {
         SERIAL1
             .lock()
@@ -70,7 +72,8 @@ pub fn _print1(args: ::core::fmt::Arguments) {
 pub fn serial1_recv() -> Option<u8> {
     // x86_64::instructions::interrupts::without_interrupts(|| {
     // SERIAL1.lock();
-
+    
+    #[cfg(debug_assertions)]
     unsafe {
         let line_sts = inb(SERIAL1_IOPORT + 5);
         if line_sts & 0x1 != 0 {
@@ -78,6 +81,8 @@ pub fn serial1_recv() -> Option<u8> {
         }
         None
     }
+    #[cfg(not(debug_assertions))]
+    None
 
     // })
 }
