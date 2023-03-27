@@ -409,7 +409,7 @@ impl Vmem {
         reason: PageFaultErrorCode,
     ) -> KResult<()> {
         let dump_and_exit = || {
-            log::error!("{:#x?}", stack_frame);
+            log::debug!("{:#x?}", stack_frame);
             self.log();
             backtrace::unwind_user_stack_from(stack_frame.frame.rbp).ok();
             get_scheduler().send_signal_to(current_task(), SIGSEGV);
@@ -417,10 +417,10 @@ impl Vmem {
         };
 
         let rip = stack_frame.frame.rip;
-        log::warn!("User page fault at {:#x}", rip);
-        log::warn!("PID: {}", current_task().pid().as_usize());
-        log::warn!("Faulted address: {:?}", faulted_addr);
-        log::warn!("Reason: {:?}", reason);
+        log::debug!("User page fault at {:#x}", rip);
+        log::debug!("PID: {}", current_task().pid().as_usize());
+        log::debug!("Faulted address: {:?}", faulted_addr);
+        log::debug!("Reason: {:?}", reason);
         if faulted_addr.align_down(PAGE_SIZE) == VirtAddr::null() {
             log::error!("User segmentation fault: null pointer access");
             dump_and_exit()

@@ -16,7 +16,7 @@ use crate::{
     task::{current_task, get_scheduler, group::TaskGroup, signal::SIGINT, wait_queue::WaitQueue},
     userland::buffer::{UserBuffer, UserBufferMut, UserBufferReader, UserBufferWriter},
     util::{ctypes::c_int, errno::Errno, error::KResult, lock::IrqMutex, ringbuffer::RingBuffer},
-    vga_text::{self, Color, ColorCode},
+    graphics::{self, render_text_buf}, fb_print, vga_text,
 };
 
 use crate::fs::{
@@ -291,7 +291,7 @@ impl Tty {
             .write(UserBuffer::from_slice(&[ch]), |ctrl| match ctrl {
                 LineControl::Backspace => {
                     // serial1_print!("\x08 \x08");
-                    vga_text::backspace();
+                    graphics::backspace();
                 }
                 LineControl::Echo(ch) => {
                     self.write(0, UserBuffer::from_slice(&[ch]), &OpenFlags::empty())
@@ -320,6 +320,7 @@ const TIOCSPGRP: usize = 0x5410;
 const TIOCGWINSZ: usize = 0x5413;
 
 #[repr(C)]
+#[derive(Copy, Clone)]
 struct WinSize {
     ws_row: u16,
     ws_col: u16,
@@ -333,13 +334,13 @@ impl File for Tty {
             TCGETS => {
                 let termios = *self.discipline.termios.lock();
                 let arg = VirtAddr::new(arg);
-                arg.write(termios)?;
+                arg.write_volatile(termios)?;
             }
             TCSETS | TCSETSW => {
                 let arg = VirtAddr::new(arg);
-                let termios = arg.read::<Termios>()?;
+                let termios = arg.read_volatile::<Termios>()?;
                 log::debug!("Termios: {:?}", termios);
-                *self.discipline.termios.lock() = *termios;
+                *self.discipline.termios.lock() = termios;
             }
             TIOCGPGRP => {
                 // let group = self.discipline.foreground_group().ok_or(errno!(
@@ -352,7 +353,7 @@ impl File for Tty {
                     .unwrap_or(current_task().group.borrow().upgrade().unwrap());
                 let id = group.lock().pgid();
                 let arg = VirtAddr::new(arg);
-                arg.write(id)?;
+                arg.write_volatile(id)?;
             }
             TIOCSPGRP => {
                 let arg = VirtAddr::new(arg);
@@ -368,7 +369,7 @@ impl File for Tty {
                     ws_ypixel: 0,
                 };
                 let arg = VirtAddr::new(arg);
-                arg.write(winsize)?;
+                arg.write_volatile(winsize)?;
             }
             _ => return Err(errno!(Errno::ENOSYS, "ioctl(): command not found")),
         }
@@ -398,6 +399,7 @@ impl File for Tty {
         let reader = UserBufferReader::from(buf);
         let total_len = parse(reader)?;
         if total_len > 0 {
+            render_text_buf();
             get_scheduler().wake_all(&POLL_WAIT_QUEUE);
         }
         Ok(total_len)
@@ -422,7 +424,7 @@ fn parse(mut reader: UserBufferReader) -> KResult<usize> {
     let mut escape_codes = bytes.split(|b| *b == 0x1b);
     if bytes[0] != 0x1b {
         // print until the first escape code
-        vga_print!(
+        fb_print!(
             "{}",
             core::str::from_utf8(escape_codes.next().unwrap()).unwrap()
         );
@@ -454,56 +456,56 @@ fn parse(mut reader: UserBufferReader) -> KResult<usize> {
 
         let parse_usize = |arg: &[u8]| core::str::from_utf8(arg).unwrap().parse::<usize>();
 
-        let (x, y) = vga_text::cursor_xy();
+        let (x, y) = graphics::cursor_xy();
         match *function {
             b'A' => {
                 let n = parse_usize(arguments[0]).unwrap_or(1);
-                vga_text::set_cursor_y(y.saturating_sub(n));
+                graphics::set_cursor_y(y.saturating_sub(n));
             }
             b'B' => {
                 let n = parse_usize(arguments[0]).unwrap_or(1);
-                vga_text::set_cursor_y(y.saturating_add(n));
+                graphics::set_cursor_y(y.saturating_add(n));
             }
             b'C' => {
                 let n = parse_usize(arguments[0]).unwrap_or(1);
-                vga_text::set_cursor_x(x.saturating_add(n));
+                graphics::set_cursor_x(x.saturating_add(n));
             }
             b'D' => {
                 let n = parse_usize(arguments[0]).unwrap_or(1);
-                vga_text::set_cursor_x(x.saturating_sub(n));
+                graphics::set_cursor_x(x.saturating_sub(n));
             }
             b'E' => {
                 let n = parse_usize(arguments[0]).unwrap_or(1);
-                vga_text::set_cursor_x(0);
-                vga_text::set_cursor_y(y.saturating_add(n));
+                graphics::set_cursor_x(0);
+                graphics::set_cursor_y(y.saturating_add(n));
             }
             b'F' => {
                 let n = parse_usize(arguments[0]).unwrap_or(1);
-                vga_text::set_cursor_x(0);
-                vga_text::set_cursor_y(y.saturating_sub(n));
+                graphics::set_cursor_x(0);
+                graphics::set_cursor_y(y.saturating_sub(n));
             }
             b'G' | b'f' => {
                 let n = parse_usize(arguments[0]).unwrap();
-                vga_text::set_cursor_x(n);
+                graphics::set_cursor_x(n);
             }
             b'H' => {
                 if arguments[0].is_empty() {
-                    vga_text::set_cursor_xy((0, 0));
+                    graphics::set_cursor_xy((0, 0));
                 } else {
                     let n = parse_usize(arguments[0]).unwrap_or(0);
                     let m = parse_usize(arguments[1]).unwrap_or(0);
-                    vga_text::set_cursor_xy((n, m));
+                    graphics::set_cursor_xy((n, m));
                 }
             }
             b'J' => {
                 if arguments.is_empty() {
-                    vga_text::clear_until_end();
+                    graphics::clear_until_end();
                 } else {
                     let n = parse_usize(arguments[0]).unwrap_or(0);
                     match n {
-                        0 => vga_text::clear_until_end(),
-                        1 => vga_text::clear_until_beginning(),
-                        2 => vga_text::clear_screen(),
+                        0 => graphics::clear_until_end(),
+                        1 => graphics::clear_until_beginning(),
+                        2 => graphics::clear_screen(),
                         3 => todo!("erase saved lines"),
                         _ => unimplemented!(),
                     }
@@ -511,13 +513,13 @@ fn parse(mut reader: UserBufferReader) -> KResult<usize> {
             }
             b'K' => {
                 if arguments.is_empty() {
-                    vga_text::clear_until_eol();
+                    graphics::clear_until_eol();
                 } else {
                     let n = parse_usize(arguments[0]).unwrap_or(0);
                     match n {
-                        0 => vga_text::clear_until_eol(),
-                        1 => vga_text::clear_from_bol(),
-                        2 => vga_text::clear_line(),
+                        0 => graphics::clear_until_eol(),
+                        1 => graphics::clear_from_bol(),
+                        2 => graphics::clear_line(),
                         _ => unimplemented!(),
                     }
                 }
@@ -535,36 +537,36 @@ fn parse(mut reader: UserBufferReader) -> KResult<usize> {
                 todo!("restore cursor postion")
             }
             b'm' => {
-                let arg0 = parse_usize(arguments[0]).unwrap() as u8;
-                match arg0 {
-                    0 => vga_text::set_color_code(ColorCode::new(Color::White, Color::Black)),
-                    1 => {} // bold
-                    3 => {} // italic
-                    4 => {} // underline
-                    30..=37 => {
-                        let color = vga_text::get_color_code();
-                        vga_text::set_color_code(ColorCode::new(
-                            unsafe { core::mem::transmute(arg0 - 30) },
-                            color.background(),
-                        ));
-                    }
-                    40..=47 => {
-                        let color = vga_text::get_color_code();
-                        vga_text::set_color_code(ColorCode::new(color.foreground(), unsafe {
-                            core::mem::transmute(arg0 - 40)
-                        }));
-                    }
-                    90..=97 => {
-                        todo!("bright foreground color")
-                    }
-                    100..=107 => {
-                        todo!("bright background color")
-                    }
-                    _ => todo!(
-                        "Unknown ANSI function: {}",
-                        core::str::from_utf8(chunk).unwrap()
-                    ),
-                }
+                // let arg0 = parse_usize(arguments[0]).unwrap() as u8;
+                // match arg0 {
+                //     0 => graphics::set_color_code(ColorCode::new(Color::White, Color::Black)),
+                //     1 => {} // bold
+                //     3 => {} // italic
+                //     4 => {} // underline
+                //     30..=37 => {
+                //         let color = graphics::get_color_code();
+                //         graphics::set_color_code(ColorCode::new(
+                //             unsafe { core::mem::transmute(arg0 - 30) },
+                //             color.background(),
+                //         ));
+                //     }
+                //     40..=47 => {
+                //         let color = graphics::get_color_code();
+                //         graphics::set_color_code(ColorCode::new(color.foreground(), unsafe {
+                //             core::mem::transmute(arg0 - 40)
+                //         }));
+                //     }
+                //     90..=97 => {
+                //         todo!("bright foreground color")
+                //     }
+                //     100..=107 => {
+                //         todo!("bright background color")
+                //     }
+                //     _ => todo!(
+                //         "Unknown ANSI function: {}",
+                //         core::str::from_utf8(chunk).unwrap()
+                //     ),
+                // }
             }
             _function if chunk[0] == b'?' => {
                 let n = parse_usize(&arguments[0][1..]).unwrap();
@@ -586,7 +588,7 @@ fn parse(mut reader: UserBufferReader) -> KResult<usize> {
             }
         }
 
-        vga_print!("{}", core::str::from_utf8(&chunk[f_idx + 1..]).unwrap());
+        fb_print!("{}", core::str::from_utf8(&chunk[f_idx + 1..]).unwrap());
     }
 
     Ok(reader.read_len())

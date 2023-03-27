@@ -187,9 +187,9 @@ impl VirtAddr {
         Ok(unsafe { &*(self.as_ptr()) })
     }
 
-    pub fn read_mut<T: Sized>(&self) -> KResult<&mut T> {
+    pub fn read_volatile<T: Sized + Copy>(&self) -> KResult<T> {
         self.read_ok::<T>()?;
-        Ok(unsafe { &mut *(self.as_mut_ptr()) })
+        Ok(unsafe { self.as_ptr::<T>().read_volatile() })
     }
 
     pub fn read_bytes(&self, buf: &mut [u8]) -> KResult<usize> {
@@ -198,7 +198,7 @@ impl VirtAddr {
         Ok(buf.len())
     }
 
-    pub fn write<T: Sized>(&self, t: T) -> KResult<()> {
+    pub fn write<T: Sized + Copy>(&self, t: T) -> KResult<()> {
         if self.addr == 0 {
             return Err(errno!(Errno::EFAULT, "write(): null VirtAddr"));
         }
@@ -206,6 +206,17 @@ impl VirtAddr {
             return Err(errno!(Errno::EACCES, "write(): unaligned VirtAddr"));
         }
         unsafe { core::ptr::write(self.as_mut_ptr(), t) };
+        Ok(())
+    }
+
+    pub fn write_volatile<T: Sized + Copy>(&self, t: T) -> KResult<()> {
+        if self.addr == 0 {
+            return Err(errno!(Errno::EFAULT, "write_volatile(): null VirtAddr"));
+        }
+        if self.addr % align_of::<T>() != 0 {
+            return Err(errno!(Errno::EACCES, "write_volatile(): unaligned VirtAddr"));
+        }
+        unsafe { core::ptr::write_volatile(self.as_mut_ptr(), t) };
         Ok(())
     }
 

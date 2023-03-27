@@ -21,7 +21,7 @@ use crate::{
         allocator::{KERNEL_FRAME_ALLOCATOR, KERNEL_PAGE_ALLOCATOR},
     },
     serial::serial1_recv,
-    task::{current_task, get_scheduler, Task},
+    task::{current_task, get_scheduler, Task}, graphics,
 };
 
 pub mod cpu_local;
@@ -67,7 +67,9 @@ pub fn arch_main(boot_info: BootInformation) {
 
     log::info!("Initializing boot GDT.");
     gdt::init_boot();
-
+    
+    let fb_tag = boot_info.framebuffer_tag().expect("No multiboot2 framebuffer tag found");
+    
     log::info!("Initializing kernel frame and page allocators.");
     mem::allocator::init(memmap).expect("Error initializing kernel frame and page allocators");
 
@@ -90,6 +92,11 @@ pub fn arch_main(boot_info: BootInformation) {
             .lock()
             .convert_to_heap_allocated();
     }
+
+    log::info!("Initializing VGA graphics.");
+    
+    graphics::init(&fb_tag).expect("Error initializing VGA graphics");
+
 
     log::info!("Setting up syscalls.");
     unsafe {

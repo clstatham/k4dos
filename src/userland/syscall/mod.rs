@@ -1,3 +1,5 @@
+use alloc::format;
+
 use crate::{
     arch::idt::InterruptFrame,
     errno,
@@ -17,7 +19,7 @@ use crate::{
     util::{
         ctypes::{c_int, c_nfds},
         errno::Errno,
-        KResult,
+        KResult, KError,
     },
 };
 
@@ -25,7 +27,7 @@ use super::buffer::UserCStr;
 
 pub mod syscall_impl;
 
-pub fn errno_to_isize(res: &KResult<isize>) -> isize {
+pub fn errno_to_isize(res: &Result<isize, KError<'_>>) -> isize {
     match res {
         Ok(retval) => *retval,
         Err(err) => {
@@ -55,7 +57,7 @@ impl<'a> SyscallHandler<'a> {
         a5: usize,
         a6: usize,
         n: usize,
-    ) -> KResult<isize> {
+    ) -> Result<isize, KError<'_>> {
         let enter_pid = current_task().pid();
         let rip = self.frame.rip;
         let quiet = QUIET_SYSCALLS.contains(&n);
@@ -202,7 +204,7 @@ fn resolve_path(uaddr: usize) -> KResult<PathBuf> {
     Ok(Path::new(UserCStr::new(VirtAddr::new(uaddr), 512)?.as_str()).into())
 }
 
-fn syscall_name_by_number(n: usize) -> &'static str {
+pub fn syscall_name_by_number(n: usize) -> &'static str {
     match n {
         0 => "read",
         1 => "write",

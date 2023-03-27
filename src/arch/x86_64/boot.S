@@ -11,12 +11,31 @@ header_start:
     .long header_end - header_start
     .long -(0xe85250d6 + 0 + (header_end - header_start))
 
+.align 8
 info_request:
     .short 1
     .short 0
     .long info_request_end - info_request
     .long 6
 info_request_end:
+
+.align 8
+console_request:
+    .short 4
+    .short 0
+    .long console_request_end - console_request
+    .long 0x3
+console_request_end:
+
+.align 8
+framebuffer_request:
+    .short 5
+    .short 1
+    .long framebuffer_request_end - framebuffer_request
+    .long 80
+    .long 25
+    .long 0
+framebuffer_request_end:
 
 .align 8
     .short 0

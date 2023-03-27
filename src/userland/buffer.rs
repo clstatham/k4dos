@@ -1,4 +1,4 @@
-use core::{mem::size_of, ops::Add};
+use core::{mem::size_of, ops::Add, sync::atomic::Ordering};
 
 use alloc::string::{String, ToString};
 
@@ -72,27 +72,38 @@ impl<'a> UserBufferMut<'a> {
     }
 }
 
-unsafe extern "C" fn user_strncpy(_dst: *mut u8, _src: *const u8, _max_len: usize) -> usize {
-    let out: usize;
-    core::arch::asm!("
-        mov rcx, rdx
-        test rcx, rcx
-        jz 2f
-    3:
-        mov al, [rsi]
+// unsafe extern "C" fn user_strncpy(_dst: *mut u8, _src: *const u8, _max_len: usize) -> usize {
+//     let out: usize;
+//     core::arch::asm!("
+//         mov rcx, rdx
+//         test rcx, rcx
+//         jz 2f
+//     3:
+//         mov al, [rsi]
 
-        test al, al
-        jz 2f
+//         test al, al
+//         jz 2f
 
-        mov [rdi], al
-        add rdi, 1
-        add rsi, 1
-        loop 3b
-    2:
-        sub rdx, rcx
-        mov {}, rdx
-    ", out(reg) out);
-    out
+//         mov [rdi], al
+//         add rdi, 1
+//         add rsi, 1
+//         loop 3b
+//     2:
+//         sub rdx, rcx
+//         mov {}, rdx
+//     ", out(reg) out);
+//     out
+// }
+
+pub unsafe fn user_strncpy_rust(dst: *mut u8, src: *const u8, max_len: usize) -> usize {
+    let mut read_len = 0usize;
+    loop {
+        let byte = src.add(read_len).read_volatile();
+        if byte == b'\0' || read_len > max_len{ break; }
+        dst.add(read_len).write_volatile(byte);
+        read_len += 1;
+    }
+    read_len
 }
 
 pub struct UserCStr {
@@ -104,7 +115,7 @@ impl UserCStr {
         vaddr.read_ok::<u8>()?;
         let mut tmp = alloc::vec![0; max_len];
         // SAFE: we've validated the length of the string, and confirmed that it won't run into kernel memory
-        let read_len = unsafe { user_strncpy(tmp.as_mut_ptr(), vaddr.as_ptr(), max_len) };
+        let read_len = unsafe { user_strncpy_rust(tmp.as_mut_ptr(), vaddr.as_ptr(), max_len) };
         let string = core::str::from_utf8(&tmp[..read_len])
             .map_err(|_| errno!(Errno::EINVAL, "UserCStr: UTF-8 parsing error"))?
             .to_string();

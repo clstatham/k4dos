@@ -1,6 +1,6 @@
 use x86::msr::{rdmsr, wrmsr};
 
-use crate::userland::syscall::{errno_to_isize, SyscallHandler, QUIET_SYSCALLS};
+use crate::userland::syscall::{errno_to_isize, SyscallHandler, QUIET_SYSCALLS, syscall_name_by_number};
 
 use super::gdt::{KERNEL_CS_IDX, USER_DS_IDX};
 use super::idt::InterruptFrame;
@@ -148,7 +148,8 @@ fn handle_syscall(
     if let Err(ref err) = res {
         if !QUIET_SYSCALLS.contains(&n) {
             log::error!(
-                "Syscall handler returned Err {:?} with msg: {:?}",
+                "Syscall handler for `{}` returned Err {:?} with msg: {:?}",
+                syscall_name_by_number(n),
                 err.errno(),
                 err.msg()
             );

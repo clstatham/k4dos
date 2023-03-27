@@ -171,6 +171,7 @@ impl<'a> SyscallHandler<'a> {
 
         let fd = opened_files.open(path_comp, flags)?;
         log::trace!("Opened {} as {}.", path, fd);
+        
         Ok(fd as isize)
     }
 

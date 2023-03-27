@@ -2,20 +2,21 @@ use core::fmt::{Debug, Display};
 
 use super::errno::Errno;
 
-pub type KResult<T> = Result<T, KError>;
+pub type KResult<T> = Result<T, KError<'static>>;
 
-pub enum KError {
+#[derive(Clone)]
+pub enum KError<'a> {
     Message {
-        msg: &'static str,
+        msg: &'a str,
     },
     Errno {
         errno: Errno,
-        msg: Option<&'static str>,
+        msg: Option<&'a str>,
     },
 }
 
-impl KError {
-    pub fn msg(&self) -> Option<&'static str> {
+impl<'a> KError<'a> {
+    pub fn msg(&self) -> Option<&'a str> {
         match self {
             KError::Message { msg } => Some(msg),
             KError::Errno { msg, .. } => *msg,
@@ -30,7 +31,7 @@ impl KError {
     }
 }
 
-impl Debug for KError {
+impl<'a> Debug for KError<'a> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
             // KError::Error { err } => write!(f, "{:?}", err),
@@ -44,7 +45,7 @@ impl Debug for KError {
     }
 }
 
-impl Display for KError {
+impl<'a> Display for KError<'a> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         write!(f, "{:?}", self)
     }

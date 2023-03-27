@@ -58,4 +58,6 @@ impl Log for KaDOSLogger {
 pub fn init() {
     log::set_logger(&KaDOSLogger).expect("error setting logger");
     log::set_max_level(log::LevelFilter::Trace);
+    // #[cfg(not(debug_assertions))]
+    // log::set_max_level(log::LevelFilter::Warn);
 }

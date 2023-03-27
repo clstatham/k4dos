@@ -33,6 +33,7 @@ arrayvec = { version = "0.7.2", default-features = false }
 x2apic = "0.4.2"
 elfloader = "0.16.0"
 bitvec = { version = "1.0.1", default-features = false }
+embedded-graphics = "0.7.1"
 
 [dependencies.lazy_static]
 version = "1.4.0"
