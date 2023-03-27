@@ -43,6 +43,10 @@ impl FrameBuffer {
         <Self as DrawTarget>::clear(self, Rgb888::new(20, 20, 20)).unwrap();
     }
 
+    pub fn frame_mut(&mut self) -> &mut [u32] {
+        &mut self.back_buffer
+    }
+
     pub fn flip(&mut self) {
         unsafe {
             self.start_addr.as_mut_ptr::<u32>().copy_from_nonoverlapping(self.back_buffer.as_ptr(), self.width * self.height);

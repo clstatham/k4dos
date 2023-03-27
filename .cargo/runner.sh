@@ -39,7 +39,7 @@ grub-mkrescue -o $KERNEL.iso target/iso_root
 
 # Run the created image with QEMU.
 qemu-system-x86_64 \
-    -enable-kvm -cpu host -M smm=off \
+    -machine q35 -cpu EPYC -M smm=off \
     -D target/log.txt -d int,guest_errors -no-reboot -no-shutdown \
     -s -S \
     -serial stdio \
