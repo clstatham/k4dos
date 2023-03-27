@@ -32,7 +32,7 @@ impl WaitQueue {
     where
         F: FnMut() -> KResult<Option<R>>,
     {
-        let start_time = arch::time::get_uptime_ticks();
+        let start_time = arch::time::get_uptime_ms();
         loop {
             let current = current_task();
             let scheduler = get_scheduler();
@@ -69,7 +69,7 @@ impl WaitQueue {
             scheduler.sleep(timeout)?;
 
             if let Some(timeout) = timeout {
-                if arch::time::get_uptime_ticks() >= start_time + timeout {
+                if arch::time::get_uptime_ms() >= start_time + timeout {
                     return Err(errno!(
                         Errno::EINTR,
                         "sleep_signalable_until(): timeout reached"
