@@ -416,11 +416,11 @@ impl Vmem {
             get_scheduler().exit_current(1)
         };
 
-        let rip = stack_frame.frame.rip;
-        log::debug!("User page fault at {:#x}", rip);
-        log::debug!("PID: {}", current_task().pid().as_usize());
-        log::debug!("Faulted address: {:?}", faulted_addr);
-        log::debug!("Reason: {:?}", reason);
+        // let rip = stack_frame.frame.rip;
+        // log::debug!("User page fault at {:#x}", rip);
+        // log::debug!("PID: {}", current_task().pid().as_usize());
+        // log::debug!("Faulted address: {:?}", faulted_addr);
+        // log::debug!("Reason: {:?}", reason);
         if faulted_addr.align_down(PAGE_SIZE) == VirtAddr::null() {
             log::error!("User segmentation fault: null pointer access");
             dump_and_exit()

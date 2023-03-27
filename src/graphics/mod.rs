@@ -1,16 +1,25 @@
 use core::ops::Add;
 
 use alloc::boxed::Box;
-use embedded_graphics::{prelude::{DrawTarget, OriginDimensions, Size, IntoStorage, Dimensions, Point, RgbColor}, pixelcolor::Rgb888, Pixel, mono_font::{MonoTextStyle, ascii::{FONT_10X20}, MonoFont}, text::{Text, Alignment}, Drawable};
+use embedded_graphics::{
+    mono_font::{ascii::FONT_10X20, MonoFont, MonoTextStyle},
+    pixelcolor::Rgb888,
+    prelude::{Dimensions, DrawTarget, IntoStorage, OriginDimensions, Point, RgbColor, Size},
+    text::{Alignment, Text},
+    Drawable, Pixel,
+};
 use multiboot2::FramebufferTag;
 use spin::Once;
 
-use crate::{util::{KResult, IrqMutex, IrqMutexGuard}, mem::addr::{VirtAddr, PhysAddr}, vga_text::{BUFFER_WIDTH, BUFFER_HEIGHT}};
+use crate::{
+    mem::addr::{PhysAddr, VirtAddr},
+    util::{IrqMutex, IrqMutexGuard, KResult},
+    vga_text::{BUFFER_HEIGHT, BUFFER_WIDTH},
+};
 
 // static MONO_FONT: Once<MonoTextStyle<'static, Rgb888>> = Once::new();
 
 const FONT: MonoFont = FONT_10X20;
-
 
 pub struct FrameBuffer {
     back_buffer: Box<[u32]>,
@@ -26,7 +35,7 @@ pub struct FrameBuffer {
 
 impl FrameBuffer {
     pub fn render_text_buf(&mut self) {
-        let mut out = [b' '; BUFFER_WIDTH * BUFFER_HEIGHT + BUFFER_HEIGHT];
+        let mut out = [b' '; (BUFFER_WIDTH + 1) * BUFFER_HEIGHT];
         for line in 0..BUFFER_HEIGHT {
             for col in 0..BUFFER_WIDTH {
                 out[col + line * (BUFFER_WIDTH + 1)] = self.text_buf[line][col];
@@ -36,20 +45,33 @@ impl FrameBuffer {
 
         let mono_font = MonoTextStyle::new(&FONT, self.text_fgcolor);
 
-        Text::with_alignment(core::str::from_utf8(&out).unwrap(), self.bounding_box().top_left + Point::new(FONT.character_size.width as i32, FONT.character_size.height as i32), mono_font, Alignment::Left).draw(self).unwrap();
+        Text::with_alignment(
+            core::str::from_utf8(&out).unwrap(),
+            self.bounding_box().top_left
+                + Point::new(
+                    FONT.character_size.width as i32,
+                    FONT.character_size.height as i32,
+                ),
+            mono_font,
+            Alignment::Left,
+        )
+        .draw(self)
+        .unwrap();
     }
 
     pub fn clear_pixels(&mut self) {
-        <Self as DrawTarget>::clear(self, Rgb888::new(20, 20, 20)).unwrap();
+        self.clear(Rgb888::new(0, 0, 0)).unwrap();
     }
 
     pub fn frame_mut(&mut self) -> &mut [u32] {
         &mut self.back_buffer
     }
 
-    pub fn flip(&mut self) {
+    pub fn present(&mut self) {
         unsafe {
-            self.start_addr.as_mut_ptr::<u32>().copy_from_nonoverlapping(self.back_buffer.as_ptr(), self.width * self.height);
+            self.start_addr
+                .as_mut_ptr::<u32>()
+                .copy_from_nonoverlapping(self.back_buffer.as_ptr(), self.width * self.height);
         }
     }
 
@@ -74,19 +96,7 @@ impl FrameBuffer {
         self.cursor_color_hook();
     }
 
-    fn cursor_color_hook(&mut self) {
-        // let cursor = self.buffer.chars[self.text_cursor_y][self.text_cursor_x].read();
-        // for y in 0..BUFFER_HEIGHT {
-        //     for x in 0..BUFFER_WIDTH {
-        //         let chr = self.buffer.chars[y][x].read();
-        //         if y == self.text_cursor_y && x == self.text_cursor_x {
-        //             self.buffer.chars[y][x].write(ScreenChar { ascii_character: cursor.ascii_character, color_code: ColorCode::new(Color::White, Color::Cyan) });
-        //         } else {
-        //             self.buffer.chars[y][x].write(ScreenChar { ascii_character: chr.ascii_character, color_code: self.color_code });
-        //         }
-        //     }
-        // }
-    }
+    fn cursor_color_hook(&mut self) {}
 
     pub fn backspace(&mut self) {
         let row = self.text_cursor_y;
@@ -128,7 +138,7 @@ impl FrameBuffer {
     }
     fn clear_until_end(&mut self) {
         for col in self.text_cursor_x..BUFFER_WIDTH {
-            self.text_buf[self.text_cursor_y][col]= b' ';
+            self.text_buf[self.text_cursor_y][col] = b' ';
         }
         for row in self.text_cursor_y + 1..BUFFER_HEIGHT {
             self.clear_row(row);
@@ -167,22 +177,22 @@ impl FrameBuffer {
     }
     fn move_up(&mut self) {
         let new_y = self.text_cursor_y.saturating_sub(1);
-        let mut new_x = self.text_cursor_x;
-        while new_x > 0 && self.text_buf[new_y][new_x] == b' ' {
-            new_x -= 1;
-        }
+        // let mut new_x = self.text_cursor_x;
+        // while new_x > 0 && self.text_buf[new_y][new_x] == b' ' {
+        // new_x -= 1;
+        // }
         self.text_cursor_y = new_y;
-        self.text_cursor_x = new_x;
+        // self.text_cursor_x = new_x;
         self.cursor_color_hook();
     }
     fn move_down(&mut self) {
         let new_y = self.text_cursor_y.add(1).min(BUFFER_HEIGHT - 1);
-        let mut new_x = self.text_cursor_x;
-        while new_x > 0 && self.text_buf[new_y][new_x] == b' ' {
-            new_x -= 1;
-        }
+        // let mut new_x = self.text_cursor_x;
+        // while new_x > 0 && self.text_buf[new_y][new_x] == b' ' {
+        //     new_x -= 1;
+        // }
         self.text_cursor_y = new_y;
-        self.text_cursor_x = new_x;
+        // self.text_cursor_x = new_x;
         self.cursor_color_hook();
     }
     fn move_left(&mut self) {
@@ -207,8 +217,9 @@ impl DrawTarget for FrameBuffer {
     type Error = core::convert::Infallible;
 
     fn draw_iter<I>(&mut self, pixels: I) -> Result<(), Self::Error>
-        where
-            I: IntoIterator<Item = embedded_graphics::Pixel<Self::Color>> {
+    where
+        I: IntoIterator<Item = embedded_graphics::Pixel<Self::Color>>,
+    {
         assert_eq!(self.bpp, 32);
         for Pixel(coord, color) in pixels.into_iter() {
             let (x, y) = coord.into();
@@ -222,9 +233,7 @@ impl DrawTarget for FrameBuffer {
     }
 
     fn clear(&mut self, color: Self::Color) -> Result<(), Self::Error> {
-        unsafe {
-            core::slice::from_raw_parts_mut(self.back_buffer.as_mut_ptr(), self.width * self.height).fill(color.into_storage());
-        }
+        self.back_buffer.fill(color.into_storage());
         Ok(())
     }
 }
@@ -310,9 +319,8 @@ pub fn move_right() {
 pub fn render_text_buf() {
     fb().clear_pixels();
     fb().render_text_buf();
-    fb().flip();
+    fb().present();
 }
-
 
 #[macro_export]
 macro_rules! fb_print {
@@ -334,9 +342,13 @@ pub fn _fb_print(args: core::fmt::Arguments) {
 }
 
 pub fn init(fb_tag: &FramebufferTag) -> KResult<()> {
-    assert!(matches!(fb_tag.buffer_type, multiboot2::FramebufferType::RGB { .. }));
+    assert!(matches!(
+        fb_tag.buffer_type,
+        multiboot2::FramebufferType::RGB { .. }
+    ));
     let framebuf = FrameBuffer {
-        back_buffer: alloc::vec![0u32; fb_tag.width as usize * fb_tag.height as usize].into_boxed_slice(),
+        back_buffer: alloc::vec![0u32; fb_tag.width as usize * fb_tag.height as usize]
+            .into_boxed_slice(),
         start_addr: PhysAddr::new(fb_tag.address as usize).as_hhdm_virt(),
         width: fb_tag.width as usize,
         height: fb_tag.height as usize,

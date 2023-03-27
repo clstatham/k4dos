@@ -29,11 +29,13 @@ impl FsNode for FbDevice {
 impl File for FbDevice {
     fn read(&self, offset: usize, buf: UserBufferMut, _options: &OpenFlags) -> KResult<usize> {
         assert_eq!(offset % 4, 0);
+        let buf_len = buf.len();
+        assert_eq!(buf_len % 4, 0);
         let mut writer = UserBufferWriter::from(buf);
         let mut fb = fb();
         let mem = fb.frame_mut();
         let start = offset/4;
-        let len = writer.remaining_len()/4;
+        let len = buf_len/4;
         let end = (start + len).min(mem.len());
         let mem = mem[start..end].iter().flat_map(|pixel| pixel.to_le_bytes());
         for byte in mem {
@@ -45,12 +47,10 @@ impl File for FbDevice {
     fn write(&self, offset: usize, buf: UserBuffer<'_>, _options: &OpenFlags) -> KResult<usize> {
         assert_eq!(offset % 4, 0);
         let buf_len = buf.len();
+        assert_eq!(buf_len % 4, 0);
         let mut reader = UserBufferReader::from(buf);
         let mut fb = fb();
         let mem = fb.frame_mut();
-        // todo: don't heap allocate here
-        // let mut bytes = alloc::vec![0u8; reader.remaining_len()];
-        // reader.read_bytes(&mut bytes)?;
         let mut i = 0;
         while (offset / 4 + i) < mem.len() && i < buf_len / 4 {
             let byte0 = reader.read::<u8>()?;
@@ -61,7 +61,7 @@ impl File for FbDevice {
             mem[offset / 4 + i] = pixel;
             i += 1;
         }
-        fb.flip();
+        fb.present();
         Ok(i * 4)
     }
 }
