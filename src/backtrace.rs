@@ -11,7 +11,7 @@ use xmas_elf::{
 use crate::{
     kerrmsg,
     mem::{addr::VirtAddr, addr_space::AddressSpace},
-    util::{KResult, SavedInterruptStatus}, graphics::FRAMEBUFFER, fb_println,
+    util::{KResult, SavedInterruptStatus}
 };
 
 pub static KERNEL_ELF: Once<ElfFile<'static>> = Once::new();

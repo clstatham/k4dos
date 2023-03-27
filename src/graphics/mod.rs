@@ -2,11 +2,10 @@ use core::ops::Add;
 
 use alloc::boxed::Box;
 use embedded_graphics::{
-    mono_font::{ascii::FONT_10X20, MonoFont, MonoTextStyle},
+    mono_font::{ascii::FONT_8X13, MonoFont, MonoTextStyle},
     pixelcolor::Rgb888,
-    prelude::{Dimensions, DrawTarget, IntoStorage, OriginDimensions, Point, RgbColor, Size},
+    prelude::*,
     text::{Alignment, Text},
-    Drawable, Pixel,
 };
 use multiboot2::FramebufferTag;
 use spin::Once;
@@ -17,9 +16,7 @@ use crate::{
     vga_text::{BUFFER_HEIGHT, BUFFER_WIDTH},
 };
 
-// static MONO_FONT: Once<MonoTextStyle<'static, Rgb888>> = Once::new();
-
-const FONT: MonoFont = FONT_10X20;
+const FONT: MonoFont = FONT_8X13;
 
 pub struct FrameBuffer {
     back_buffer: Box<[u32]>,
@@ -34,6 +31,18 @@ pub struct FrameBuffer {
 }
 
 impl FrameBuffer {
+    pub fn width(&self) -> usize {
+        self.width
+    }
+
+    pub fn height(&self) -> usize {
+        self.height
+    }
+
+    pub fn bpp(&self) -> usize {
+        self.bpp
+    }
+
     pub fn render_text_buf(&mut self) {
         let mut out = [b' '; (BUFFER_WIDTH + 1) * BUFFER_HEIGHT];
         for line in 0..BUFFER_HEIGHT {
@@ -88,7 +97,6 @@ impl FrameBuffer {
                 let row = self.text_cursor_y;
                 let col = self.text_cursor_x;
 
-                // let color_code = self.color_code;
                 self.text_buf[row][col] = byte;
                 self.move_right();
             }
@@ -356,7 +364,7 @@ pub fn init(fb_tag: &FramebufferTag) -> KResult<()> {
         text_buf: [[b' '; BUFFER_WIDTH]; BUFFER_HEIGHT],
         text_cursor_x: 0,
         text_cursor_y: 0,
-        text_fgcolor: Rgb888::GREEN,
+        text_fgcolor: Rgb888::WHITE,
     };
 
     FRAMEBUFFER.call_once(|| IrqMutex::new(framebuf));

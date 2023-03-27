@@ -87,6 +87,8 @@ pub struct Task {
 
     pid: TaskId,
 
+    pub(crate) start_time: Once<usize>,
+
     pub(crate) root_fs: Arc<IrqMutex<RootFs>>,
     pub(crate) opened_files: Arc<IrqMutex<OpenedFileTable>>,
 
@@ -112,6 +114,7 @@ impl Task {
             arch: UnsafeCell::new(ArchTask::new_idle()),
             state: AtomicCell::new(TaskState::Runnable),
             pid,
+            start_time: Once::new(),
             parent: IrqMutex::new(Weak::new()),
             children: Arc::new(IrqMutex::new(Vec::new())),
             root_fs: Arc::new(IrqMutex::new(get_root().unwrap().clone())),
@@ -138,6 +141,7 @@ impl Task {
             group: AtomicRefCell::new(Arc::downgrade(&group)),
             state: AtomicCell::new(TaskState::Runnable),
             pid,
+            start_time: Once::new(),
             parent: IrqMutex::new(Weak::new()),
             children: Arc::new(IrqMutex::new(Vec::new())),
             root_fs: Arc::new(IrqMutex::new(get_root().unwrap().clone())),
@@ -181,6 +185,7 @@ impl Task {
             group: AtomicRefCell::new(Arc::downgrade(&group)),
             state: AtomicCell::new(TaskState::Runnable),
             pid,
+            start_time: Once::new(),
             vmem: Arc::new(IrqMutex::new(Vmem::new())),
             signals: Arc::new(IrqMutex::new(SignalDelivery::new())),
             signaled_frame: AtomicCell::new(None),
@@ -222,6 +227,7 @@ impl Task {
             opened_files: Arc::new(IrqMutex::new(self.opened_files.lock().clone())), // todo: deeper clone
             state: AtomicCell::new(TaskState::Runnable),
             pid,
+            start_time: Once::new(),
             root_fs: Arc::new(IrqMutex::new(self.root_fs.lock().clone())), // todo: actually fork the root fs
             children: Arc::new(IrqMutex::new(Vec::new())),
             parent: IrqMutex::new(Weak::new()),

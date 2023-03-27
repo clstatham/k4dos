@@ -1,7 +1,7 @@
 use alloc::sync::Arc;
 use spin::Once;
 
-use crate::{fs::{FsNode, File, opened_file::OpenFlags, initramfs::get_root, INode}, util::KResult, userland::buffer::{UserBufferMut, UserBufferWriter, UserBuffer, UserBufferReader}, graphics::fb};
+use crate::{fs::{FsNode, File, opened_file::OpenFlags, initramfs::get_root, INode}, util::{KResult, errno::Errno}, userland::buffer::{UserBufferMut, UserBufferWriter, UserBuffer, UserBufferReader}, graphics::fb, errno, mem::addr::VirtAddr};
 
 pub static DEV_FB0: Once<Arc<FbDevice>> = Once::new();
 
@@ -53,15 +53,78 @@ impl File for FbDevice {
         let mem = fb.frame_mut();
         let mut i = 0;
         while (offset / 4 + i) < mem.len() && i < buf_len / 4 {
-            let byte0 = reader.read::<u8>()?;
-            let byte1 = reader.read::<u8>()?;
-            let byte2 = reader.read::<u8>()?;
-            let byte3 = reader.read::<u8>()?;
-            let pixel = u32::from_le_bytes([byte0, byte1, byte2, byte3]);
+            let pixel = reader.read::<u32>()?;
+            // let pixel = u32::from_le_bytes([byte0, byte1, byte2, byte3]);
             mem[offset / 4 + i] = pixel;
             i += 1;
         }
         fb.present();
         Ok(i * 4)
     }
+
+    fn ioctl(&self, cmd: usize, arg: usize) -> KResult<isize> {
+        const FBIOGET_VSCREENINFO: usize = 0x4600;
+        // const FBIOGET_FSCREENINFO: usize = 0x4602;
+        match cmd {
+            FBIOGET_VSCREENINFO => {
+                let fb = fb();
+                let info = FbVarScreenInfo {
+                    xres: fb.width() as u32,
+                    yres: fb.height() as u32,
+                    xres_virtual: fb.width() as u32,
+                    yres_virtual: fb.height() as u32,
+                    bpp: fb.bpp() as u32,
+                    ..FbVarScreenInfo::default()
+                };
+                VirtAddr::new(arg).write_volatile(info)?;
+            }
+            // FBIOGET_FSCREENINFO => {
+
+            // }
+            _ => return Err(errno!(Errno::EINVAL, "ioctl(): unknown cmd"))
+        }
+        Ok(0)
+    }
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Default)]
+struct FbBitField {
+    offset: u32,
+    length: u32,
+    msb_right: u32,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Default)]
+struct FbVarScreenInfo {
+    xres: u32,
+    yres: u32,
+    xres_virtual: u32,
+    yres_virtual: u32,
+    xoffset: u32,
+    yoffset: u32,
+    bpp: u32,
+    grayscale: u32,
+    red: FbBitField,
+    green: FbBitField,
+    blue: FbBitField,
+    transp: FbBitField,
+    nonstd: u32,
+    activate: u32,
+    height_mm: u32,
+    width_mm: u32,
+    accel_flags: u32,
+    pixclock: u32,
+    left_margin: u32,
+    right_margin: u32,
+    upper_margin: u32,
+    lower_margin: u32,
+    hsync_len: u32,
+    vsync_len: u32,
+    sync: u32,
+    vmode: u32,
+    rotate: u32,
+    colorspace: u32,
+    reserved: [u32; 4],
 }

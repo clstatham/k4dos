@@ -1,5 +1,3 @@
-use alloc::format;
-
 use crate::{
     arch::idt::InterruptFrame,
     errno,
@@ -38,8 +36,12 @@ pub fn errno_to_isize(res: &Result<isize, KError<'_>>) -> isize {
 }
 
 pub const QUIET_SYSCALLS: &[usize] = &[
-    // SYS_POLL,
     SYS_UNLINK,
+    SYS_CLOCK_GETTIME,
+    SYS_NANOSLEEP,
+    SYS_LSEEK,
+    SYS_WRITEV,
+    SYS_READV,
 ];
 
 pub struct SyscallHandler<'a> {
@@ -154,6 +156,9 @@ impl<'a> SyscallHandler<'a> {
             SYS_UNLINK => self.sys_unlink(&resolve_path(a1)?),
             SYS_LSEEK => self.sys_lseek(a1 as FileDesc, a2, a3.into()),
             SYS_DUP2 => self.sys_dup2(a1 as FileDesc, a2 as FileDesc),
+            SYS_CLOCK_GETTIME => self.sys_clock_gettime(a1, VirtAddr::new(a2)),
+            SYS_NANOSLEEP => self.sys_nanosleep(VirtAddr::new(a1), VirtAddr::new(a2)),
+            SYS_MKDIR => self.sys_mkdir(&resolve_path(a1)?, FileMode::new(a2 as u32)),
             _ => Err(errno!(Errno::ENOSYS, "dispatch(): syscall not implemented")),
         };
 
@@ -569,6 +574,7 @@ pub const SYS_WRITEV: usize = 20;
 pub const SYS_PIPE: usize = 22;
 pub const SYS_SELECT: usize = 23;
 pub const SYS_DUP2: usize = 33;
+pub const SYS_NANOSLEEP: usize = 35;
 pub const SYS_GETPID: usize = 39;
 pub const SYS_SOCKET: usize = 41;
 pub const SYS_CONNECT: usize = 42;

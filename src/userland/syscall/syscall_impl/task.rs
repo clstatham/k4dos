@@ -9,8 +9,10 @@ use crate::{
     mem::addr::VirtAddr,
     task::{current_task, get_scheduler, group::PgId, Task, TaskId, TaskState, JOIN_WAIT_QUEUE},
     userland::{buffer::UserCStr, syscall::SyscallHandler},
-    util::{ctypes::c_int, errno::Errno, KResult},
+    util::{ctypes::c_int, errno::Errno, KResult, KError}, arch::time,
 };
+
+use super::time::TimeSpec;
 
 const ARG_MAX: usize = 512;
 const ARG_LEN_MAX: usize = 4096;
@@ -190,6 +192,39 @@ impl<'a> SyscallHandler<'a> {
         }
 
         Ok(got_pid.as_usize() as isize)
+    }
+
+    pub fn sys_nanosleep(&mut self, req: VirtAddr, _rem: VirtAddr) -> KResult<isize> {
+        let req = req.read_volatile::<TimeSpec>()?;
+        assert_eq!(req.tv_nsec % 1000000, 0);
+        let duration = req.tv_sec * 1000 + req.tv_nsec / 1000000;
+        match get_scheduler().sleep(Some(duration as usize)) {
+            Ok(_) => {},
+            Err(KError::Errno { errno, .. }) if errno == Errno::EINTR => {
+                todo!()
+                // return Err(KError::Errno { errno: Errno::EINTR, msg })
+            },
+            Err(_) => {
+                todo!()
+            },
+        }
+        Ok(0)
+    }
+
+    pub fn sys_clock_gettime(&mut self, clk_id: usize, tp: VirtAddr) -> KResult<isize> {
+        if clk_id != 2 {
+            return Err(errno!(Errno::ENOSYS, "sys_clock_gettime(): not yet implemented"))
+        }
+        let current = current_task();
+        let delta_ms = time::get_uptime_ticks() - current.start_time.get().unwrap();
+        let delta_sec = delta_ms / 1000;
+        let delta_ns = delta_ms % 1000 * 1000000;
+        let ts = TimeSpec {
+            tv_sec: delta_sec as isize,
+            tv_nsec: delta_ns as isize,
+        };
+        tp.write_volatile(ts)?;
+        Ok(0)
     }
 }
 

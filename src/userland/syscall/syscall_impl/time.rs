@@ -16,7 +16,7 @@ pub struct ITimerVal {
     pub it_value: TimeVal,
 }
 
-#[derive(Clone, Default, PartialEq)]
+#[derive(Clone, Copy, Default, PartialEq)]
 #[repr(C)]
 pub struct TimeSpec {
     pub tv_sec: isize,

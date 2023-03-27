@@ -32,9 +32,9 @@ framebuffer_request:
     .short 5
     .short 1
     .long framebuffer_request_end - framebuffer_request
-    .long 80
-    .long 25
-    .long 0
+    .long 640
+    .long 400
+    .long 32
 framebuffer_request_end:
 
 .align 8

@@ -11,7 +11,7 @@ use crate::{
         self,
         idt::InterruptFrame,
         startup_init,
-        task::{arch_context_switch, ArchTask},
+        task::{arch_context_switch, ArchTask}, time,
     },
     errno,
     fs::POLL_WAIT_QUEUE,
@@ -365,6 +365,7 @@ pub fn switch() {
         // log::debug!("Switching from preempt task to PID {:?}", task.pid);
         drop(queue);
         drop(current);
+        task.start_time.call_once(time::get_uptime_ticks);
         arch_context_switch(
             sched.preempt_task.as_ref().unwrap().arch_mut(),
             task.arch_mut(),

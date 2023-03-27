@@ -6,10 +6,10 @@ use crate::{
     bitflags_from_user, errno,
     fs::{
         alloc_inode_no,
-        initramfs::file::InitRamFsFile,
+        initramfs::{dir::InitRamFsDir, file::InitRamFsFile},
         opened_file::{FileDesc, LseekWhence, OpenFlags},
         path::Path,
-        FileMode, INode, PollStatus, O_RDWR, O_WRONLY, POLL_WAIT_QUEUE,
+        FileMode, INode, PollStatus, O_RDWR, O_WRONLY, POLL_WAIT_QUEUE, S_IFDIR, S_IFREG,
     },
     mem::addr::VirtAddr,
     task::current_task,
@@ -123,10 +123,10 @@ impl<'a> SyscallHandler<'a> {
     }
 }
 
-fn create(path: &Path, flags: OpenFlags, _mode: FileMode) -> KResult<INode> {
-    if flags.contains(OpenFlags::O_DIRECTORY) {
-        return Err(errno!(Errno::EINVAL, "create(): invalid flags"));
-    }
+fn create(path: &Path, _flags: OpenFlags, mode: FileMode) -> KResult<INode> {
+    // if flags.contains(OpenFlags::O_DIRECTORY) {
+    //     return Err(errno!(Errno::EINVAL, "create(): invalid flags"));
+    // }
 
     let (parent_dir, name) = path
         .parent_and_basename()
@@ -134,10 +134,19 @@ fn create(path: &Path, flags: OpenFlags, _mode: FileMode) -> KResult<INode> {
 
     let current = current_task();
     let root = current.root_fs.lock();
-    let inode = INode::File(Arc::new(InitRamFsFile::new(
-        name.to_owned(),
-        alloc_inode_no(),
-    )));
+    let inode = if mode.is_regular_file() {
+        INode::File(Arc::new(InitRamFsFile::new(
+            name.to_owned(),
+            alloc_inode_no(),
+        )))
+    } else if mode.is_directory() {
+        INode::Dir(Arc::new(InitRamFsDir::new(
+            name.to_owned(),
+            alloc_inode_no(),
+        )))
+    } else {
+        return Err(errno!(Errno::EINVAL, "create(): invalid flags"));
+    };
     root.lookup(parent_dir, true)?
         .as_dir()?
         .insert(inode.clone());
@@ -149,8 +158,9 @@ impl<'a> SyscallHandler<'a> {
         let current = current_task();
         log::trace!("Attempting to open {}", path);
         if flags.contains(OpenFlags::O_CREAT) {
-            match create(path, flags, mode) {
+            match create(path, flags, FileMode::new(S_IFREG | mode.access_mode())) {
                 Ok(_) => {}
+                Err(err) if err.errno() == Some(Errno::EINVAL) => {},
                 Err(err)
                     if flags.contains(OpenFlags::O_EXCL) && err.errno() == Some(Errno::EEXIST) => {}
                 Err(err) => return Err(err),
@@ -171,7 +181,7 @@ impl<'a> SyscallHandler<'a> {
 
         let fd = opened_files.open(path_comp, flags)?;
         log::trace!("Opened {} as {}.", path, fd);
-        
+
         Ok(fd as isize)
     }
 
@@ -179,6 +189,11 @@ impl<'a> SyscallHandler<'a> {
         let current = current_task();
         current.opened_files.lock().close(fd)?;
         log::trace!("Closed {}", fd);
+        Ok(0)
+    }
+
+    pub fn sys_mkdir(&mut self, path: &Path, mode: FileMode) -> KResult<isize> {
+        create(path, OpenFlags::empty(), FileMode::new(S_IFDIR | mode.access_mode()))?;
         Ok(0)
     }
 
