@@ -33,22 +33,25 @@ pub mod util;
 #[macro_use]
 pub mod graphics;
 
+use core::sync::atomic::AtomicUsize;
+
 use mem::addr::VirtAddr;
 
+use spin::Once;
 use x86_64::instructions::hlt;
 
-// pub static PHYSICAL_OFFSET: AtomicUsize = AtomicUsize::new(0);
+pub static PHYSICAL_OFFSET: Once<usize> = Once::new();
 
 #[inline]
 pub fn phys_offset() -> VirtAddr {
-    // VirtAddr::new(PHYSICAL_OFFSET.load(core::sync::atomic::Ordering::Acquire))
-    VirtAddr::new(0xffff800000000000)
+    VirtAddr::new(*PHYSICAL_OFFSET.get().unwrap())
+    // VirtAddr::new(0xffff800000000000)
 }
 
 #[no_mangle]
-pub extern "C" fn kernel_main(_magic: u64, boot_info_addr: usize) -> ! {
-    let boot_info = unsafe { multiboot2::load(boot_info_addr) }.unwrap();
-    arch::arch_main(boot_info);
+pub extern "C" fn start() -> ! {
+    // let boot_info = unsafe { multiboot2::load(boot_info_addr) }.unwrap();
+    arch::arch_main();
 
     hcf();
 }

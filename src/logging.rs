@@ -60,5 +60,5 @@ pub fn init() {
     #[cfg(debug_assertions)]
     log::set_max_level(log::LevelFilter::Trace);
     #[cfg(not(debug_assertions))]
-    log::set_max_level(log::LevelFilter::Off);
+    log::set_max_level(log::LevelFilter::Trace);
 }

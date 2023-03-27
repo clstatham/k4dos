@@ -7,7 +7,7 @@ use embedded_graphics::{
     prelude::*,
     text::{Alignment, Text},
 };
-use multiboot2::FramebufferTag;
+use limine::LimineFramebufferResponse;
 use spin::Once;
 
 use crate::{
@@ -349,15 +349,14 @@ pub fn _fb_print(args: core::fmt::Arguments) {
     });
 }
 
-pub fn init(fb_tag: &FramebufferTag) -> KResult<()> {
-    assert!(matches!(
-        fb_tag.buffer_type,
-        multiboot2::FramebufferType::RGB { .. }
-    ));
+pub fn init(fb_tag: &LimineFramebufferResponse) -> KResult<()> {
+    let fb_tag = unsafe { &*fb_tag.framebuffers().first().unwrap().as_ptr() };
+    let fb_base = fb_tag.address.as_ptr().unwrap() as usize;
+    log::debug!("FB addr: {:#x}", fb_base);
     let framebuf = FrameBuffer {
         back_buffer: alloc::vec![0u32; fb_tag.width as usize * fb_tag.height as usize]
             .into_boxed_slice(),
-        start_addr: PhysAddr::new(fb_tag.address as usize).as_hhdm_virt(),
+        start_addr: VirtAddr::new(fb_base),
         width: fb_tag.width as usize,
         height: fb_tag.height as usize,
         bpp: fb_tag.bpp as usize,
@@ -366,6 +365,8 @@ pub fn init(fb_tag: &FramebufferTag) -> KResult<()> {
         text_cursor_y: 0,
         text_fgcolor: Rgb888::WHITE,
     };
+
+    
 
     FRAMEBUFFER.call_once(|| IrqMutex::new(framebuf));
 

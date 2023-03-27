@@ -4,6 +4,8 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     // Get the name of the package.
     let kernel_name = env::var("CARGO_PKG_NAME")?;
 
+    println!("cargo:rustc-link-arg-bin={kernel_name}=--script=.cargo/linker.ld");
+
     // Add linker args.
     println!("cargo:rustc-link-arg-bin={kernel_name}=--gc-sections");
 

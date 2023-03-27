@@ -1,7 +1,7 @@
 use core::arch::global_asm;
 
 use alloc::sync::Arc;
-use multiboot2::BootInformation;
+use limine::{LimineBootInfoRequest, LimineHhdmRequest, LimineStackSizeRequest, LimineBootTimeRequest, LimineFramebufferRequest, LimineMemmapRequest};
 use x86::{
     controlregs::{self, Cr0, Cr4, Xcr0},
     cpuid::CpuId,
@@ -18,7 +18,7 @@ use crate::{
     },
     mem::{
         self,
-        allocator::{KERNEL_FRAME_ALLOCATOR, KERNEL_PAGE_ALLOCATOR},
+        allocator::{KERNEL_FRAME_ALLOCATOR, KERNEL_PAGE_ALLOCATOR}, consts::KERNEL_STACK_SIZE,
     },
     serial::serial1_recv,
     task::{current_task, get_scheduler, Task}, graphics,
@@ -31,12 +31,26 @@ pub mod syscall;
 pub mod task;
 pub mod time;
 
-global_asm!(include_str!("boot.S"));
+// static BOOT_INFO: LimineBootInfoRequest = LimineBootInfoRequest::new(0);
+static HHDM: LimineHhdmRequest = LimineHhdmRequest::new(0);
+static STACK: LimineStackSizeRequest = LimineStackSizeRequest::new(0).stack_size(KERNEL_STACK_SIZE as u64);
+static BOOT_TIME: LimineBootTimeRequest = LimineBootTimeRequest::new(0);
+static FB_REQUEST: LimineFramebufferRequest = LimineFramebufferRequest::new(0);
+static MEM_MAP: LimineMemmapRequest = LimineMemmapRequest::new(0);
 
-pub fn arch_main(boot_info: BootInformation) {
+// global_asm!(include_str!("boot.S"));
+
+pub fn arch_main() {
+    unsafe {
+        core::ptr::read_volatile(STACK.get_response().as_ptr().unwrap());
+    }
+    
     interrupts::disable();
 
-    let memmap = boot_info.memory_map_tag().unwrap();
+    // crate::PHYSICAL_OFFSET.store(HHDM.get_response().get().unwrap().offset as usize, core::sync::atomic::Ordering::Release);
+    crate::PHYSICAL_OFFSET.call_once(|| HHDM.get_response().get().unwrap().offset as usize);
+
+    let memmap = MEM_MAP.get_response().get_mut().unwrap().memmap_mut();
 
     crate::logging::init();
     log::info!("Logger initialized.");
@@ -68,8 +82,8 @@ pub fn arch_main(boot_info: BootInformation) {
     log::info!("Initializing boot GDT.");
     gdt::init_boot();
     
-    let fb_tag = boot_info.framebuffer_tag().expect("No multiboot2 framebuffer tag found");
-    
+    // let fb_tag = boot_info.framebuffer_tag().expect("No multiboot2 framebuffer tag found");
+    let fb_resp = FB_REQUEST.get_response().get().unwrap();
     log::info!("Initializing kernel frame and page allocators.");
     mem::allocator::init(memmap).expect("Error initializing kernel frame and page allocators");
 
@@ -95,7 +109,7 @@ pub fn arch_main(boot_info: BootInformation) {
 
     log::info!("Initializing VGA graphics.");
     
-    graphics::init(&fb_tag).expect("Error initializing VGA graphics");
+    graphics::init(&fb_resp).expect("Error initializing VGA graphics");
 
 
     log::info!("Setting up syscalls.");
