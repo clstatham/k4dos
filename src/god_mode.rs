@@ -4,7 +4,7 @@ use x86_64::instructions::interrupts;
 
 use crate::{
     task::{get_scheduler, Task, TaskId},
-    util::BlockingMutex, mem::{allocator::KERNEL_FRAME_ALLOCATOR, consts::PAGE_SIZE},
+    util::BlockingMutex, mem::{allocator::KERNEL_FRAME_ALLOCATOR, consts::PAGE_SIZE, addr::{VirtAddr, PhysAddr}},
 };
 
 pub static GOD_MODE_TASK: Once<Arc<Task>> = Once::new();
@@ -46,7 +46,7 @@ pub fn god_mode_repl() {
         } else {
             continue;
         };
-        let args = args.collect::<Vec<_>>();
+        // let args = args.collect::<Vec<_>>();
 
         serial1_println!();
         log::warn!("God said: {}", cmd);
@@ -63,7 +63,7 @@ pub fn god_mode_repl() {
                 serial1_println!("Total free bytes: {}", total_space_pages * PAGE_SIZE);
             }
             "vm" => {
-                let pid = if let Ok(pid) = args[0].parse() {
+                let pid = if let Some(Ok(pid)) = args.next().map(|arg| arg.parse()) {
                     TaskId::new(pid)
                 } else {
                     serial1_println!("Invalid argument. Specify a PID to inspect vmem of.");
@@ -78,6 +78,44 @@ pub fn god_mode_repl() {
                 };
                 serial1_println!("Dumping virtual memory of pid {}. Check serial0 (stdio).", pid.as_usize());
                 task.vmem().lock().log();
+            }
+            "d" => {
+                let addr_type = if let Some(addr_type) = args.next() {
+                    match addr_type {
+                        "p" => "p",
+                        "v" => "v",
+                        _ => {
+                            serial1_println!("Invalid argument. Specify `v` for dumping virtual memory or `p` for physical memory.");
+                            continue;
+                        }
+                    }
+                } else {
+                    serial1_println!("Invalid argument. Specify `v` for dumping virtual memory or `p` for physical memory.");
+                    continue;
+                };
+                let start = if let Some(Ok(start)) = args.next().map(|arg| usize::from_str_radix(arg, 16)) {
+                    start
+                } else {
+                    serial1_println!("Invalid argument. Specify the physical address to dump the frame of.");
+                    continue;
+                };
+
+                let ptr = if addr_type == "p" {
+                    PhysAddr::new(start).as_hhdm_virt().as_ptr::<u64>()
+                } else {
+                    VirtAddr::new(start).as_ptr::<u64>()
+                };
+                let max_i = PAGE_SIZE/core::mem::size_of::<u64>();
+                serial1_println!("Dumping page at {:#x}.", start);
+                for i in 0..max_i/4 {
+                    let i = i * 4;
+                    serial1_print!("{:#016x}\t|\t", start + i * core::mem::size_of::<u64>());
+                    for j in 0..4 {
+                        let offset = i + j;
+                        serial1_print!("{:016x} ", unsafe { ptr.add(offset).read_volatile() });
+                    }
+                    serial1_println!();
+                }
             }
             _ => {}
         }
