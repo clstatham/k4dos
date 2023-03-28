@@ -1,10 +1,10 @@
-use alloc::{borrow::ToOwned, collections::VecDeque, string::String, sync::Arc};
+use alloc::{borrow::ToOwned, collections::VecDeque, string::String, sync::Arc, vec::Vec};
 use spin::Once;
 use x86_64::instructions::interrupts;
 
 use crate::{
-    task::{get_scheduler, Task},
-    util::BlockingMutex,
+    task::{get_scheduler, Task, TaskId},
+    util::BlockingMutex, mem::{allocator::KERNEL_FRAME_ALLOCATOR, consts::PAGE_SIZE},
 };
 
 pub static GOD_MODE_TASK: Once<Arc<Task>> = Once::new();
@@ -38,9 +38,48 @@ fn read_cmd() -> String {
 
 pub fn god_mode_repl() {
     loop {
-        serial1_print!("\nGM > ");
+        serial1_print!("\ngodmode > ");
         let cmd = read_cmd();
+        let mut args = cmd.split_whitespace();
+        let cmd = if let Some(cmd) = args.next() {
+            cmd
+        } else {
+            continue;
+        };
+        let args = args.collect::<Vec<_>>();
+
         serial1_println!();
         log::warn!("God said: {}", cmd);
+        match cmd {
+            "f" => {
+                serial1_println!("Dumping free physical memory.");
+                let fa = KERNEL_FRAME_ALLOCATOR.get().unwrap().lock();
+                let mut total_space_pages = 0;
+                for area in fa.free_chunks.iter() {
+                    total_space_pages += area.size_in_pages();
+                    serial1_println!("Free chunk at {:?}", area);
+                }
+                serial1_println!("Total free pages: {}", total_space_pages);
+                serial1_println!("Total free bytes: {}", total_space_pages * PAGE_SIZE);
+            }
+            "vm" => {
+                let pid = if let Ok(pid) = args[0].parse() {
+                    TaskId::new(pid)
+                } else {
+                    serial1_println!("Invalid argument. Specify a PID to inspect vmem of.");
+                    continue;
+                };
+                let sched = get_scheduler();
+                let task = if let Some(task) = sched.find_task(pid) {
+                    task
+                } else {
+                    serial1_println!("Invalid argument. PID not found.");
+                    continue;
+                };
+                serial1_println!("Dumping virtual memory of pid {}. Check serial0 (stdio).", pid.as_usize());
+                task.vmem().lock().log();
+            }
+            _ => {}
+        }
     }
 }

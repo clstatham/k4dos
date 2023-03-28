@@ -212,6 +212,7 @@ fn poll_serial1() {
                     drop(lock);
                     break;
                 }
+                // sched.preempt();
                 interrupts::enable_and_hlt();
             }
         }

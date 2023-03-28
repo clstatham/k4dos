@@ -201,7 +201,7 @@ macro_rules! allocator_impl {
         /// Even though this implements Clone, you should be very careful about cloning allocators.
         #[derive(Clone)]
         pub struct $name {
-            free_chunks: StaticListOrVec<$range, 256>,
+            pub(crate) free_chunks: StaticListOrVec<$range, 256>,
         }
 
         impl $name {
