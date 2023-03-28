@@ -1,6 +1,8 @@
 use x86::msr::{rdmsr, wrmsr};
 
-use crate::userland::syscall::{errno_to_isize, SyscallHandler, QUIET_SYSCALLS, syscall_name_by_number};
+use crate::userland::syscall::{
+    errno_to_isize, syscall_name_by_number, SyscallHandler, QUIET_SYSCALLS,
+};
 
 use super::gdt::{KERNEL_CS_IDX, USER_DS_IDX};
 use super::idt::InterruptFrame;

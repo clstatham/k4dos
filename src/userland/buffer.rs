@@ -99,7 +99,9 @@ pub unsafe fn user_strncpy_rust(dst: *mut u8, src: *const u8, max_len: usize) ->
     let mut read_len = 0usize;
     loop {
         let byte = src.add(read_len).read_volatile();
-        if byte == b'\0' || read_len > max_len{ break; }
+        if byte == b'\0' || read_len > max_len {
+            break;
+        }
         dst.add(read_len).write_volatile(byte);
         read_len += 1;
     }

@@ -1,6 +1,6 @@
 use core::ops::Add;
 
-use alloc::boxed::Box;
+use alloc::{boxed::Box, vec::Vec};
 use embedded_graphics::{
     mono_font::{ascii::FONT_8X13, MonoFont, MonoTextStyle},
     pixelcolor::Rgb888,
@@ -24,7 +24,7 @@ pub struct FrameBuffer {
     width: usize,
     height: usize,
     bpp: usize,
-    text_buf: [[u8; BUFFER_WIDTH]; BUFFER_HEIGHT],
+    text_buf: [[Option<u8>; BUFFER_WIDTH]; BUFFER_HEIGHT],
     text_cursor_x: usize,
     text_cursor_y: usize,
     text_fgcolor: Rgb888,
@@ -44,12 +44,16 @@ impl FrameBuffer {
     }
 
     pub fn render_text_buf(&mut self) {
-        let mut out = [b' '; (BUFFER_WIDTH + 1) * BUFFER_HEIGHT];
+        let mut out = Vec::new();
         for line in 0..BUFFER_HEIGHT {
-            for col in 0..BUFFER_WIDTH {
-                out[col + line * (BUFFER_WIDTH + 1)] = self.text_buf[line][col];
+            'inner: for col in 0..BUFFER_WIDTH {
+                if let Some(ch) = self.text_buf[line][col] {
+                    out.push(ch);
+                } else {
+                    out.push(b'\n');
+                    break 'inner;
+                }
             }
-            out[BUFFER_WIDTH + line * (BUFFER_WIDTH + 1)] = b'\n';
         }
 
         let mono_font = MonoTextStyle::new(&FONT, self.text_fgcolor);
@@ -97,7 +101,7 @@ impl FrameBuffer {
                 let row = self.text_cursor_y;
                 let col = self.text_cursor_x;
 
-                self.text_buf[row][col] = byte;
+                self.text_buf[row][col] = Some(byte);
                 self.move_right();
             }
         }
@@ -109,7 +113,7 @@ impl FrameBuffer {
     pub fn backspace(&mut self) {
         let row = self.text_cursor_y;
         let col = self.text_cursor_x.saturating_sub(1);
-        self.text_buf[row][col] = b' ';
+        self.text_buf[row][col] = None;
         self.text_cursor_x = col;
         self.cursor_color_hook();
     }
@@ -140,13 +144,13 @@ impl FrameBuffer {
 
     fn clear_row(&mut self, row: usize) {
         for col in 0..BUFFER_WIDTH {
-            self.text_buf[row][col] = b' ';
+            self.text_buf[row][col] = None;
         }
         self.cursor_color_hook();
     }
     fn clear_until_end(&mut self) {
         for col in self.text_cursor_x..BUFFER_WIDTH {
-            self.text_buf[self.text_cursor_y][col] = b' ';
+            self.text_buf[self.text_cursor_y][col] = None;
         }
         for row in self.text_cursor_y + 1..BUFFER_HEIGHT {
             self.clear_row(row);
@@ -155,7 +159,7 @@ impl FrameBuffer {
     }
     fn clear_until_beginning(&mut self) {
         for col in 0..self.text_cursor_x {
-            self.text_buf[self.text_cursor_y][col] = b' ';
+            self.text_buf[self.text_cursor_y][col] = None;
         }
         for row in 0..self.text_cursor_y - 1 {
             self.clear_row(row);
@@ -164,13 +168,13 @@ impl FrameBuffer {
     }
     fn clear_until_eol(&mut self) {
         for col in self.text_cursor_x..BUFFER_WIDTH {
-            self.text_buf[self.text_cursor_y][col] = b' ';
+            self.text_buf[self.text_cursor_y][col] = None;
         }
         self.cursor_color_hook();
     }
     fn clear_from_bol(&mut self) {
         for col in 0..self.text_cursor_x {
-            self.text_buf[self.text_cursor_y][col] = b' ';
+            self.text_buf[self.text_cursor_y][col] = None;
         }
         self.cursor_color_hook();
     }
@@ -360,13 +364,11 @@ pub fn init(fb_tag: &LimineFramebufferResponse) -> KResult<()> {
         width: fb_tag.width as usize,
         height: fb_tag.height as usize,
         bpp: fb_tag.bpp as usize,
-        text_buf: [[b' '; BUFFER_WIDTH]; BUFFER_HEIGHT],
+        text_buf: [[None; BUFFER_WIDTH]; BUFFER_HEIGHT],
         text_cursor_x: 0,
         text_cursor_y: 0,
         text_fgcolor: Rgb888::WHITE,
     };
-
-    
 
     FRAMEBUFFER.call_once(|| IrqMutex::new(framebuf));
 

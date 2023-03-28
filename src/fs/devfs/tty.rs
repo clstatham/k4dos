@@ -11,12 +11,15 @@ use bitflags::bitflags;
 use spin::Once;
 
 use crate::{
-    errno,
+    errno, fb_print,
+    graphics::{self, render_text_buf},
     mem::addr::VirtAddr,
     task::{current_task, get_scheduler, group::TaskGroup, signal::SIGINT, wait_queue::WaitQueue},
     userland::buffer::{UserBuffer, UserBufferMut, UserBufferReader, UserBufferWriter},
-    util::{ctypes::c_int, errno::Errno, error::KResult, lock::IrqMutex, ringbuffer::RingBuffer},
-    graphics::{self, render_text_buf}, fb_print, vga_text,
+    util::{
+        ctypes::c_int, errno::Errno, error::KResult, lock::IrqMutex, ringbuffer::RingBuffer, KError,
+    },
+    vga_text,
 };
 
 use crate::fs::{
@@ -286,6 +289,14 @@ impl Tty {
         }
     }
 
+    pub fn set_cooked_mode(&self, cooked: bool) {
+        if cooked {
+            self.discipline.termios.lock().lflag |= LFlag::ICANON | LFlag::ECHO;
+        } else {
+            self.discipline.termios.lock().lflag &= !(LFlag::ICANON | LFlag::ECHO);
+        }
+    }
+
     pub fn input_char(&self, ch: u8) {
         self.discipline
             .write(UserBuffer::from_slice(&[ch]), |ctrl| match ctrl {
@@ -386,11 +397,24 @@ impl File for Tty {
     }
 
     fn read(&self, _offset: usize, buf: UserBufferMut, options: &OpenFlags) -> KResult<usize> {
-        let read_len = self.discipline.read(buf, options)?;
-        if read_len > 0 {
-            get_scheduler().wake_all(&POLL_WAIT_QUEUE);
+        let read_len = self.discipline.read(buf, options);
+        if let Ok(read_len) = read_len {
+            if read_len > 0 {
+                get_scheduler().wake_all(&POLL_WAIT_QUEUE);
+            }
+            Ok(read_len)
+        } else if matches!(
+            read_len,
+            Err(KError::Errno {
+                errno: Errno::EINTR,
+                ..
+            })
+        ) && options.contains(OpenFlags::O_NONBLOCK)
+        {
+            Ok(0)
+        } else {
+            read_len
         }
-        Ok(read_len)
     }
 
     fn write(&self, _offset: usize, buf: UserBuffer<'_>, _options: &OpenFlags) -> KResult<usize> {

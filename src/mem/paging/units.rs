@@ -182,12 +182,12 @@ macro_rules! range_impl {
 
             #[inline]
             pub fn size_in_pages(self) -> usize {
-                (self.end.index().0 - self.start.index().0) as usize + 1
+                (self.end.index().0 - self.start.index().0) + 1
             }
 
             #[inline]
             pub fn size_in_bytes(self) -> usize {
-                self.size_in_pages() * PAGE_SIZE as usize
+                self.size_in_pages() * PAGE_SIZE
             }
 
             #[inline]

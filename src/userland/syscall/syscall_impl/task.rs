@@ -4,12 +4,13 @@ use alloc::{sync::Arc, vec::Vec};
 use bitflags::bitflags;
 
 use crate::{
+    arch::time,
     errno,
     fs::path::Path,
     mem::addr::VirtAddr,
     task::{current_task, get_scheduler, group::PgId, Task, TaskId, TaskState, JOIN_WAIT_QUEUE},
     userland::{buffer::UserCStr, syscall::SyscallHandler},
-    util::{ctypes::c_int, errno::Errno, KResult, KError}, arch::time,
+    util::{ctypes::c_int, errno::Errno, KError, KResult},
 };
 
 use super::time::TimeSpec;
@@ -158,7 +159,10 @@ impl<'a> SyscallHandler<'a> {
             let current = current_task();
             let children = current.children.lock();
             if children.is_empty() {
-                return Err(errno!(Errno::ECHILD, "sys_wait4(): all subprocesses have exited"));
+                return Err(errno!(
+                    Errno::ECHILD,
+                    "sys_wait4(): all subprocesses have exited"
+                ));
             }
             for child in children.iter() {
                 if pid.as_usize() as isize > 0 && pid != child.pid() {
@@ -199,21 +203,24 @@ impl<'a> SyscallHandler<'a> {
         assert_eq!(req.tv_nsec % 1000000, 0);
         let duration = req.tv_sec * 1000 + req.tv_nsec / 1000000;
         match get_scheduler().sleep(Some(duration as usize)) {
-            Ok(_) => {},
+            Ok(_) => {}
             Err(KError::Errno { errno, .. }) if errno == Errno::EINTR => {
                 todo!()
                 // return Err(KError::Errno { errno: Errno::EINTR, msg })
-            },
+            }
             Err(_) => {
                 todo!()
-            },
+            }
         }
         Ok(0)
     }
 
     pub fn sys_clock_gettime(&mut self, clk_id: usize, tp: VirtAddr) -> KResult<isize> {
         if clk_id != 2 {
-            return Err(errno!(Errno::ENOSYS, "sys_clock_gettime(): not yet implemented"))
+            return Err(errno!(
+                Errno::ENOSYS,
+                "sys_clock_gettime(): not yet implemented"
+            ));
         }
         let current = current_task();
         let delta_ns = time::get_uptime_ns() - current.start_time.get().unwrap() * 1000000;

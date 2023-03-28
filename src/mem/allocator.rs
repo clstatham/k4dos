@@ -3,7 +3,7 @@ use core::ops::{Index, IndexMut};
 use alloc::vec::Vec;
 use arrayvec::ArrayVec;
 use buddy_system_allocator::LockedHeap;
-use limine::{LimineMemoryMapEntryType, NonNullPtr, LimineMemmapEntry};
+use limine::{LimineMemmapEntry, LimineMemoryMapEntryType, NonNullPtr};
 use spin::Once;
 
 use super::addr::{PhysAddr, VirtAddr};
@@ -52,27 +52,30 @@ pub fn alloc_kernel_pages_at(start: Page, count: usize) -> KResult<AllocatedPage
         .allocate_at(start, count)
 }
 
-pub fn free_kernel_frames(frames: &mut AllocatedFrames) -> KResult<()> {
+pub fn free_kernel_frames(frames: &mut AllocatedFrames, merge: bool) -> KResult<()> {
     KERNEL_FRAME_ALLOCATOR
         .get()
         .ok_or(kerrmsg!("KERNEL_FRAME_ALLOCATOR not initialized"))?
         .try_lock()?
-        .free(frames);
+        .free(frames, merge);
     Ok(())
 }
 
-pub fn free_kernel_pages(pages: &mut AllocatedPages) -> KResult<()> {
+pub fn free_kernel_pages(pages: &mut AllocatedPages, merge: bool) -> KResult<()> {
     KERNEL_PAGE_ALLOCATOR
         .get()
         .ok_or(kerrmsg!("KERNEL_PAGE_ALLOCATOR not initialized"))?
         .try_lock()?
-        .free(pages);
+        .free(pages, merge);
     Ok(())
 }
 
 pub fn init(memmap: &mut [NonNullPtr<LimineMemmapEntry>]) -> KResult<()> {
     let mut frame_alloc = FrameAllocator::new_static();
-    for entry in memmap.iter().filter(|entry| entry.typ == LimineMemoryMapEntryType::Usable) {
+    for entry in memmap
+        .iter()
+        .filter(|entry| entry.typ == LimineMemoryMapEntryType::Usable)
+    {
         let entry = unsafe { &*entry.as_ptr() };
         if (entry.len as usize) < PAGE_SIZE {
             continue;
@@ -304,18 +307,18 @@ macro_rules! allocator_impl {
                 Ok(allocation)
             }
 
-            fn merge_contiguous_chunks(&mut self) {
+            pub fn merge_contiguous_chunks(&mut self) {
                 let mut merge1 = None;
                 let mut merge2 = None;
                 for (i, chunk) in self.free_chunks.iter().enumerate() {
                     if let Some(next_chunk) = self.free_chunks.get(i + 1) {
                         if chunk.start() == next_chunk.end() + 1 {
-                            merge1 = Some(chunk.clone());
-                            merge2 = Some(next_chunk.clone());
+                            merge1 = Some(*chunk);
+                            merge2 = Some(*next_chunk);
                             break;
                         } else if chunk.end() + 1 == next_chunk.start() {
-                            merge1 = Some(next_chunk.clone());
-                            merge2 = Some(chunk.clone());
+                            merge1 = Some(*next_chunk);
+                            merge2 = Some(*chunk);
                             break;
                         }
                     }
@@ -333,7 +336,7 @@ macro_rules! allocator_impl {
                     if merge1.merge_with(merge2).is_err() {
                         panic!("Error merging chunks");
                     }
-                    self.free_chunks.push(merge1.clone());
+                    self.free_chunks.push(*merge1);
 
                     self.merge_contiguous_chunks();
                 }
@@ -352,14 +355,17 @@ macro_rules! allocator_impl {
                 self.allocate_internal(Some(range.start()), count)
             }
 
-            pub fn free(&mut self, allocation: &mut $allocated) {
+            pub fn free(&mut self, allocation: &mut $allocated, merge: bool) {
                 if allocation.is_empty() {
                     return;
                 }
+                log::debug!("Freeing frame {:?}", allocation.start());
                 unsafe {
-                    self.insert_free_region(*allocation.clone());
+                    self.insert_free_region(**allocation);
                 }
-                self.merge_contiguous_chunks();
+                if merge {
+                    self.merge_contiguous_chunks();
+                }
             }
         }
     };

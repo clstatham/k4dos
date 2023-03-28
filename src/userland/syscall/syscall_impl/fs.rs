@@ -170,7 +170,7 @@ impl<'a> SyscallHandler<'a> {
         if flags.contains(OpenFlags::O_CREAT) {
             match create(path, flags, FileMode::new(S_IFREG | mode.access_mode())) {
                 Ok(_) => {}
-                Err(err) if err.errno() == Some(Errno::EINVAL) => {},
+                Err(err) if err.errno() == Some(Errno::EINVAL) => {}
                 Err(err)
                     if flags.contains(OpenFlags::O_EXCL) && err.errno() == Some(Errno::EEXIST) => {}
                 Err(err) => return Err(err),
@@ -203,7 +203,11 @@ impl<'a> SyscallHandler<'a> {
     }
 
     pub fn sys_mkdir(&mut self, path: &Path, mode: FileMode) -> KResult<isize> {
-        create(path, OpenFlags::empty(), FileMode::new(S_IFDIR | mode.access_mode()))?;
+        create(
+            path,
+            OpenFlags::empty(),
+            FileMode::new(S_IFDIR | mode.access_mode()),
+        )?;
         Ok(0)
     }
 

@@ -17,7 +17,7 @@ use crate::{
     util::{
         ctypes::{c_int, c_nfds},
         errno::Errno,
-        KResult, KError,
+        KError, KResult,
     },
 };
 

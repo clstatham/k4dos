@@ -1,25 +1,30 @@
 use alloc::sync::Arc;
-use limine::{LimineHhdmRequest, LimineStackSizeRequest, LimineBootTimeRequest, LimineFramebufferRequest, LimineMemmapRequest};
+use limine::{
+    LimineBootTimeRequest, LimineFramebufferRequest, LimineHhdmRequest, LimineMemmapRequest,
+    LimineStackSizeRequest,
+};
 use x86::{
     controlregs::{self, Cr0, Cr4, Xcr0},
     cpuid::CpuId,
 };
-use x86_64::instructions::{hlt, interrupts};
+use x86_64::instructions::interrupts;
 
 use crate::{
     fs::{
         self,
-        devfs::tty::TTY,
         initramfs::get_root,
         opened_file::{OpenFlags, OpenedFile},
         path::Path,
     },
+    god_mode::{self, GOD_MODE_FIFO},
+    graphics,
     mem::{
         self,
-        allocator::{KERNEL_FRAME_ALLOCATOR, KERNEL_PAGE_ALLOCATOR}, consts::KERNEL_STACK_SIZE,
+        allocator::{KERNEL_FRAME_ALLOCATOR, KERNEL_PAGE_ALLOCATOR},
+        consts::KERNEL_STACK_SIZE,
     },
     serial::serial1_recv,
-    task::{current_task, get_scheduler, Task}, graphics,
+    task::{current_task, get_scheduler, Task},
 };
 
 pub mod cpu_local;
@@ -31,7 +36,8 @@ pub mod time;
 
 // static BOOT_INFO: LimineBootInfoRequest = LimineBootInfoRequest::new(0);
 static HHDM: LimineHhdmRequest = LimineHhdmRequest::new(0);
-static STACK: LimineStackSizeRequest = LimineStackSizeRequest::new(0).stack_size(KERNEL_STACK_SIZE as u64);
+static STACK: LimineStackSizeRequest =
+    LimineStackSizeRequest::new(0).stack_size(KERNEL_STACK_SIZE as u64);
 static BOOT_TIME: LimineBootTimeRequest = LimineBootTimeRequest::new(0);
 static FB_REQUEST: LimineFramebufferRequest = LimineFramebufferRequest::new(0);
 static MEM_MAP: LimineMemmapRequest = LimineMemmapRequest::new(0);
@@ -42,7 +48,7 @@ pub fn arch_main() {
     unsafe {
         core::ptr::read_volatile(STACK.get_response().as_ptr().unwrap());
     }
-    
+
     interrupts::disable();
 
     // crate::PHYSICAL_OFFSET.store(HHDM.get_response().get().unwrap().offset as usize, core::sync::atomic::Ordering::Release);
@@ -80,7 +86,7 @@ pub fn arch_main() {
 
     log::info!("Initializing boot GDT.");
     gdt::init_boot();
-    
+
     // let fb_tag = boot_info.framebuffer_tag().expect("No multiboot2 framebuffer tag found");
     let fb_resp = FB_REQUEST.get_response().get().unwrap();
     log::info!("Initializing kernel frame and page allocators.");
@@ -107,9 +113,8 @@ pub fn arch_main() {
     }
 
     log::info!("Initializing VGA graphics.");
-    
-    graphics::init(&fb_resp).expect("Error initializing VGA graphics");
 
+    graphics::init(&fb_resp).expect("Error initializing VGA graphics");
 
     log::info!("Setting up syscalls.");
     unsafe {
@@ -138,8 +143,10 @@ pub fn arch_main() {
 
     {
         let task = Task::new_kernel(sched, poll_serial1, true);
-        sched.push_runnable(task);
+        sched.push_runnable(task, true);
     }
+
+    god_mode::init();
 
     loop {
         interrupts::enable_and_hlt();
@@ -198,8 +205,16 @@ fn poll_serial1() {
     loop {
         let c = serial1_recv();
         if let Some(c) = c {
-            TTY.get().unwrap().input_char(c);
+            // TTY.get().unwrap().input_char(c);
+            loop {
+                if let Ok(mut lock) = GOD_MODE_FIFO.get().unwrap().try_lock() {
+                    lock.push_back(c);
+                    drop(lock);
+                    break;
+                }
+                interrupts::enable_and_hlt();
+            }
         }
-        hlt();
+        interrupts::enable_and_hlt();
     }
 }

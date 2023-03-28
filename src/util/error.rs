@@ -6,13 +6,8 @@ pub type KResult<T> = Result<T, KError<'static>>;
 
 #[derive(Clone)]
 pub enum KError<'a> {
-    Message {
-        msg: &'a str,
-    },
-    Errno {
-        errno: Errno,
-        msg: Option<&'a str>,
-    },
+    Message { msg: &'a str },
+    Errno { errno: Errno, msg: Option<&'a str> },
 }
 
 impl<'a> KError<'a> {

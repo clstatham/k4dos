@@ -1,7 +1,14 @@
 use alloc::sync::Arc;
 use spin::Once;
 
-use crate::{fs::{FsNode, File, opened_file::OpenFlags, initramfs::get_root, INode}, util::{KResult, errno::Errno}, userland::buffer::{UserBufferMut, UserBufferWriter, UserBuffer, UserBufferReader}, graphics::fb, errno, mem::addr::VirtAddr};
+use crate::{
+    errno,
+    fs::{initramfs::get_root, opened_file::OpenFlags, File, FsNode, INode},
+    graphics::fb,
+    mem::addr::VirtAddr,
+    userland::buffer::{UserBuffer, UserBufferMut, UserBufferReader, UserBufferWriter},
+    util::{errno::Errno, KResult},
+};
 
 pub static DEV_FB0: Once<Arc<FbDevice>> = Once::new();
 
@@ -34,8 +41,8 @@ impl File for FbDevice {
         let mut writer = UserBufferWriter::from(buf);
         let mut fb = fb();
         let mem = fb.frame_mut();
-        let start = offset/4;
-        let len = buf_len/4;
+        let start = offset / 4;
+        let len = buf_len / 4;
         let end = (start + len).min(mem.len());
         let mem = mem[start..end].iter().flat_map(|pixel| pixel.to_le_bytes());
         for byte in mem {
@@ -81,7 +88,7 @@ impl File for FbDevice {
             // FBIOGET_FSCREENINFO => {
 
             // }
-            _ => return Err(errno!(Errno::EINVAL, "ioctl(): unknown cmd"))
+            _ => return Err(errno!(Errno::EINVAL, "ioctl(): unknown cmd")),
         }
         Ok(0)
     }

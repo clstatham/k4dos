@@ -12,7 +12,11 @@ use x86_64::{
 };
 
 use crate::{
-    backtrace, fs::devfs::{tty::TTY, input::KBD_DEVICE}, mem::addr::VirtAddr, task::get_scheduler, util::IrqMutex,
+    backtrace,
+    fs::devfs::{input::KBD_DEVICE, tty::TTY},
+    mem::addr::VirtAddr,
+    task::get_scheduler,
+    util::IrqMutex,
 };
 
 pub const PIC_1_OFFSET: u8 = 32;
@@ -426,7 +430,7 @@ fn do_keyboard_input() {
 
     let mut port = Port::new(0x60);
     let scancode: u8 = unsafe { port.read() };
-    
+
     let mut keyboard = KEYBOARD.lock();
     if let Ok(Some(key_evt)) = keyboard.add_byte(scancode) {
         if let Some(kbd) = KBD_DEVICE.get() {
@@ -434,7 +438,9 @@ fn do_keyboard_input() {
         }
         if let Some(key) = keyboard.process_keyevent(key_evt) {
             match key {
-                DecodedKey::Unicode(c) => TTY.get().unwrap().input_char(c as u8),
+                DecodedKey::Unicode(c) => {
+                    TTY.get().unwrap().input_char(c as u8);
+                }
                 DecodedKey::RawKey(_code) => {}
             }
         }

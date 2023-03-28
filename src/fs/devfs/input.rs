@@ -4,7 +4,11 @@ use alloc::sync::Arc;
 use pc_keyboard::{KeyEvent, KeyState};
 use spin::{mutex::SpinMutex, Once};
 
-use crate::{fs::{FsNode, File, opened_file::OpenFlags, initramfs::get_root, INode}, userland::buffer::{UserBufferMut, UserBufferWriter}, util::KResult}; 
+use crate::{
+    fs::{initramfs::get_root, opened_file::OpenFlags, File, FsNode, INode},
+    userland::buffer::{UserBufferMut, UserBufferWriter},
+    util::KResult,
+};
 
 pub static KBD_DEVICE: Once<Arc<KbdDevice>> = Once::new();
 

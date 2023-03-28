@@ -9,11 +9,13 @@ use crate::{
     fs::{opened_file::FileDesc, FileRef},
     mem::{
         addr::VirtAddr,
-        allocator::{alloc_kernel_frames, PageAllocator},
+        allocator::{
+            alloc_kernel_frames, free_kernel_frames, PageAllocator, KERNEL_FRAME_ALLOCATOR,
+        },
         consts::{PAGE_SIZE, USER_STACK_TOP, USER_VALLOC_BASE},
         paging::{
             mapper::Mapper,
-            units::{Page, PageRange},
+            units::{AllocatedFrames, FrameRange, Page, PageRange},
         },
     },
     task::{current_task, get_scheduler, signal::SIGSEGV},
@@ -297,9 +299,22 @@ impl Vmem {
         unsafe { self.page_allocator.insert_free_region(range) }
         for page in range.iter() {
             unsafe {
-                active_mapper.unmap_single(page);
-            }
+                if let Some(frame) = active_mapper.unmap_single(page) {
+                    free_kernel_frames(
+                        &mut AllocatedFrames::assume_allocated(FrameRange::new(frame, frame)),
+                        false,
+                    )
+                    .ok();
+                } else {
+                    log::warn!("Tried to free memory that wasn't mapped: {:?}", page);
+                }
+            };
         }
+        KERNEL_FRAME_ALLOCATOR
+            .get()
+            .unwrap()
+            .lock()
+            .merge_contiguous_chunks();
         Some(())
     }
 

@@ -1,8 +1,8 @@
+pub mod fb;
+pub mod input;
 pub mod null;
 pub mod tty;
 pub mod urandom;
-pub mod fb;
-pub mod input;
 
 pub fn init() {
     self::tty::init();

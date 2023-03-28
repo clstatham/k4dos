@@ -1,7 +1,7 @@
 use lazy_static::lazy_static;
 
 use uart_16550::SerialPort;
-
+use x86::io::inb;
 
 use crate::util::lock::IrqMutex;
 
@@ -71,15 +71,15 @@ pub fn _print1(args: ::core::fmt::Arguments) {
 #[inline]
 pub fn serial1_recv() -> Option<u8> {
     // #[cfg(debug_assertions)]
-    // unsafe {
-    //     let line_sts = inb(SERIAL1_IOPORT + 5);
-    //     if line_sts & 0x1 != 0 {
-    //         return Some(inb(SERIAL1_IOPORT));
-    //     }
-    //     None
-    // }
+    unsafe {
+        let line_sts = inb(SERIAL1_IOPORT + 5);
+        if line_sts & 0x1 != 0 {
+            return Some(inb(SERIAL1_IOPORT));
+        }
+        None
+    }
     // #[cfg(not(debug_assertions))]
-    None
+    // None
 
     // })
 }

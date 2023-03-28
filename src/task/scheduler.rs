@@ -11,7 +11,8 @@ use crate::{
         self,
         idt::InterruptFrame,
         startup_init,
-        task::{arch_context_switch, ArchTask}, time,
+        task::{arch_context_switch, ArchTask},
+        time,
     },
     errno,
     fs::POLL_WAIT_QUEUE,
@@ -60,16 +61,16 @@ impl Scheduler {
         };
         let idle_thread = Task::new_idle(&mut s);
         let init_task = Task::new_kernel(&s, startup_init, false);
-        s.push_runnable(init_task);
+        s.push_runnable(init_task, false);
         let preempt_task = Task::new_kernel(&s, preempt, false);
         let reaper_task = Task::new_kernel(&s, reap, true);
         s.idle_thread = Some(idle_thread);
         s.preempt_task = Some(preempt_task);
-        s.push_runnable(reaper_task);
+        s.push_runnable(reaper_task, false);
         Arc::new(s)
     }
 
-    pub fn push_runnable(&self, task: Arc<Task>) {
+    pub fn push_runnable(&self, task: Arc<Task>, priority: bool) {
         task.state.store(TaskState::Runnable);
         let mut queue = self.run_queue.lock();
         self.tasks.lock().try_insert(task.pid, task.clone()).ok();
@@ -77,7 +78,11 @@ impl Scheduler {
         let already_in_queue = queue.iter().any(|t| t.pid == task.pid);
         if !already_in_queue {
             // log::debug!("Pushing {} as runnable", task.pid.as_usize());
-            queue.push_back(task);
+            if priority {
+                queue.push_front(task);
+            } else {
+                queue.push_back(task);
+            }
         } else {
             // log::warn!(
             //     "Attempted to push {} as runnable, but it was already runnable",
@@ -143,7 +148,7 @@ impl Scheduler {
                     //     task.pid.as_usize()
                     // );
                     drop(queue);
-                    self.push_runnable(task);
+                    self.push_runnable(task, true);
                     queue = self.deadline_waiting_queue.lock();
                 } else {
                     queue.push_back((task, deadline));
@@ -220,7 +225,7 @@ impl Scheduler {
     }
 
     pub fn resume_task(&self, task: Arc<Task>) {
-        self.push_runnable(task);
+        self.push_runnable(task, false);
     }
 
     pub fn try_delivering_signal(
@@ -314,16 +319,16 @@ impl Scheduler {
     }
 
     pub fn sleep(&self, duration: Option<usize>) -> KResult<()> {
-        let current = self.current_task();
+        let task = self.current_task();
 
         if let Some(duration) = duration {
-            self.push_deadline_waiting(current.clone(), duration);
+            self.push_deadline_waiting(task.clone(), duration);
         } else {
-            self.push_waiting(current.clone());
+            self.push_waiting(task.clone());
         }
         self.preempt();
 
-        if current.has_pending_signals() {
+        if task.has_pending_signals() {
             Err(errno!(Errno::EINTR, "sleep(): pending signals"))
         } else {
             Ok(())
@@ -333,6 +338,7 @@ impl Scheduler {
 
 pub fn switch() {
     let sched = get_scheduler();
+
     sched.check_deadline();
     let mut queue = sched.run_queue.lock();
     let mut current = sched
@@ -365,7 +371,7 @@ pub fn switch() {
         // log::debug!("Switching from preempt task to PID {:?}", task.pid);
         drop(queue);
         drop(current);
-        task.start_time.call_once(|| time::get_uptime_ms());
+        task.start_time.call_once(time::get_uptime_ms);
         arch_context_switch(
             sched.preempt_task.as_ref().unwrap().arch_mut(),
             task.arch_mut(),

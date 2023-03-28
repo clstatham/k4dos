@@ -214,7 +214,10 @@ impl VirtAddr {
             return Err(errno!(Errno::EFAULT, "write_volatile(): null VirtAddr"));
         }
         if self.addr % align_of::<T>() != 0 {
-            return Err(errno!(Errno::EACCES, "write_volatile(): unaligned VirtAddr"));
+            return Err(errno!(
+                Errno::EACCES,
+                "write_volatile(): unaligned VirtAddr"
+            ));
         }
         unsafe { core::ptr::write_volatile(self.as_mut_ptr(), t) };
         Ok(())

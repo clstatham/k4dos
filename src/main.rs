@@ -12,7 +12,7 @@
     slice_pattern,
     is_sorted,
     map_try_insert,
-    iter_advance_by,
+    iter_advance_by
 )]
 #![allow(clippy::missing_safety_doc)]
 
@@ -32,8 +32,7 @@ pub mod userland;
 pub mod util;
 #[macro_use]
 pub mod graphics;
-
-
+pub mod god_mode;
 
 use mem::addr::VirtAddr;
 

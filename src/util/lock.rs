@@ -51,7 +51,9 @@ impl<T: ?Sized> BlockingMutex<T> {
         if self.inner.is_locked() {
             Err(kerrmsg!("Cannot relock BlockingMutex")) // todo: more verbose error message
         } else {
-            self.lock()
+            Ok(BlockingMutexGuard {
+                inner: ManuallyDrop::new(self.inner.lock()),
+            })
         }
     }
 

@@ -2,7 +2,7 @@ use core::sync::atomic::{AtomicUsize, Ordering};
 
 use x86::io::{inb, outb};
 
-use crate::{util::IrqMutex, userland::syscall::syscall_impl::time::TimeSpec};
+use crate::{userland::syscall::syscall_impl::time::TimeSpec, util::IrqMutex};
 
 const PIT_FREQUENCY_HZ: usize = 1000;
 pub const PIT_DIVIDEND: usize = 1193182;
@@ -11,7 +11,10 @@ static UPTIME_RAW: AtomicUsize = AtomicUsize::new(0);
 static UPTIME_SEC: AtomicUsize = AtomicUsize::new(0);
 
 pub static EPOCH: AtomicUsize = AtomicUsize::new(usize::MAX);
-pub static RT_CLOCK: IrqMutex<TimeSpec> = IrqMutex::new(TimeSpec { tv_sec: 0, tv_nsec: 0 });
+pub static RT_CLOCK: IrqMutex<TimeSpec> = IrqMutex::new(TimeSpec {
+    tv_sec: 0,
+    tv_nsec: 0,
+});
 
 pub fn get_uptime_ns() -> usize {
     let ts = get_rt_clock();

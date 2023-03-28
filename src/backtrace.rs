@@ -11,7 +11,7 @@ use xmas_elf::{
 use crate::{
     kerrmsg,
     mem::{addr::VirtAddr, addr_space::AddressSpace},
-    util::{KResult, SavedInterruptStatus}
+    util::{KResult, SavedInterruptStatus},
 };
 
 pub static KERNEL_ELF: Once<ElfFile<'static>> = Once::new();
@@ -147,7 +147,7 @@ extern "C" fn rust_panic(info: &PanicInfo) -> ! {
     // if FRAMEBUFFER.get().is_some() {
     //     fb_println!("Panicked at '{}'", panic_msg);
     // }
-    
+
     if let Some(panic_location) = info.location() {
         serial0_println!("{}", panic_location);
         // if FRAMEBUFFER.get().is_some() {

@@ -195,7 +195,7 @@ impl Task {
         new.signals.lock().clone_from(&self.signals.lock());
         new.vmem.lock().fork_from(&self.vmem.lock());
         group.lock().add(Arc::downgrade(&new));
-        get_scheduler().push_runnable(new.clone());
+        get_scheduler().push_runnable(new.clone(), false);
         new
     }
 
@@ -239,7 +239,7 @@ impl Task {
         });
         self.add_child(t.clone());
         group.lock().add(Arc::downgrade(&t));
-        get_scheduler().push_runnable(t.clone());
+        get_scheduler().push_runnable(t.clone(), false);
         t
     }
 
