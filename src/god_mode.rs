@@ -4,7 +4,7 @@ use x86_64::instructions::interrupts;
 
 use crate::{
     task::{get_scheduler, Task, TaskId},
-    util::BlockingMutex, mem::{allocator::KERNEL_FRAME_ALLOCATOR, consts::PAGE_SIZE, addr::{VirtAddr, PhysAddr}},
+    util::{BlockingMutex, align_down}, mem::{allocator::{KERNEL_FRAME_ALLOCATOR, GLOBAL_ALLOC}, consts::{PAGE_SIZE, KERNEL_HEAP_SIZE}, addr::{VirtAddr, PhysAddr}},
 };
 
 pub static GOD_MODE_TASK: Once<Arc<Task>> = Once::new();
@@ -46,12 +46,11 @@ pub fn god_mode_repl() {
         } else {
             continue;
         };
-        // let args = args.collect::<Vec<_>>();
 
         serial1_println!();
         log::warn!("God said: {}", cmd);
         match cmd {
-            "f" => {
+            "f" | "frames" => {
                 serial1_println!("Dumping free physical memory.");
                 let fa = KERNEL_FRAME_ALLOCATOR.get().unwrap().lock();
                 let mut total_space_pages = 0;
@@ -62,7 +61,7 @@ pub fn god_mode_repl() {
                 serial1_println!("Total free pages: {}", total_space_pages);
                 serial1_println!("Total free bytes: {}", total_space_pages * PAGE_SIZE);
             }
-            "vm" => {
+            "vm" | "vmem" => {
                 let pid = if let Some(Ok(pid)) = args.next().map(|arg| arg.parse()) {
                     TaskId::new(pid)
                 } else {
@@ -79,42 +78,36 @@ pub fn god_mode_repl() {
                 serial1_println!("Dumping virtual memory of pid {}. Check serial0 (stdio).", pid.as_usize());
                 task.vmem().lock().log();
             }
-            "d" => {
-                let addr_type = if let Some(addr_type) = args.next() {
-                    match addr_type {
-                        "p" => "p",
-                        "v" => "v",
-                        _ => {
-                            serial1_println!("Invalid argument. Specify `v` for dumping virtual memory or `p` for physical memory.");
-                            continue;
-                        }
-                    }
-                } else {
-                    serial1_println!("Invalid argument. Specify `v` for dumping virtual memory or `p` for physical memory.");
-                    continue;
-                };
+            "x" | "examine" => {
                 let start = if let Some(Ok(start)) = args.next().map(|arg| usize::from_str_radix(arg, 16)) {
-                    start
+                    align_down(start, PAGE_SIZE)
                 } else {
-                    serial1_println!("Invalid argument. Specify the physical address to dump the frame of.");
+                    serial1_println!("Invalid argument. Specify the address to dump the frame of.");
                     continue;
                 };
 
-                let ptr = if addr_type == "p" {
-                    PhysAddr::new(start).as_hhdm_virt().as_ptr::<u64>()
-                } else {
-                    VirtAddr::new(start).as_ptr::<u64>()
-                };
+                let ptr = PhysAddr::new(start).as_hhdm_virt().as_ptr::<u64>();
+
                 let max_i = PAGE_SIZE/core::mem::size_of::<u64>();
-                serial1_println!("Dumping page at {:#x}.", start);
+                serial1_println!("Dumping frame at {:#x}.", start);
                 for i in 0..max_i/4 {
                     let i = i * 4;
-                    serial1_print!("{:#016x}\t|\t", start + i * core::mem::size_of::<u64>());
+                    serial1_print!("{:#016x} >> ", start + i * core::mem::size_of::<u64>());
                     for j in 0..4 {
                         let offset = i + j;
                         serial1_print!("{:016x} ", unsafe { ptr.add(offset).read_volatile() });
                     }
                     serial1_println!();
+                }
+            }
+            "h" | "heap" => {
+                let lock = GLOBAL_ALLOC.try_lock();
+                if let Some(lock) = lock {
+                    serial1_println!("Kernel heap size:           {:#08x}", KERNEL_HEAP_SIZE);
+                    serial1_println!("Kernel heap usage (actual): {:#08x} ({:.4}%)", lock.stats_alloc_actual(), lock.stats_alloc_actual() as f64 / KERNEL_HEAP_SIZE as f64 * 100.0);
+                    serial1_println!("Kernel heap usage (user):   {:#08x} ({:.4}%)", lock.stats_alloc_user(), lock.stats_alloc_user() as f64 / KERNEL_HEAP_SIZE as f64 * 100.0);
+                } else {
+                    serial1_println!("Error locking global allocator.");
                 }
             }
             _ => {}
