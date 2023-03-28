@@ -23,6 +23,15 @@ mkdir -p extern
 cd extern
 if [[ $@ =~ "download" ]];
 then
+    echo
+    echo "!!!IMPORTANT!!!"
+    echo "If you just want a prebuilt image, go to the following link to download one and put it in a new folder in this directory called initramfs"
+    echo "The prebuilt image currently contains preconfigured and prebuilt distributions of Busybox, FreeDOOM, NetHack, and RustyRays."
+    echo "Busybox, FreeDOOM, Doom-Generic, and NetHack are subject to their own copyright and license terms."
+    echo "https://drive.google.com/file/d/1Yl8Ei1toRCmoHbNVxOxamXrGS_s4xvf6/view"
+    echo "Press ENTER to continue, or Ctrl-C to cancel."
+    read
+
     echo "Downloading Busybox."
     git clone git://busybox.net/busybox.git
     echo "Installing musl with pacman and creating symlinks. (will sudo)"
@@ -30,6 +39,7 @@ then
     sudo ln -s /usr/bin/ar /usr/bin/musl-ar
     sudo ln -s /usr/bin/strip /usr/bin/musl-strip
     echo "Now run 'deps.sh menuconfig' and load kados.config, located in the same directory as this script"
+    
 fi
 
 
