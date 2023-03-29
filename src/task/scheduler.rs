@@ -345,10 +345,12 @@ pub fn switch() {
 
     sched.check_deadline();
     let mut queue = sched.run_queue.lock();
-    let mut current = sched
-        .current_task
-        .try_write()
-        .expect("switch(): couldn't lock the current task for switching");
+    let current = sched.current_task.try_write();
+    if current.is_none() {
+        log::warn!("Couldn't lock current task for writing.");
+        return;
+    }
+    let mut current = current.unwrap();
     let mut task = None;
     loop {
         let t = queue.pop_front();

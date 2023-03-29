@@ -1,3 +1,5 @@
+use alloc::borrow::ToOwned;
+
 use crate::{
     arch::idt::InterruptFrame,
     errno,
@@ -45,6 +47,8 @@ pub const QUIET_SYSCALLS: &[usize] = &[
     SYS_GETRANDOM,
     SYS_WRITE,
     SYS_READ,
+    SYS_OPEN,
+    SYS_STAT,
 ];
 
 pub struct SyscallHandler<'a> {
@@ -63,23 +67,60 @@ impl<'a> SyscallHandler<'a> {
         a6: usize,
         n: usize,
     ) -> Result<isize, KError<'_>> {
-        let enter_pid = current_task().pid();
         let rip = self.frame.rip;
         let quiet = QUIET_SYSCALLS.contains(&n);
 
         if !quiet {
-            log::trace!(
-                "[{:#x}] SYSCALL #{} {}({:#x}, {:#x}, {:#x}, {:#x}, {:#x}, {:#x})",
-                rip,
-                n,
-                syscall_name_by_number(n),
-                a1,
-                a2,
-                a3,
-                a4,
-                a5,
-                a6
-            );
+            let current = current_task();
+            let symtab = &current.arch_mut().symtab;
+            if let Some(symtab) = symtab {
+                let mut symbol = None;
+                for sym in symtab.iter() {
+                    if rip as u64 >= sym.value && rip as u64 <= (sym.value + sym.size) {
+                        symbol = Some(sym.name.to_owned());
+                    }
+                }
+                if let Some(symbol) = symbol {
+                    log::trace!(
+                        "[{}] SYSCALL #{} {}({:#x}, {:#x}, {:#x}, {:#x}, {:#x}, {:#x})",
+                        symbol,
+                        n,
+                        syscall_name_by_number(n),
+                        a1,
+                        a2,
+                        a3,
+                        a4,
+                        a5,
+                        a6
+                    );
+                } else {
+                    log::trace!(
+                        "[{:#x}] SYSCALL #{} {}({:#x}, {:#x}, {:#x}, {:#x}, {:#x}, {:#x})",
+                        rip,
+                        n,
+                        syscall_name_by_number(n),
+                        a1,
+                        a2,
+                        a3,
+                        a4,
+                        a5,
+                        a6
+                    );
+                }
+            } else {
+                log::trace!(
+                    "[{:#x}] SYSCALL #{} {}({:#x}, {:#x}, {:#x}, {:#x}, {:#x}, {:#x})",
+                    rip,
+                    n,
+                    syscall_name_by_number(n),
+                    a1,
+                    a2,
+                    a3,
+                    a4,
+                    a5,
+                    a6
+                );
+            }
         }
 
         let res = match n {
@@ -166,21 +207,10 @@ impl<'a> SyscallHandler<'a> {
             _ => Err(errno!(Errno::ENOSYS, "dispatch(): syscall not implemented")),
         };
 
-        let exit_pid = current_task().pid();
-        if exit_pid == enter_pid {
-            if let Err(err) =
-                get_scheduler().try_delivering_signal(self.frame, errno_to_isize(&res))
-            {
-                if !quiet {
-                    log::error!("Failed to send signal: {:?}", err);
-                }
+        if let Err(err) = get_scheduler().try_delivering_signal(self.frame, errno_to_isize(&res)) {
+            if !quiet {
+                log::error!("Failed to send signal: {:?}", err);
             }
-        } else if !quiet {
-            log::warn!(
-                "Syscall ended with a different process ({}) than it started with ({})!",
-                exit_pid.as_usize(),
-                enter_pid.as_usize()
-            );
         }
 
         res

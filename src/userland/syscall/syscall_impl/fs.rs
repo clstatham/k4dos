@@ -166,7 +166,7 @@ fn create(path: &Path, _flags: OpenFlags, mode: FileMode) -> KResult<INode> {
 impl<'a> SyscallHandler<'a> {
     pub fn sys_open(&mut self, path: &Path, flags: OpenFlags, mode: FileMode) -> KResult<isize> {
         let current = current_task();
-        log::trace!("Attempting to open {}", path);
+        // log::trace!("Attempting to open {}", path);
         if flags.contains(OpenFlags::O_CREAT) {
             match create(path, flags, FileMode::new(S_IFREG | mode.access_mode())) {
                 Ok(_) => {}
@@ -308,7 +308,7 @@ impl<'a> SyscallHandler<'a> {
     }
 
     pub fn sys_stat(&mut self, path: &Path, buf: VirtAddr) -> KResult<isize> {
-        log::debug!("sys_stat-ing path {}", path);
+        // log::debug!("sys_stat-ing path {}", path);
         let stat = current_task().root_fs.lock().lookup(path, true)?.stat()?;
         buf.write(stat)?;
         Ok(0)
