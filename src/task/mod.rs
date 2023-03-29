@@ -320,12 +320,14 @@ impl Task {
     ) -> KResult<()> {
         let mut sigset = self.sigset.lock();
         if oldset.value() != 0 {
-            oldset.write_bytes(sigset.as_raw_slice())?;
+            let slice = sigset.as_raw_slice();
+            assert_eq!(slice.len(), 8);
+            oldset.write_bytes(slice)?;
         }
 
         if set.value() != 0 {
-            let new_set = set.read::<[u8; 128]>()?;
-            let new_set = SigSet::new(*new_set);
+            let new_set = set.read_volatile::<[u8; 8]>()?;
+            let new_set = SigSet::new(new_set);
             match how {
                 SignalMask::Block => *sigset |= new_set,
                 SignalMask::Unblock => *sigset &= !new_set,

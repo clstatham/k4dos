@@ -73,6 +73,7 @@ const SIGMAX: c_int = 32;
 
 pub const SIG_DFL: usize = 0;
 pub const SIG_IGN: usize = 1;
+pub const SIG_ERR: usize = usize::MAX;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum SigAction {
@@ -168,7 +169,7 @@ impl SignalDelivery {
     }
 }
 
-pub type SigSet = BitArray<[u8; 1024 / 8], LocalBits>;
+pub type SigSet = BitArray<[u8; 8], LocalBits>;
 pub enum SignalMask {
     Block,
     Unblock,

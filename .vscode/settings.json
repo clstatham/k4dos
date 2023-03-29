@@ -3,5 +3,6 @@
     "lldb.dereferencePointers": true,
     "lldb.consoleMode": "commands",
     "lldb.showDisassembly": "auto",
-    "rust-analyzer.check.command": "clippy"
+    "rust-analyzer.check.command": "clippy",
+    "editor.formatOnSave": true,
 }

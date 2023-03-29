@@ -87,24 +87,24 @@ pub unsafe extern "C" fn syscall_entry() {
         ",
             pop_regs!(),
             "
-        // test dword ptr [rsp + 4], 0xFFFF8000
-        // jnz 1f
+        test dword ptr [rsp + 4], 0xFFFF8000
+        jnz 1f
 
         pop rcx
         add rsp, 8
         pop r11
-        // pop qword ptr gs:[{off} + {sp}]
-        // mov rsp, gs:[{off} + {sp}]
-        pop rsp
+        pop qword ptr gs:[{off} + {sp}]
+        mov rsp, gs:[{off} + {sp}]
+        // pop rsp
         cli
         swapgs
         sysretq
-    // 1:
-    //     xor rcx, rcx
-    //     xor r11, r11
-    //     cli
-    //     swapgs
-    //     iretq
+    1:
+        xor rcx, rcx
+        xor r11, r11
+        cli
+        swapgs
+        iretq
         "
         ),
         off = const(0),

@@ -426,7 +426,7 @@ impl Vmem {
         let dump_and_exit = || {
             log::debug!("{:#x?}", stack_frame);
             self.log();
-            backtrace::unwind_user_stack_from(stack_frame.frame.rbp).ok();
+            backtrace::unwind_user_stack_from(stack_frame.frame.rbp, stack_frame.frame.rip).ok();
             get_scheduler().send_signal_to(current_task(), SIGSEGV);
             get_scheduler().exit_current(1)
         };

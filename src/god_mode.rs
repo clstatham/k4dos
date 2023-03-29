@@ -1,10 +1,15 @@
-use alloc::{borrow::ToOwned, collections::VecDeque, string::String, sync::Arc, vec::Vec};
+use alloc::{borrow::ToOwned, collections::VecDeque, string::String, sync::Arc};
 use spin::Once;
 use x86_64::instructions::interrupts;
 
 use crate::{
+    mem::{
+        addr::PhysAddr,
+        allocator::{GLOBAL_ALLOC, KERNEL_FRAME_ALLOCATOR},
+        consts::{KERNEL_HEAP_SIZE, PAGE_SIZE},
+    },
     task::{get_scheduler, Task, TaskId},
-    util::{BlockingMutex, align_down}, mem::{allocator::{KERNEL_FRAME_ALLOCATOR, GLOBAL_ALLOC}, consts::{PAGE_SIZE, KERNEL_HEAP_SIZE}, addr::{VirtAddr, PhysAddr}},
+    util::{align_down, BlockingMutex},
 };
 
 pub static GOD_MODE_TASK: Once<Arc<Task>> = Once::new();
@@ -75,11 +80,16 @@ pub fn god_mode_repl() {
                     serial1_println!("Invalid argument. PID not found.");
                     continue;
                 };
-                serial1_println!("Dumping virtual memory of pid {}. Check serial0 (stdio).", pid.as_usize());
+                serial1_println!(
+                    "Dumping virtual memory of pid {}. Check serial0 (stdio).",
+                    pid.as_usize()
+                );
                 task.vmem().lock().log();
             }
             "x" | "examine" => {
-                let start = if let Some(Ok(start)) = args.next().map(|arg| usize::from_str_radix(arg, 16)) {
+                let start = if let Some(Ok(start)) =
+                    args.next().map(|arg| usize::from_str_radix(arg, 16))
+                {
                     align_down(start, PAGE_SIZE)
                 } else {
                     serial1_println!("Invalid argument. Specify the address to dump the frame of.");
@@ -88,9 +98,9 @@ pub fn god_mode_repl() {
 
                 let ptr = PhysAddr::new(start).as_hhdm_virt().as_ptr::<u64>();
 
-                let max_i = PAGE_SIZE/core::mem::size_of::<u64>();
+                let max_i = PAGE_SIZE / core::mem::size_of::<u64>();
                 serial1_println!("Dumping frame at {:#x}.", start);
-                for i in 0..max_i/4 {
+                for i in 0..max_i / 4 {
                     let i = i * 4;
                     serial1_print!("{:#016x} >> ", start + i * core::mem::size_of::<u64>());
                     for j in 0..4 {
@@ -104,8 +114,16 @@ pub fn god_mode_repl() {
                 let lock = GLOBAL_ALLOC.try_lock();
                 if let Some(lock) = lock {
                     serial1_println!("Kernel heap size:           {:#08x}", KERNEL_HEAP_SIZE);
-                    serial1_println!("Kernel heap usage (actual): {:#08x} ({:.4}%)", lock.stats_alloc_actual(), lock.stats_alloc_actual() as f64 / KERNEL_HEAP_SIZE as f64 * 100.0);
-                    serial1_println!("Kernel heap usage (user):   {:#08x} ({:.4}%)", lock.stats_alloc_user(), lock.stats_alloc_user() as f64 / KERNEL_HEAP_SIZE as f64 * 100.0);
+                    serial1_println!(
+                        "Kernel heap usage (actual): {:#08x} ({:.4}%)",
+                        lock.stats_alloc_actual(),
+                        lock.stats_alloc_actual() as f64 / KERNEL_HEAP_SIZE as f64 * 100.0
+                    );
+                    serial1_println!(
+                        "Kernel heap usage (user):   {:#08x} ({:.4}%)",
+                        lock.stats_alloc_user(),
+                        lock.stats_alloc_user() as f64 / KERNEL_HEAP_SIZE as f64 * 100.0
+                    );
                 } else {
                     serial1_println!("Error locking global allocator.");
                 }

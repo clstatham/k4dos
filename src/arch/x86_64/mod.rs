@@ -114,7 +114,7 @@ pub fn arch_main() {
 
     log::info!("Initializing VGA graphics.");
 
-    graphics::init(&fb_resp).expect("Error initializing VGA graphics");
+    graphics::init(fb_resp).expect("Error initializing VGA graphics");
 
     log::info!("Setting up syscalls.");
     unsafe {

@@ -4,7 +4,10 @@ use pc_keyboard::{layouts::Us104Key, DecodedKey, HandleControl, Keyboard, Scanco
 use pic8259::ChainedPics;
 use spin::Mutex;
 
-use x86::io::outb;
+use x86::{
+    io::outb,
+    msr::{rdmsr, IA32_FS_BASE, IA32_GS_BASE},
+};
 use x86_64::{
     instructions::port::Port,
     registers::control::Cr3,
@@ -291,8 +294,14 @@ extern "C" fn x64_handle_interrupt(vector: u8, stack_frame: *mut InterruptErrorF
                 stack_frame,
                 error_code
             );
+            unsafe {
+                let fsbase = rdmsr(IA32_FS_BASE);
+                // let gsbase = rdmsr(IA32_GS_BASE);
+                log::debug!("FSBASE: {:#x}", fsbase);
+            }
             if stack_frame.frame.is_user_mode() {
-                backtrace::unwind_user_stack_from(stack_frame.frame.rbp).unwrap();
+                backtrace::unwind_user_stack_from(stack_frame.frame.rbp, stack_frame.frame.rip)
+                    .unwrap();
                 get_scheduler().exit_current(1);
             }
             panic!()

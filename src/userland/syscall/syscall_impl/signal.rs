@@ -3,7 +3,7 @@ use crate::{
     mem::addr::VirtAddr,
     task::{
         current_task, get_scheduler,
-        signal::{SigAction, SignalMask, DEFAULT_ACTIONS, SIG_DFL, SIG_IGN},
+        signal::{SigAction, SignalMask, DEFAULT_ACTIONS, SIG_DFL, SIG_ERR, SIG_IGN},
         TaskId,
     },
     userland::syscall::SyscallHandler,
@@ -44,7 +44,7 @@ impl<'a> SyscallHandler<'a> {
             let action = current_task().signals.lock().get_action(signum);
             let action = match action {
                 SigAction::Ignore => SIG_IGN,
-                SigAction::Terminate => 0, // todo?
+                SigAction::Terminate => SIG_ERR, // todo?
                 SigAction::Handler { handler } => handler as usize,
             };
             oldact.write(action)?;

@@ -170,7 +170,7 @@ impl LineDiscipline {
         *self.foreground_group.lock() = pg;
     }
 
-    fn is_current_foreground(&self) -> bool {
+    fn _is_current_foreground(&self) -> bool {
         let pg = &*self.foreground_group.lock();
         current_task().belongs_to_group(pg) || pg.upgrade().is_none()
     }

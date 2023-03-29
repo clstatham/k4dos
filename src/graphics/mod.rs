@@ -232,7 +232,6 @@ impl DrawTarget for FrameBuffer {
     where
         I: IntoIterator<Item = embedded_graphics::Pixel<Self::Color>>,
     {
-        assert_eq!(self.bpp, 32);
         for Pixel(coord, color) in pixels.into_iter() {
             let (x, y) = coord.into();
             if (0..self.width as i32).contains(&x) && (0..self.height as i32).contains(&y) {

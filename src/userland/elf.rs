@@ -1,7 +1,11 @@
-use elfloader::{ElfBinary, ElfLoader};
+use alloc::{borrow::ToOwned, string::String, vec::Vec};
+use elfloader::{ElfBinary, ElfLoader, Entry, Entry64};
 use x86::random::rdrand_slice;
 
-use xmas_elf::program::Type;
+use xmas_elf::{
+    program::Type,
+    sections::{SectionData, ShType},
+};
 
 use crate::{
     errno,
@@ -30,12 +34,20 @@ pub enum AuxvType {
     AtEntry = 9,
 }
 
+#[derive(Clone)]
+pub struct SymTabEntry {
+    pub name: String,
+    pub value: u64,
+    pub size: u64,
+}
+
 pub struct UserlandEntry {
     pub entry_point: VirtAddr,
     pub vmem: Vmem,
     pub fsbase: Option<VirtAddr>,
     pub addr_space: AddressSpace,
     pub hdr: [(AuxvType, usize); 4],
+    pub symtab: Option<Vec<SymTabEntry>>,
 }
 
 pub fn load_elf(file: FileRef) -> KResult<UserlandEntry> {
@@ -66,6 +78,27 @@ pub fn load_elf(file: FileRef) -> KResult<UserlandEntry> {
             end_of_image = end_of_image.max((hdr.virtual_addr() + hdr.mem_size()) as usize);
             start_of_image = end_of_image.min(hdr.virtual_addr() as usize);
         }
+    }
+    let mut symbol_table = None;
+    for section in elf.file.section_iter() {
+        if section.get_type() == Ok(ShType::SymTab) {
+            let section_data = section.get_data(&elf.file);
+            if let Ok(ref _section_data @ SectionData::SymbolTable64(symtab)) = section_data {
+                symbol_table = Some(
+                    symtab
+                        .iter()
+                        .map(|e| SymTabEntry {
+                            name: e.get_name(&elf.file).unwrap().to_owned(),
+                            size: e.size(),
+                            value: e.value(),
+                        })
+                        .collect::<Vec<_>>(),
+                );
+            }
+        }
+    }
+    if symbol_table.is_none() {
+        log::warn!("Couldn't get symbol table for ELF.");
     }
     log::debug!(
         "ELF loaded into memory at {:#x} .. {:#x}",
@@ -101,7 +134,6 @@ pub fn load_elf(file: FileRef) -> KResult<UserlandEntry> {
 
     elf.load(&mut loader).unwrap();
 
-    current.switch();
     let p2 = elf.file.header.pt2;
     log::debug!("Base address at {:?}", VirtAddr::new(loader.base_addr));
     let hdr = [
@@ -111,6 +143,19 @@ pub fn load_elf(file: FileRef) -> KResult<UserlandEntry> {
         (AuxvType::AtEntry, p2.entry_point() as usize),
     ];
 
+    if let Some(ref symtab) = symbol_table {
+        for sym in symtab.iter() {
+            if sym.name == "__stack_chk_fail" {
+                // unsafe {
+                //     *(sym.value as *mut u8) = 0xc3; // "ret" instruction
+                // }
+                log::warn!("SSP is ON for this binary!");
+                break;
+            }
+        }
+    }
+    current.switch();
+
     log::debug!("ELF load complete.");
     Ok(UserlandEntry {
         entry_point: loader.entry_point,
@@ -118,6 +163,7 @@ pub fn load_elf(file: FileRef) -> KResult<UserlandEntry> {
         fsbase: None,
         addr_space,
         hdr,
+        symtab: symbol_table,
     })
 }
 

@@ -206,6 +206,10 @@ impl Scheduler {
 
         current.opened_files.lock().close_all();
         self.run_queue.lock().retain(|t| t.pid != current.pid);
+        self.waiting_queue.lock().retain(|t| t.pid != current.pid);
+        self.deadline_waiting_queue
+            .lock()
+            .retain(|t| t.0.pid != current.pid);
         self.tasks.lock().remove(&current.pid);
         self.exited_tasks.lock().push(current);
         self.wake_all(&JOIN_WAIT_QUEUE);

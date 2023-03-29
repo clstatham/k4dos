@@ -21,7 +21,7 @@ use crate::{
         signal::Signal,
         vmem::{MMapFlags, MMapKind, MMapProt, Vmem},
     },
-    userland::elf::{self, AuxvType},
+    userland::elf::{self, AuxvType, SymTabEntry},
     util::{stack::Stack, KResult},
 };
 
@@ -45,15 +45,15 @@ fn xrstor(fpu: &mut Box<[u8]>) {
 
 pub fn arch_context_switch(prev: &mut ArchTask, next: &mut ArchTask) {
     unsafe {
-        prev.fsbase = VirtAddr::new(rdmsr(IA32_FS_BASE) as usize);
-        prev.gsbase = VirtAddr::new(rdmsr(IA32_GS_BASE) as usize);
+        // prev.fsbase = VirtAddr::new(rdmsr(IA32_FS_BASE) as usize);
+        // prev.gsbase = VirtAddr::new(rdmsr(IA32_GS_BASE) as usize);
         wrmsr(IA32_FS_BASE, next.fsbase.value() as u64);
-        swapgs();
+        // swapgs();
         wrmsr(IA32_GS_BASE, next.gsbase.value() as u64);
         get_tss().privilege_stack_table[0] = x86_64::VirtAddr::new(
             (next.kernel_stack.as_ptr() as usize + next.kernel_stack.len()) as u64,
         );
-        swapgs();
+        // swapgs();
 
         if let Some(fpu) = prev.fpu_storage.as_mut() {
             xsave(fpu);
@@ -199,6 +199,7 @@ pub struct ArchTask {
     fsbase: VirtAddr,
     gsbase: VirtAddr,
     fpu_storage: Option<Box<[u8]>>,
+    pub symtab: Option<Vec<SymTabEntry>>,
 }
 
 unsafe impl Sync for ArchTask {}
@@ -213,6 +214,7 @@ impl ArchTask {
             fsbase: VirtAddr::null(),
             gsbase: VirtAddr::null(),
             fpu_storage: None,
+            symtab: None,
         }
     }
 
@@ -247,9 +249,10 @@ impl ArchTask {
             address_space,
             kernel_stack: alloc::vec![0u8; KERNEL_STACK_SIZE].into_boxed_slice(),
             user: false,
-            fsbase: unsafe { VirtAddr::new(rdmsr(IA32_FS_BASE) as usize) },
+            fsbase: VirtAddr::null(),
             gsbase: unsafe { VirtAddr::new(rdmsr(IA32_GS_BASE) as usize) },
             fpu_storage: None,
+            symtab: None,
         }
     }
 
@@ -333,6 +336,7 @@ impl ArchTask {
 
         self.fpu_storage = Some(Self::alloc_fpu_storage());
         self.context = core::ptr::Unique::dangling();
+        self.symtab = userland_entry.symtab;
         unsafe {
             exec_entry(userland_entry.entry_point.value(), stack.top(), 0x200);
         }
@@ -374,6 +378,7 @@ impl ArchTask {
             fsbase: self.fsbase,
             gsbase: self.gsbase,
             fpu_storage: Some(fpu_storage),
+            symtab: self.symtab.clone(),
         })
     }
 
@@ -423,6 +428,7 @@ impl ArchTask {
             gsbase: self.gsbase,
             fsbase: self.fsbase,
             kernel_stack: alloc::vec![0u8; KERNEL_STACK_SIZE].into_boxed_slice(),
+            symtab: self.symtab.clone(),
         })
     }
 
