@@ -7,6 +7,7 @@ use crate::{
     bitflags_from_user, errno,
     fs::{
         alloc_inode_no,
+        devfs::socket::Socket,
         initramfs::{dir::InitRamFsDir, file::InitRamFsFile},
         opened_file::{FileDesc, LseekWhence, OpenFlags},
         path::Path,
@@ -42,7 +43,7 @@ impl<'a> SyscallHandler<'a> {
         let current = current_task();
         let mut files = current.opened_files.lock();
         match cmd {
-            F_GETFD => {
+            F_GETFL => {
                 let flags = files.get(fd)?.get_flags();
                 Ok(flags.bits() as isize)
             }
@@ -56,6 +57,7 @@ impl<'a> SyscallHandler<'a> {
                     .set_flags(OpenFlags::from_bits_truncate(arg as i32))?;
                 Ok(0)
             }
+            F_GETFD => Ok(0),
             F_DUPFD_CLOEXEC => {
                 let fd = files.dup(fd, Some(arg as i32), OpenFlags::O_CLOEXEC)?;
                 Ok(fd as isize)
@@ -438,4 +440,32 @@ impl<'a> SyscallHandler<'a> {
         assert_eq!(newfd, newfd_dup);
         Ok(newfd as isize)
     }
+
+    pub fn sys_socket(&mut self, domain: usize, typ: usize, protocol: usize) -> KResult<isize> {
+        let current = current_task();
+        let mut files = current.opened_files.lock();
+        let fd = files.open_socket(domain, typ, protocol)?;
+        Ok(fd as isize)
+    }
+
+    pub fn sys_setsockopt(
+        &mut self,
+        fd: FileDesc,
+        level: c_int,
+        option_name: c_int,
+        option_value: VirtAddr,
+        option_len: usize,
+    ) -> KResult<isize> {
+        let current = current_task();
+        let socket = current.get_opened_file_by_fd(fd)?;
+        match level {
+            SOL_SOCKET => {
+                // todo
+            }
+            _ => return Err(errno!(Errno::EINVAL, "invalid socket option level")),
+        }
+        Ok(0)
+    }
 }
+
+const SOL_SOCKET: c_int = 1;

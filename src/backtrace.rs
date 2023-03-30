@@ -1,4 +1,4 @@
-use core::{mem::size_of, panic::PanicInfo};
+use core::{alloc::Layout, mem::size_of, panic::PanicInfo};
 
 use alloc::vec::Vec;
 use spin::Once;
@@ -193,10 +193,10 @@ extern "C" fn rust_panic(info: &PanicInfo) -> ! {
     }
 
     // serial0_println!("");
-    // match unwind_stack() {
-    //     Ok(()) => {}
-    //     Err(e) => serial0_println!("Error unwinding stack: {:?}", e.msg()),
-    // }
+    match unwind_stack() {
+        Ok(()) => {}
+        Err(e) => serial0_println!("Error unwinding stack: {:?}", e.msg()),
+    }
 
     crate::hcf();
 }
@@ -213,4 +213,9 @@ extern "C" fn _Unwind_Resume(unwind_context_ptr: usize) -> ! {
 extern "C" fn rust_eh_personality() -> ! {
     serial0_println!("Poisoned function `rust_eh_personality` was called.");
     crate::hcf()
+}
+
+#[alloc_error_handler]
+fn handle_alloc_error(layout: Layout) -> ! {
+    panic!("Alloc Error for layout {:?}", layout)
 }

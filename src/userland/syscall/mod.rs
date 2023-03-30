@@ -78,6 +78,7 @@ impl<'a> SyscallHandler<'a> {
                 for sym in symtab.iter() {
                     if rip as u64 >= sym.value && rip as u64 <= (sym.value + sym.size) {
                         symbol = Some(sym.name.to_owned());
+                        break;
                     }
                 }
                 if let Some(symbol) = symbol {
@@ -162,6 +163,7 @@ impl<'a> SyscallHandler<'a> {
                 crate::bitflags_from_user!(MMapProt, a3 as u64),
             ),
             SYS_MUNMAP => self.sys_munmap(VirtAddr::new(a1), a2),
+            SYS_MREMAP => self.sys_mremap(VirtAddr::new(a1), a2, a3),
             SYS_RT_SIGACTION => {
                 self.sys_rt_sigaction(a1 as c_int, VirtAddr::new(a2), VirtAddr::new(a3))
             }
@@ -204,6 +206,15 @@ impl<'a> SyscallHandler<'a> {
             SYS_NANOSLEEP => self.sys_nanosleep(VirtAddr::new(a1), VirtAddr::new(a2)),
             SYS_MKDIR => self.sys_mkdir(&resolve_path(a1)?, FileMode::new(a2 as u32)),
             SYS_GETRANDOM => self.sys_getrandom(VirtAddr::new(a1), a2),
+            SYS_SOCKET => self.sys_socket(a1, a2, a3),
+            SYS_SETSOCKOPT => self.sys_setsockopt(
+                a1 as FileDesc,
+                a2 as c_int,
+                a3 as c_int,
+                VirtAddr::new(a4),
+                a5,
+            ),
+            SYS_MADVISE => Ok(0), // todo
             _ => Err(errno!(Errno::ENOSYS, "dispatch(): syscall not implemented")),
         };
 
@@ -607,6 +618,8 @@ pub const SYS_READV: usize = 19;
 pub const SYS_WRITEV: usize = 20;
 pub const SYS_PIPE: usize = 22;
 pub const SYS_SELECT: usize = 23;
+pub const SYS_MREMAP: usize = 25;
+pub const SYS_MADVISE: usize = 28;
 pub const SYS_DUP2: usize = 33;
 pub const SYS_NANOSLEEP: usize = 35;
 pub const SYS_GETPID: usize = 39;
@@ -620,6 +633,7 @@ pub const SYS_BIND: usize = 49;
 pub const SYS_LISTEN: usize = 50;
 pub const SYS_GETSOCKNAME: usize = 51;
 pub const SYS_GETPEERNAME: usize = 52;
+pub const SYS_SETSOCKOPT: usize = 54;
 pub const SYS_GETSOCKOPT: usize = 55;
 pub const SYS_CLONE: usize = 56;
 pub const SYS_FORK: usize = 57;

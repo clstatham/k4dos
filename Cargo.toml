@@ -34,6 +34,7 @@ x2apic = "0.4.2"
 elfloader = "0.16.0"
 bitvec = { version = "1.0.1", default-features = false }
 embedded-graphics = "0.7.1"
+smoltcp = { version = "0.9.1", default-features = false, features = ["alloc", "proto-ipv4", "socket", "socket-raw", "socket-udp", "socket-tcp", "proto-dhcpv4", "medium-ethernet"] }
 
 [dependencies.lazy_static]
 version = "1.4.0"

@@ -44,4 +44,15 @@ impl<'a> SyscallHandler<'a> {
         )?;
         Ok(0)
     }
+
+    pub fn sys_mremap(&mut self, addr: VirtAddr, old_size: usize, size: usize) -> KResult<isize> {
+        let current = current_task();
+        let new_addr = current.vmem().lock().mremap(
+            addr,
+            old_size,
+            size,
+            &mut current.arch_mut().address_space.mapper(),
+        )?;
+        Ok(new_addr.value() as isize)
+    }
 }

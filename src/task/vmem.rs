@@ -7,6 +7,7 @@ use crate::{
     arch::idt::InterruptErrorFrame,
     backtrace, errno,
     fs::{opened_file::FileDesc, FileRef},
+    kerrmsg,
     mem::{
         addr::VirtAddr,
         allocator::{
@@ -15,7 +16,7 @@ use crate::{
         consts::{PAGE_SIZE, USER_STACK_TOP, USER_VALLOC_BASE},
         paging::{
             mapper::Mapper,
-            units::{AllocatedFrames, FrameRange, Page, PageRange},
+            units::{AllocatedFrames, Frame, FrameRange, Page, PageRange},
         },
     },
     task::{current_task, get_scheduler, signal::SIGSEGV},
@@ -111,6 +112,27 @@ impl VmemArea {
     pub fn end_address(&self) -> VirtAddr {
         self.end_addr
     }
+
+    pub fn size_in_bytes(&self) -> usize {
+        self.end_addr - self.start_addr
+    }
+
+    pub fn merge_with(&mut self, other: Self) -> KResult<()> {
+        if other.size_in_bytes() == 0 {
+            return Ok(());
+        }
+        if other.start_addr != self.end_addr && other.end_addr != self.start_addr {
+            return Err(kerrmsg!("Error merging pages"));
+        }
+        if other.start_addr < self.start_addr {
+            self.start_addr = other.start_addr;
+        }
+        if other.end_addr > self.end_addr {
+            self.end_addr = other.end_addr;
+        }
+
+        Ok(())
+    }
 }
 
 pub struct Vmem {
@@ -135,13 +157,19 @@ impl Vmem {
         }
     }
 
-    pub fn area_containing(
+    pub fn area_containing_mut(
         &mut self,
         start_addr: VirtAddr,
         end_addr: VirtAddr,
     ) -> Option<&mut VmemArea> {
         self.areas
             .iter_mut()
+            .find(|area| area.contains_addr(start_addr) && area.contains_addr(end_addr))
+    }
+
+    pub fn area_containing(&self, start_addr: VirtAddr, end_addr: VirtAddr) -> Option<&VmemArea> {
+        self.areas
+            .iter()
             .find(|area| area.contains_addr(start_addr) && area.contains_addr(end_addr))
     }
 
@@ -153,7 +181,7 @@ impl Vmem {
         prot: MMapProt,
         kind: MMapKind,
     ) -> KResult<()> {
-        if self.area_containing(start_addr, end_addr).is_some() {
+        if self.area_containing_mut(start_addr, end_addr).is_some() {
             self.log();
             panic!("Cannot add vmem area that already exists");
         }
@@ -164,8 +192,43 @@ impl Vmem {
             prot,
             kind,
         });
+        self.areas.retain(|a| a.start_addr != a.end_addr);
         self.areas.sort_by_key(|area| area.start_address());
+        self.merge_contiguous_chunks();
         Ok(())
+    }
+
+    pub fn merge_contiguous_chunks(&mut self) {
+        let mut merge1 = None;
+        let mut merge2 = None;
+        for (i, chunk) in self.areas.iter().enumerate() {
+            if let Some(next_chunk) = self.areas.get(i + 1) {
+                if chunk.flags == next_chunk.flags && chunk.prot == next_chunk.prot {
+                    if chunk.start_address() == next_chunk.end_address() {
+                        merge1 = Some(chunk.clone());
+                        merge2 = Some(next_chunk.clone());
+                        break;
+                    } else if chunk.end_address() == next_chunk.start_address() {
+                        merge1 = Some(next_chunk.clone());
+                        merge2 = Some(chunk.clone());
+                        break;
+                    }
+                }
+            }
+        }
+        if let Some(ref mut merge1) = merge1 {
+            let merge2 = merge2.unwrap();
+            self.areas.retain(|chunk| {
+                chunk.start_address() != merge1.start_address()
+                    && chunk.start_address() != merge2.start_address()
+            });
+            if merge1.merge_with(merge2).is_err() {
+                panic!("Error merging chunks");
+            }
+            self.areas.push(merge1.clone());
+            self.areas.sort_by_key(|a| a.start_addr);
+            self.merge_contiguous_chunks();
+        }
     }
 
     fn zero_memory(&self, mut start_addr: VirtAddr, end_addr: VirtAddr) -> KResult<()> {
@@ -180,13 +243,85 @@ impl Vmem {
         protection: MMapProt,
     ) -> KResult<()> {
         let area = self
-            .area_containing(start_addr, start_addr + size - 1)
+            .area_containing_mut(start_addr, start_addr + size - 1)
             .ok_or(errno!(
                 Errno::ENOMEM,
                 "mprotect(): no areas containing address"
             ))?;
         area.prot = protection;
         Ok(())
+    }
+
+    pub fn mremap(
+        &mut self,
+        old_addr: VirtAddr,
+        old_size: usize,
+        new_size: usize,
+        active_mapper: &mut Mapper,
+    ) -> KResult<VirtAddr> {
+        if new_size == 0 {
+            return Err(errno!(Errno::EINVAL, "mremap(): new_size is zero"));
+        }
+
+        // let new_size_aligned = align_up(new_size, PAGE_SIZE);
+        let conflicting_area = self
+            .area_containing(old_addr + new_size, old_addr + new_size)
+            .cloned();
+        let old_area = self.area_containing_mut(old_addr, old_addr + old_size);
+
+        if let Some(old_area) = old_area {
+            if let Some(ref conflicting_area) = conflicting_area {
+                if conflicting_area.start_addr == old_area.start_addr {
+                    if old_area.end_address() < old_addr + new_size {
+                        old_area.end_addr = old_addr + new_size;
+                    }
+                    return Ok(old_addr);
+                }
+            } else {
+                old_area.end_addr = old_area.start_addr + new_size;
+                return Ok(old_area.start_addr);
+            }
+        } else {
+            return Err(errno!(
+                Errno::EFAULT,
+                "mremap(): address not owned by this process"
+            ));
+        }
+        self.log();
+        let old_area = self.area_containing(old_addr, old_addr).unwrap().clone();
+        let VmemArea {
+            start_addr,
+            end_addr,
+            flags,
+            prot,
+            kind: _,
+        } = old_area;
+
+        let new_addr = self.mmap(VirtAddr::new(0), new_size, prot, flags, -1, 0)?;
+        // unsafe {
+        //     new_addr
+        //         .as_mut_ptr::<u8>()
+        //         .copy_from(start_addr.as_ptr(), old_area.size_in_bytes());
+        // }
+        let old_pages = PageRange::new(
+            Page::containing_address(start_addr),
+            Page::containing_address(end_addr),
+        );
+        let new_pages = PageRange::new(
+            Page::containing_address(new_addr),
+            Page::containing_address(new_addr + old_area.size_in_bytes()),
+        );
+        for (old_page, new_page) in old_pages.iter().zip(new_pages.iter()) {
+            let frame = active_mapper.translate(old_page.start_address());
+            if let Some((frame, flags)) = frame {
+                active_mapper
+                    .map_to_single(new_page, Frame::containing_address(frame), flags)
+                    .unwrap();
+            }
+            // else, do nothing?
+        }
+        self.munmap(active_mapper, start_addr, end_addr)?;
+        Ok(new_addr)
     }
 
     pub fn mmap(
@@ -201,6 +336,12 @@ impl Vmem {
         if size == 0 {
             return Err(errno!(Errno::EFAULT, "mmap(): size is 0"));
         }
+        if flags.contains(MMapFlags::MAP_FIXED) {
+            return Err(errno!(
+                Errno::ENOSYS,
+                "mmap(): MMAP_FIXED not yet implemented"
+            ));
+        }
 
         let size_aligned = align_up(size, PAGE_SIZE);
         if start_addr == VirtAddr::null() {
@@ -209,12 +350,24 @@ impl Vmem {
                 if let Some(prev_idx) = prev {
                     let prev = &mut self.areas[prev_idx];
                     if prev.end_addr == start
-                        && prev.flags == flags
-                        && prev.prot == protection
-                        && matches!(prev.kind, MMapKind::Anonymous)
+                    // && prev.flags == flags
+                    // todo: ???
+                    && prev.prot == protection
+                    // && matches!(prev.kind, MMapKind::Anonymous)
                     {
+                        assert_eq!(prev.flags, flags);
+                        // assert_eq!(prev.prot, protection);
+                        assert!(matches!(prev.kind, MMapKind::Anonymous));
                         prev.end_addr = start + size_aligned;
                         return Ok(start);
+                    } else {
+                        log::warn!(
+                            "Couldn't merge area [{:?} .. {:?}] with [{:?} .. {:?}]",
+                            prev.start_addr,
+                            prev.end_addr,
+                            start,
+                            start + size_aligned
+                        );
                     }
                 }
 
@@ -306,10 +459,11 @@ impl Vmem {
                     )
                     .ok();
                 } else {
-                    log::warn!("Tried to free memory that wasn't mapped: {:?}", page);
+                    // log::warn!("Tried to free memory that wasn't mapped: {:?}", page);
                 }
             };
         }
+
         KERNEL_FRAME_ALLOCATOR
             .get()
             .unwrap()
@@ -397,10 +551,11 @@ impl Vmem {
         log::debug!("BEGIN VIRTUAL MEMORY STATE DUMP");
         for area in self.areas.iter() {
             log::debug!(
-                "{:>16x?} .. {:>16x?}   | {:?}",
+                "{:>16x?} .. {:>16x?}   | {:?}  {:?}",
                 area.start_addr,
                 area.end_addr,
-                area.flags
+                area.flags,
+                area.prot
             );
         }
         log::debug!("END VIRTUAL MEMORY STATE DUMP");
@@ -424,6 +579,9 @@ impl Vmem {
         reason: PageFaultErrorCode,
     ) -> KResult<()> {
         let dump_and_exit = || {
+            log::error!("Instruction pointer: {:#x}", { stack_frame.frame.rip });
+            log::error!("Faulted address: {:?}", faulted_addr);
+            log::error!("Reason: {:?}", reason);
             log::debug!("{:#x?}", stack_frame);
             self.log();
             backtrace::unwind_user_stack_from(stack_frame.frame.rbp, stack_frame.frame.rip).ok();

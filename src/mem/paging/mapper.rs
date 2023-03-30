@@ -129,9 +129,9 @@ impl<'a> Mapper<'a> {
     pub unsafe fn unmap_single(&mut self, page: Page) -> Option<Frame> {
         let addr = page.start_address();
         // these unwraps should be safe since we know the pages are already mapped
-        let p3 = self.p4.next_table_mut(addr.p4_index()).unwrap();
-        let p2 = p3.next_table_mut(addr.p3_index()).unwrap();
-        let p1 = p2.next_table_mut(addr.p2_index()).unwrap();
+        let p3 = self.p4.next_table_mut(addr.p4_index())?;
+        let p2 = p3.next_table_mut(addr.p3_index())?;
+        let p1 = p2.next_table_mut(addr.p2_index())?;
         let old_frame = p1[addr.p1_index()].frame();
         p1[addr.p1_index()].set_unused();
         unsafe { tlb::flush(addr.value()) };

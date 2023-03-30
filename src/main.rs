@@ -12,7 +12,8 @@
     slice_pattern,
     is_sorted,
     map_try_insert,
-    iter_advance_by
+    iter_advance_by,
+    alloc_error_handler
 )]
 #![allow(clippy::missing_safety_doc)]
 

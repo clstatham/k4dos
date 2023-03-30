@@ -237,7 +237,10 @@ impl<'a> ElfLoader for KadosElfLoader<'a> {
     ) -> Result<(), elfloader::ElfLoaderErr> {
         let region_start = VirtAddr::new(base as usize + self.load_offset);
         let region_end = region_start + region.len();
-        let area = self.vmem.area_containing(region_start, region_end).unwrap();
+        let area = self
+            .vmem
+            .area_containing_mut(region_start, region_end)
+            .unwrap();
         let mut prot = MMapProt::empty();
         if flags.is_read() {
             prot |= MMapProt::PROT_READ;

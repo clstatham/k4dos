@@ -46,9 +46,14 @@ impl File for InitRamFsFile {
         let mut reader = UserBufferReader::from(buf);
         let mut data = self.data.lock();
         let data_len = data.len();
-        if offset + reader.remaining_len() > data_len || options.contains(OpenFlags::O_APPEND) {
-            data.extend_from_slice(&vec![0u8; offset + reader.remaining_len() - data_len]);
+        if data.is_empty() {
+            data.extend_from_slice(&vec![0u8; offset + reader.remaining_len()]);
+        } else if offset + reader.remaining_len() < isize::MAX as usize
+            && (offset + reader.remaining_len() > data_len || options.contains(OpenFlags::O_APPEND))
+        {
+            data.push(0u8);
         }
+
         reader.read_bytes(&mut data[offset..])
     }
 

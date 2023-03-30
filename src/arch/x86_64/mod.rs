@@ -1,7 +1,7 @@
 use alloc::sync::Arc;
 use limine::{
-    LimineBootTimeRequest, LimineFramebufferRequest, LimineHhdmRequest, LimineMemmapRequest,
-    LimineStackSizeRequest,
+    LimineBootTimeRequest, LimineFramebufferRequest, LimineHhdmRequest, LimineKernelFileRequest,
+    LimineMemmapRequest, LimineStackSizeRequest,
 };
 use x86::{
     controlregs::{self, Cr0, Cr4, Xcr0},
@@ -10,6 +10,7 @@ use x86::{
 use x86_64::instructions::interrupts;
 
 use crate::{
+    backtrace,
     fs::{
         self,
         initramfs::get_root,
@@ -41,6 +42,7 @@ static STACK: LimineStackSizeRequest =
 static BOOT_TIME: LimineBootTimeRequest = LimineBootTimeRequest::new(0);
 static FB_REQUEST: LimineFramebufferRequest = LimineFramebufferRequest::new(0);
 static MEM_MAP: LimineMemmapRequest = LimineMemmapRequest::new(0);
+static KERNEL_FILE: LimineKernelFileRequest = LimineKernelFileRequest::new(0);
 
 // global_asm!(include_str!("boot.S"));
 
@@ -50,6 +52,18 @@ pub fn arch_main() {
     }
 
     interrupts::disable();
+
+    let kernel_file = KERNEL_FILE
+        .get_response()
+        .as_ptr()
+        .expect("Error getting kernel binary from Limine");
+    let kernel_file = unsafe { &*kernel_file };
+    let kernel_file = unsafe { &*kernel_file.kernel_file.as_ptr().unwrap() };
+    let kernel_file_base = kernel_file.base.as_ptr().unwrap();
+    let kernel_file_len = kernel_file.length as usize;
+    let kernel_file_data =
+        unsafe { core::slice::from_raw_parts(kernel_file_base, kernel_file_len) };
+    backtrace::KERNEL_ELF.call_once(|| xmas_elf::ElfFile::new(kernel_file_data).unwrap());
 
     // crate::PHYSICAL_OFFSET.store(HHDM.get_response().get().unwrap().offset as usize, core::sync::atomic::Ordering::Release);
     crate::PHYSICAL_OFFSET.call_once(|| HHDM.get_response().get().unwrap().offset as usize);

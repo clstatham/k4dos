@@ -359,7 +359,7 @@ macro_rules! allocator_impl {
                 if allocation.is_empty() {
                     return;
                 }
-                log::debug!("Freeing frame {:?}", allocation.start());
+                // log::debug!("Freeing frame {:?}", allocation.start());
                 unsafe {
                     self.insert_free_region(**allocation);
                 }

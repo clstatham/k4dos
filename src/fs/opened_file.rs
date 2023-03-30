@@ -12,6 +12,7 @@ use crate::{
 };
 
 use super::{
+    devfs::socket::Socket,
     path::PathComponent,
     pipe::{Pipe, PIPE_FS},
     DirEntry, DirRef, FileRef, FsNode, INode, PollStatus,
@@ -330,6 +331,31 @@ impl OpenedFileTable {
         let options = old_file.options();
         self.open_with_fd(newfd, old_file, options)?;
         Ok(newfd)
+    }
+
+    pub fn open_socket(&mut self, domain: usize, typ: usize, protocol: usize) -> KResult<FileDesc> {
+        let fd = self.alloc_fd(None)?;
+        let socket = Arc::new(Socket {
+            domain: domain.try_into()?,
+            typ: typ.try_into()?,
+            protocol: protocol.try_into()?,
+            id: Socket::alloc_id(),
+        });
+        self.open_with_fd(
+            fd,
+            OpenedFile::new(
+                Arc::new(PathComponent {
+                    parent_dir: None,
+                    name: socket.get_name(),
+                    inode: INode::File(socket.clone()),
+                }),
+                OpenFlags::empty(),
+                0,
+            )
+            .into(),
+            OpenFlags::empty(),
+        )?;
+        Ok(fd)
     }
 
     pub fn open_pipe(&mut self, options: OpenFlags) -> KResult<Arc<Pipe>> {
