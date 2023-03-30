@@ -7,6 +7,7 @@ use crate::util::lock::IrqMutex;
 
 pub const SERIAL0_IOPORT: u16 = 0x3f8;
 pub const SERIAL1_IOPORT: u16 = 0x2f8;
+pub const SERIAL2_IOPORT: u16 = 0x3e8;
 
 lazy_static! {
     pub static ref SERIAL0: IrqMutex<SerialPort> = {
@@ -18,9 +19,11 @@ lazy_static! {
     pub static ref SERIAL1: IrqMutex<SerialPort> = {
         let mut serial_port = unsafe { SerialPort::new(SERIAL1_IOPORT) };
         serial_port.init();
-        // unsafe {
-        //     outb(SERIAL1_IOPORT + 1, 0b101);
-        // }
+        IrqMutex::new(serial_port)
+    };
+    pub static ref SERIAL2: IrqMutex<SerialPort> = {
+        let mut serial_port = unsafe { SerialPort::new(SERIAL2_IOPORT) };
+        serial_port.init();
         IrqMutex::new(serial_port)
     };
 }
@@ -49,7 +52,7 @@ macro_rules! serial0_print {
 /// Prints to the host through the logging serial interface, appending a newline.
 #[macro_export]
 macro_rules! serial0_println {
-    () => ($crate::serial_print!("\n"));
+    () => ($crate::serial0_print!("\n"));
     ($fmt:expr) => ($crate::serial0_print!(concat!($fmt, "\n")));
     ($fmt:expr, $($arg:tt)*) => ($crate::serial0_print!(
         concat!($fmt, "\n"), $($arg)*));
@@ -99,4 +102,34 @@ macro_rules! serial1_println {
     ($fmt:expr) => ($crate::serial1_print!(concat!($fmt, "\r\n")));
     ($fmt:expr, $($arg:tt)*) => ($crate::serial1_print!(
         concat!($fmt, "\r\n"), $($arg)*));
+}
+
+#[doc(hidden)]
+#[allow(unreachable_code)]
+pub fn _print2(args: ::core::fmt::Arguments) {
+    use core::fmt::Write;
+    // #[cfg(debug_assertions)]
+    x86_64::instructions::interrupts::without_interrupts(|| {
+        SERIAL2
+            .lock()
+            .write_fmt(args)
+            .expect("Printing to serial failed");
+    });
+}
+
+/// Prints to the host through the TTY logging serial interface.
+#[macro_export]
+macro_rules! serial2_print {
+    ($($arg:tt)*) => {
+        $crate::serial::_print2(format_args!($($arg)*))
+    };
+}
+
+/// Prints to the host through the TTY logging serial interface, appending a newline.
+#[macro_export]
+macro_rules! serial2_println {
+    () => ($crate::serial2_print!("\n"));
+    ($fmt:expr) => ($crate::serial2_print!(concat!($fmt, "\n")));
+    ($fmt:expr, $($arg:tt)*) => ($crate::serial2_print!(
+        concat!($fmt, "\n"), $($arg)*));
 }

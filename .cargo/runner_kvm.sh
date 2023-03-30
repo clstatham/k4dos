@@ -45,5 +45,6 @@ qemu-system-x86_64 \
     -s \
     -serial stdio \
     -serial pty \
+    -serial file:target/fb_log.txt \
     -m 4G \
     -cdrom $KERNEL.iso >&2

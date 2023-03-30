@@ -335,12 +335,15 @@ pub fn render_text_buf() {
 
 #[macro_export]
 macro_rules! fb_print {
-    ($($arg:tt)*) => ($crate::graphics::_fb_print(format_args!($($arg)*)));
+    ($($arg:tt)*) => ({
+        $crate::graphics::_fb_print(format_args!($($arg)*));
+        $crate::serial::_print2(format_args!($($arg)*));
+    });
 }
 
 #[macro_export]
 macro_rules! fb_println {
-    () => ($crate::vga_print!("\n"));
+    () => ($crate::fb_print!("\n"));
     ($($arg:tt)*) => ($crate::fb_print!("{}\n", format_args!($($arg)*)));
 }
 

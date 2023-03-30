@@ -448,10 +448,11 @@ fn parse(mut reader: UserBufferReader) -> KResult<usize> {
     let mut escape_codes = bytes.split(|b| *b == 0x1b);
     if bytes[0] != 0x1b {
         // print until the first escape code
-        fb_print!(
-            "{}",
-            core::str::from_utf8(escape_codes.next().unwrap()).unwrap()
-        );
+        if let Some(next) = escape_codes.next() {
+            fb_print!("{}", core::str::from_utf8(next).unwrap());
+        } else {
+            return Ok(0);
+        }
     }
     for chunk in escape_codes {
         if chunk.is_empty() {
