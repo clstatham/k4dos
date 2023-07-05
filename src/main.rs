@@ -16,6 +16,7 @@
     alloc_error_handler
 )]
 #![allow(clippy::missing_safety_doc)]
+#![warn(clippy::unwrap_used)]
 
 extern crate alloc;
 

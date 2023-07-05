@@ -300,8 +300,7 @@ extern "C" fn x64_handle_interrupt(vector: u8, stack_frame: *mut InterruptErrorF
                 log::debug!("FSBASE: {:#x}", fsbase);
             }
             if stack_frame.frame.is_user_mode() {
-                backtrace::unwind_user_stack_from(stack_frame.frame.rbp, stack_frame.frame.rip)
-                    .unwrap();
+                backtrace::unwind_user_stack_from(stack_frame.frame.rbp, stack_frame.frame.rip);
                 get_scheduler().exit_current(1);
             }
             panic!()

@@ -584,7 +584,7 @@ impl Vmem {
             log::error!("Reason: {:?}", reason);
             log::debug!("{:#x?}", stack_frame);
             self.log();
-            backtrace::unwind_user_stack_from(stack_frame.frame.rbp, stack_frame.frame.rip).ok();
+            backtrace::unwind_user_stack_from(stack_frame.frame.rbp, stack_frame.frame.rip);
             get_scheduler().send_signal_to(current_task(), SIGSEGV);
             get_scheduler().exit_current(1)
         };

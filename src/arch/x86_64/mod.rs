@@ -48,7 +48,12 @@ static KERNEL_FILE: LimineKernelFileRequest = LimineKernelFileRequest::new(0);
 
 pub fn arch_main() {
     unsafe {
-        core::ptr::read_volatile(STACK.get_response().as_ptr().unwrap());
+        core::ptr::read_volatile(
+            STACK
+                .get_response()
+                .as_ptr()
+                .expect("Expected kernel stack to be readable"),
+        );
     }
 
     interrupts::disable();
@@ -58,27 +63,54 @@ pub fn arch_main() {
         .as_ptr()
         .expect("Error getting kernel binary from Limine");
     let kernel_file = unsafe { &*kernel_file };
-    let kernel_file = unsafe { &*kernel_file.kernel_file.as_ptr().unwrap() };
-    let kernel_file_base = kernel_file.base.as_ptr().unwrap();
+    let kernel_file = unsafe {
+        &*kernel_file
+            .kernel_file
+            .as_ptr()
+            .expect("Expected pointer to kernel ELF file to be valid")
+    };
+    let kernel_file_base = kernel_file
+        .base
+        .as_ptr()
+        .expect("Expected pointer to base of kernel ELF to be valid");
     let kernel_file_len = kernel_file.length as usize;
     let kernel_file_data =
         unsafe { core::slice::from_raw_parts(kernel_file_base, kernel_file_len) };
-    backtrace::KERNEL_ELF.call_once(|| xmas_elf::ElfFile::new(kernel_file_data).unwrap());
+    backtrace::KERNEL_ELF.call_once(|| {
+        xmas_elf::ElfFile::new(kernel_file_data).expect("Error parsing kernel ELF file data")
+    });
 
     // crate::PHYSICAL_OFFSET.store(HHDM.get_response().get().unwrap().offset as usize, core::sync::atomic::Ordering::Release);
-    crate::PHYSICAL_OFFSET.call_once(|| HHDM.get_response().get().unwrap().offset as usize);
+    crate::PHYSICAL_OFFSET.call_once(|| {
+        HHDM.get_response()
+            .get()
+            .expect("Error getting HHDM response from Limine")
+            .offset as usize
+    });
 
-    let memmap = MEM_MAP.get_response().get_mut().unwrap().memmap_mut();
+    let memmap = MEM_MAP
+        .get_response()
+        .get_mut()
+        .expect("Error getting memory map response from Limine")
+        .memmap_mut();
 
     crate::logging::init();
     log::info!("Logger initialized.");
 
     log::info!("Setting up time structures.");
-    let boot_time = unsafe { &*BOOT_TIME.get_response().as_ptr().unwrap() }.boot_time;
+    let boot_time = unsafe {
+        &*BOOT_TIME
+            .get_response()
+            .as_ptr()
+            .expect("Error getting boot time response from Limine")
+    }
+    .boot_time;
     time::init(boot_time);
 
     log::info!("Initializing FPU mechanisms.");
-    let features = CpuId::new().get_feature_info().unwrap();
+    let features = CpuId::new()
+        .get_feature_info()
+        .expect("Error getting CPUID feature info");
     assert!(features.has_xsave(), "XSAVE not available");
     assert!(features.has_mmx(), "MMX not available");
     assert!(features.has_fpu(), "FPU not available");
@@ -102,7 +134,10 @@ pub fn arch_main() {
     gdt::init_boot();
 
     // let fb_tag = boot_info.framebuffer_tag().expect("No multiboot2 framebuffer tag found");
-    let fb_resp = FB_REQUEST.get_response().get().unwrap();
+    let fb_resp = FB_REQUEST
+        .get_response()
+        .get()
+        .expect("Error getting framebuffer response from Limine");
     log::info!("Initializing kernel frame and page allocators.");
     mem::allocator::init(memmap).expect("Error initializing kernel frame and page allocators");
 
@@ -116,12 +151,12 @@ pub fn arch_main() {
     {
         KERNEL_FRAME_ALLOCATOR
             .get()
-            .unwrap()
+            .expect("Error getting kernel frame allocator")
             .lock()
             .convert_to_heap_allocated();
         KERNEL_PAGE_ALLOCATOR
             .get()
-            .unwrap()
+            .expect("Error getting kernel page allocator")
             .lock()
             .convert_to_heap_allocated();
     }
@@ -142,7 +177,7 @@ pub fn arch_main() {
     idt::init();
 
     log::info!("Initializing filesystems.");
-    fs::initramfs::init().unwrap();
+    fs::initramfs::init().expect("Error initializing initramfs");
 
     log::info!("Initializing task scheduler.");
     crate::task::init();

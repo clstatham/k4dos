@@ -45,7 +45,7 @@ fn print_symbol(rip: usize, symtab: &Option<Vec<SymTabEntry>>, depth: usize) {
     }
 }
 
-pub fn unwind_user_stack_from(mut rbp: usize, mut rip: usize) -> KResult<()> {
+pub fn unwind_user_stack_from(mut rbp: usize, mut rip: usize) {
     let _guard = SavedInterruptStatus::save();
     interrupts::disable();
     let mut addr_space = AddressSpace::current();
@@ -53,7 +53,7 @@ pub fn unwind_user_stack_from(mut rbp: usize, mut rip: usize) -> KResult<()> {
 
     if rbp == 0 {
         serial0_println!("<empty backtrace>");
-        return Ok(());
+        return;
     }
 
     let current = get_scheduler().current_task_opt();
@@ -95,7 +95,6 @@ pub fn unwind_user_stack_from(mut rbp: usize, mut rip: usize) -> KResult<()> {
         }
     }
     serial0_println!("---END BACKTRACE---");
-    Ok(())
 }
 
 pub fn unwind_stack() -> KResult<()> {
