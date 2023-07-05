@@ -7,7 +7,6 @@ use crate::{
     bitflags_from_user, errno,
     fs::{
         alloc_inode_no,
-        devfs::socket::Socket,
         initramfs::{dir::InitRamFsDir, file::InitRamFsFile},
         opened_file::{FileDesc, LseekWhence, OpenFlags},
         path::Path,
@@ -452,12 +451,12 @@ impl<'a> SyscallHandler<'a> {
         &mut self,
         fd: FileDesc,
         level: c_int,
-        option_name: c_int,
-        option_value: VirtAddr,
-        option_len: usize,
+        _option_name: c_int,
+        _option_value: VirtAddr,
+        _option_len: usize,
     ) -> KResult<isize> {
         let current = current_task();
-        let socket = current.get_opened_file_by_fd(fd)?;
+        let _socket = current.get_opened_file_by_fd(fd)?;
         match level {
             SOL_SOCKET => {
                 // todo

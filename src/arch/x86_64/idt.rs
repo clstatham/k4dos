@@ -6,7 +6,7 @@ use spin::Mutex;
 
 use x86::{
     io::outb,
-    msr::{rdmsr, IA32_FS_BASE, IA32_GS_BASE},
+    msr::{rdmsr, IA32_FS_BASE},
 };
 use x86_64::{
     instructions::port::Port,

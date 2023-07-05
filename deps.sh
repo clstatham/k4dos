@@ -3,7 +3,7 @@
 set -e
 
 if [[ -z "$@" ]]; then
-    echo "Usage: deps.sh [COMMANDS]..."
+    echo "Usage: extern.sh [COMMANDS]..."
     echo "Available commands:"
     echo "download       Downloads Busybox"
     echo "menuconfig     Configures Busybox with menuconfig"

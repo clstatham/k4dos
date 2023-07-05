@@ -1,14 +1,14 @@
-use std::{env, error::Error, process::Command};
+use std::{env, error::Error};
 
 fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     // Get the name of the package.
     let kernel_name = env::var("CARGO_PKG_NAME")?;
 
-    let status = Command::new("./deps.sh")
-        .args(["makeimg"])
-        .status()
-        .unwrap();
-    assert!(status.success());
+    // let status = Command::new("./deps.sh")
+    //     .args(["makeimg"])
+    //     .status()
+    //     .unwrap();
+    // assert!(status.success());
 
     println!("cargo:rustc-link-arg-bin={kernel_name}=--script=.cargo/linker.ld");
 

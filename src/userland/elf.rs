@@ -1,5 +1,5 @@
 use alloc::{borrow::ToOwned, string::String, vec::Vec};
-use elfloader::{ElfBinary, ElfLoader, Entry, Entry64};
+use elfloader::{ElfBinary, ElfLoader, Entry};
 use x86::random::rdrand_slice;
 
 use xmas_elf::{

@@ -12,7 +12,7 @@ use xmas_elf::{
 use crate::{
     kerrmsg,
     mem::{addr::VirtAddr, addr_space::AddressSpace, consts::PAGE_SIZE},
-    task::{current_task, get_scheduler},
+    task::get_scheduler,
     userland::elf::SymTabEntry,
     util::{KResult, SavedInterruptStatus},
 };

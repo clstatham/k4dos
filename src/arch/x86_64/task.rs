@@ -3,7 +3,6 @@ use core::{alloc::Layout, slice::SlicePattern};
 use alloc::{alloc::alloc_zeroed, boxed::Box, vec::Vec};
 use x86::{
     cpuid::CpuId,
-    current::segmentation::swapgs,
     msr::{rdmsr, wrmsr, IA32_FS_BASE, IA32_GS_BASE},
     tlb,
 };

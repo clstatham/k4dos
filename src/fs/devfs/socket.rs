@@ -1,7 +1,5 @@
 use core::sync::atomic::{AtomicUsize, Ordering};
 
-use smoltcp::iface::SocketHandle;
-
 use crate::{
     errno,
     fs::{File, FsNode},
@@ -146,7 +144,7 @@ pub fn write_sockaddr(
 }
 
 impl File for Socket {
-    fn ioctl(&self, cmd: usize, arg: usize) -> KResult<isize> {
+    fn ioctl(&self, cmd: usize, _arg: usize) -> KResult<isize> {
         const FIONBIO: usize = 0x5421;
         match cmd {
             FIONBIO => {
