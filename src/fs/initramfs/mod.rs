@@ -91,7 +91,10 @@ pub static INITRAM_FS: Once<Arc<InitRamFs>> = Once::new();
 
 pub fn init() -> KResult<()> {
     INITRAM_FS.call_once(|| {
-        let image = include_bytes!("../../../initramfs/initramfs");
+        let image = include_bytes!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/initramfs/initramfs.img"
+        ));
         if image.is_empty() {
             panic!("initramfs not embedded");
         }

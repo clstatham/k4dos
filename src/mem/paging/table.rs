@@ -32,6 +32,7 @@ impl PageTableEntry {
     const ADDRESS_MASK: usize = 0x000f_ffff_ffff_f000;
     const FLAGS_MASK: usize = 0x01ff;
 
+    #[allow(clippy::new_without_default)]
     pub const fn new() -> Self {
         PageTableEntry { data: 0 }
     }
@@ -94,6 +95,7 @@ pub struct PageTable {
 }
 
 impl PageTable {
+    #[allow(clippy::new_without_default)]
     #[inline]
     pub const fn new() -> Self {
         Self {

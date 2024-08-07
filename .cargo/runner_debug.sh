@@ -44,7 +44,6 @@ qemu-system-x86_64 \
     -D target/log.txt -d int,guest_errors -no-reboot -no-shutdown \
     -s -S \
     -serial stdio \
-    -serial pty \
     -serial file:target/fb_log.txt \
     -m 4G \
     -cdrom $KERNEL.iso >&2

@@ -174,10 +174,9 @@ pub fn unwind_stack() -> KResult<()> {
 }
 
 #[panic_handler]
-extern "C" fn rust_panic(info: &PanicInfo) -> ! {
+fn rust_panic(info: &PanicInfo) -> ! {
     interrupts::disable();
-    let default_panic = &format_args!("");
-    let panic_msg = info.message().unwrap_or(default_panic);
+    let panic_msg = info.message();
 
     serial0_println!("Panicked at '{}'", panic_msg);
     // if FRAMEBUFFER.get().is_some() {

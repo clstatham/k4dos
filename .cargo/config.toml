@@ -7,4 +7,12 @@ build-std = ["core", "compiler_builtins", "alloc"]
 build-std-features = ["compiler-builtins-mem"]
 
 [target.x86_64-unknown-none]
-runner = ".cargo/runner_kvm.sh"
+# release runner
+# replace with this line if you're on a linux host
+# runner = ".cargo/runner_release.sh"
+runner = ["mingw64.exe", ".cargo/runner_release.sh"]
+
+# debug runner
+# replace with this line if you're on a linux host
+# runner = ".cargo/runner_debug.sh"
+# runner = ["mingw64.exe", ".cargo/runner_debug.sh"]

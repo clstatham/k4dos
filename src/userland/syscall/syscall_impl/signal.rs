@@ -63,7 +63,7 @@ impl<'a> SyscallHandler<'a> {
                     }
                 },
                 _ => SigAction::Handler {
-                    handler: unsafe { core::mem::transmute(handler) },
+                    handler: unsafe { core::mem::transmute::<usize, fn()>(handler) },
                 },
             };
 

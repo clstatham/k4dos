@@ -1,8 +1,6 @@
 #![no_std]
 #![no_main]
 #![feature(
-    pointer_is_aligned,
-    panic_info_message,
     lang_items,
     abi_x86_interrupt,
     naked_functions,
@@ -15,8 +13,9 @@
     iter_advance_by,
     alloc_error_handler
 )]
+#![allow(internal_features)]
 #![allow(clippy::missing_safety_doc)]
-#![warn(clippy::unwrap_used)]
+// #![warn(clippy::unwrap_used)]
 
 extern crate alloc;
 

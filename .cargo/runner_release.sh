@@ -1,4 +1,4 @@
-#! /bin/sh
+#! /bin/bash
 #
 # This script will be executed by `cargo run`.
 
@@ -40,11 +40,10 @@ target/limine/limine-deploy $KERNEL.iso
 # -machine q35 -cpu EPYC
 echo "Running in release mode." >&2
 qemu-system-x86_64 \
-    -cpu host -enable-kvm -M smm=off \
+    -machine q35 -cpu EPYC -M smm=off \
     -D target/log.txt -d int,guest_errors -no-reboot -no-shutdown \
     -s \
     -serial stdio \
-    -serial pty \
     -serial file:target/fb_log.txt \
     -m 4G \
     -cdrom $KERNEL.iso >&2

@@ -9,14 +9,20 @@ pub struct RingBuffer<T, const CAP: usize> {
     full: bool,
 }
 
-impl<T, const CAP: usize> RingBuffer<T, CAP> {
-    pub const fn new() -> RingBuffer<T, CAP> {
+impl<T, const CAP: usize> Default for RingBuffer<T, CAP> {
+    fn default() -> Self {
         RingBuffer {
             buf: unsafe { MaybeUninit::uninit().assume_init() },
             rp: 0,
             wp: 0,
             full: false,
         }
+    }
+}
+
+impl<T, const CAP: usize> RingBuffer<T, CAP> {
+    pub fn new() -> RingBuffer<T, CAP> {
+        Self::default()
     }
 
     pub fn is_writable(&self) -> bool {

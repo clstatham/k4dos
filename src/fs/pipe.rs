@@ -109,6 +109,7 @@ pub struct PipeFs {
 }
 
 impl PipeFs {
+    #[allow(clippy::new_without_default)]
     pub const fn new() -> Self {
         Self {
             pipes: IrqMutex::new(Vec::new()),

@@ -202,6 +202,7 @@ impl<'a> SyscallHandler<'a> {
         let req = req.read_volatile::<TimeSpec>()?;
         assert_eq!(req.tv_nsec % 1000000, 0);
         let duration = req.tv_sec * 1000 + req.tv_nsec / 1000000;
+        #[allow(clippy::redundant_guards)]
         match get_scheduler().sleep(Some(duration as usize)) {
             Ok(_) => {}
             Err(KError::Errno { errno, .. }) if errno == Errno::EINTR => {

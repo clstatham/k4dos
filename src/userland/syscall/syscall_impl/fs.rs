@@ -78,7 +78,7 @@ impl<'a> SyscallHandler<'a> {
         let buf_val = buf.value();
         let ubuf = UserBufferMut::from_vaddr(buf, len);
         let mut writer = UserBufferWriter::from(ubuf);
-        writer.write_bytes(cwd.as_str().as_bytes()).unwrap(); // this currently never returns Err; may change
+        writer.write_bytes(cwd.as_bytes()).unwrap(); // this currently never returns Err; may change
         Ok(buf_val as isize)
     }
 
