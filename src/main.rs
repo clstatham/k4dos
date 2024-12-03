@@ -4,11 +4,8 @@
     lang_items,
     abi_x86_interrupt,
     naked_functions,
-    asm_const,
     ptr_internals,
-    const_refs_to_cell,
     slice_pattern,
-    is_sorted,
     map_try_insert,
     iter_advance_by,
     alloc_error_handler

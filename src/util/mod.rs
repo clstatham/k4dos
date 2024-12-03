@@ -15,5 +15,5 @@ pub const fn align_down(val: usize, align: usize) -> usize {
 }
 #[inline]
 pub const fn align_up(val: usize, align: usize) -> usize {
-    (val + align - 1) / align * align
+    val.div_ceil(align) * align
 }

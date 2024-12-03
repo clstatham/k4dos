@@ -7,7 +7,7 @@ use embedded_graphics::{
     prelude::*,
     text::{Alignment, Text},
 };
-use limine::LimineFramebufferResponse;
+use limine::response::FramebufferResponse;
 use spin::Once;
 
 use crate::{
@@ -355,17 +355,17 @@ pub fn _fb_print(args: core::fmt::Arguments) {
     });
 }
 
-pub fn init(fb_tag: &LimineFramebufferResponse) -> KResult<()> {
-    let fb_tag = unsafe { &*fb_tag.framebuffers().first().unwrap().as_ptr() };
-    let fb_base = fb_tag.address.as_ptr().unwrap() as usize;
+pub fn init(fb_tag: &FramebufferResponse) -> KResult<()> {
+    let fb_tag = fb_tag.framebuffers().next().unwrap();
+    let fb_base = fb_tag.addr() as usize;
     log::debug!("FB addr: {:#x}", fb_base);
     let framebuf = FrameBuffer {
-        back_buffer: alloc::vec![0u32; fb_tag.width as usize * fb_tag.height as usize]
+        back_buffer: alloc::vec![0u32; fb_tag.width() as usize * fb_tag.height() as usize]
             .into_boxed_slice(),
         start_addr: VirtAddr::new(fb_base),
-        width: fb_tag.width as usize,
-        height: fb_tag.height as usize,
-        bpp: fb_tag.bpp as usize,
+        width: fb_tag.width() as usize,
+        height: fb_tag.height() as usize,
+        bpp: fb_tag.bpp() as usize,
         text_buf: [[None; BUFFER_WIDTH]; BUFFER_HEIGHT],
         text_cursor_x: 0,
         text_cursor_y: 0,

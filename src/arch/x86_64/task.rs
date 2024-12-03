@@ -70,7 +70,7 @@ pub fn arch_context_switch(prev: &mut ArchTask, next: &mut ArchTask) {
 
 #[naked]
 unsafe extern "C" fn iretq_init() -> ! {
-    core::arch::asm!(
+    core::arch::naked_asm!(
         "
     cli
     
@@ -81,33 +81,29 @@ unsafe extern "C" fn iretq_init() -> ! {
     
     iretq
     ",
-        options(noreturn)
     )
 }
 
 #[naked]
 unsafe extern "C" fn fork_init() -> ! {
-    core::arch::asm!(
-        concat!(
-            "
+    core::arch::naked_asm!(concat!(
+        "
         cli
         
         add rsp, 8
         ",
-            crate::pop_regs!(),
-            "
+        crate::pop_regs!(),
+        "
 
         swapgs
         iretq
     "
-        ),
-        options(noreturn)
-    )
+    ),)
 }
 
 #[naked]
 unsafe extern "C" fn context_switch(_prev: &mut core::ptr::Unique<Context>, _next: &Context) {
-    core::arch::asm!(
+    core::arch::naked_asm!(
         "
         pushfq
         push rbp
@@ -131,7 +127,6 @@ unsafe extern "C" fn context_switch(_prev: &mut core::ptr::Unique<Context>, _nex
         ret
 
     ",
-        options(noreturn)
     )
 }
 
@@ -153,7 +148,7 @@ pub struct Context {
 #[naked]
 unsafe extern "C" fn exec_entry(rcx: usize, rsp: usize, r11: usize) -> ! {
     unsafe {
-        core::arch::asm!(
+        core::arch::naked_asm!(
             "
             cli
             swapgs
@@ -184,7 +179,6 @@ unsafe extern "C" fn exec_entry(rcx: usize, rsp: usize, r11: usize) -> ! {
             sysretq
             ",
             user_ds = const((USER_DS_IDX as u64) << 3 | 3),
-            options(noreturn)
         )
     }
 }

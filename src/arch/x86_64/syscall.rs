@@ -1,3 +1,5 @@
+use core::mem::offset_of;
+
 use x86::msr::{rdmsr, wrmsr};
 
 use crate::userland::syscall::{
@@ -61,9 +63,8 @@ macro_rules! pop_regs {
 
 #[naked]
 pub unsafe extern "C" fn syscall_entry() {
-    use memoffset::offset_of;
     use x86_64::structures::tss::TaskStateSegment;
-    core::arch::asm!(
+    core::arch::naked_asm!(
         concat!(
             "
         cli
@@ -88,7 +89,7 @@ pub unsafe extern "C" fn syscall_entry() {
             pop_regs!(),
             "
         test dword ptr [rsp + 4], 0xFFFF8000
-        jnz 1f
+        jnz 2f
 
         pop rcx
         add rsp, 8
@@ -99,7 +100,7 @@ pub unsafe extern "C" fn syscall_entry() {
         cli
         swapgs
         sysretq
-    1:
+    2:
         xor rcx, rcx
         xor r11, r11
         cli
@@ -112,7 +113,6 @@ pub unsafe extern "C" fn syscall_entry() {
         ksp = const(offset_of!(TaskStateSegment, privilege_stack_table)),
         ss_sel = const((crate::arch::gdt::USER_DS_IDX << 3) | 3),
         cs_sel = const((crate::arch::gdt::USER_CS_IDX << 3) | 3),
-        options(noreturn)
     )
 }
 

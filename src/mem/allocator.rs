@@ -3,7 +3,7 @@ use core::ops::{Index, IndexMut};
 use alloc::vec::Vec;
 use arrayvec::ArrayVec;
 use buddy_system_allocator::LockedHeap;
-use limine::{LimineMemmapEntry, LimineMemoryMapEntryType, NonNullPtr};
+use limine::memory_map::{Entry, EntryType};
 use spin::Once;
 
 use super::addr::{PhysAddr, VirtAddr};
@@ -70,18 +70,17 @@ pub fn free_kernel_pages(pages: &mut AllocatedPages, merge: bool) -> KResult<()>
     Ok(())
 }
 
-pub fn init(memmap: &mut [NonNullPtr<LimineMemmapEntry>]) -> KResult<()> {
+pub fn init(memmap: &[&Entry]) -> KResult<()> {
     let mut frame_alloc = FrameAllocator::new_static();
     for entry in memmap
         .iter()
-        .filter(|entry| entry.typ == LimineMemoryMapEntryType::Usable)
+        .filter(|entry| entry.entry_type == EntryType::USABLE)
     {
-        let entry = unsafe { &*entry.as_ptr() };
-        if (entry.len as usize) < PAGE_SIZE {
+        if (entry.length as usize) < PAGE_SIZE {
             continue;
         }
         let start = entry.base as usize;
-        let end = start + entry.len as usize;
+        let end = start + entry.length as usize;
         let frames = FrameRange::new(
             Frame::containing_address(PhysAddr::new(start)),
             Frame::containing_address(PhysAddr::new(end)),

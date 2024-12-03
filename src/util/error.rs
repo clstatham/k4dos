@@ -26,7 +26,7 @@ impl<'a> KError<'a> {
     }
 }
 
-impl<'a> Debug for KError<'a> {
+impl Debug for KError<'_> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
             // KError::Error { err } => write!(f, "{:?}", err),
@@ -40,7 +40,7 @@ impl<'a> Debug for KError<'a> {
     }
 }
 
-impl<'a> Display for KError<'a> {
+impl Display for KError<'_> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         write!(f, "{:?}", self)
     }

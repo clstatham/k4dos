@@ -37,7 +37,7 @@ pub const F_SETLK: c_int = 6;
 pub const F_LINUX_SPECIFIC_BASE: c_int = 1024;
 pub const F_DUPFD_CLOEXEC: c_int = F_LINUX_SPECIFIC_BASE + 6;
 
-impl<'a> SyscallHandler<'a> {
+impl SyscallHandler<'_> {
     pub fn sys_fcntl(&mut self, fd: FileDesc, cmd: c_int, arg: usize) -> KResult<isize> {
         let current = current_task();
         let mut files = current.opened_files.lock();
@@ -69,7 +69,7 @@ impl<'a> SyscallHandler<'a> {
     pub fn sys_getcwd(&mut self, buf: VirtAddr, len: usize) -> KResult<isize> {
         let cwd = current_task().root_fs.lock().cwd_path().resolve_abs_path();
 
-        if len < cwd.as_str().as_bytes().len() {
+        if len < cwd.as_str().len() {
             return Err(errno!(Errno::ERANGE, "sys_getcwd(): buffer too small"));
         }
 
@@ -164,7 +164,7 @@ fn create(path: &Path, _flags: OpenFlags, mode: FileMode) -> KResult<INode> {
     Ok(inode)
 }
 
-impl<'a> SyscallHandler<'a> {
+impl SyscallHandler<'_> {
     pub fn sys_open(&mut self, path: &Path, flags: OpenFlags, mode: FileMode) -> KResult<isize> {
         let current = current_task();
         // log::trace!("Attempting to open {}", path);
@@ -250,7 +250,7 @@ impl<'a> SyscallHandler<'a> {
     }
 }
 
-impl<'a> SyscallHandler<'a> {
+impl SyscallHandler<'_> {
     pub fn sys_poll(&mut self, fds: VirtAddr, nfds: c_nfds, timeout: c_int) -> KResult<isize> {
         let timeout = if timeout >= 0 {
             Some(timeout as usize)
@@ -344,7 +344,7 @@ pub struct IoVec {
     len: usize,
 }
 
-impl<'a> SyscallHandler<'a> {
+impl SyscallHandler<'_> {
     pub fn sys_readv(
         &mut self,
         fd: FileDesc,

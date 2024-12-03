@@ -1,8 +1,9 @@
 use alloc::sync::Arc;
-use limine::{
-    LimineBootTimeRequest, LimineFramebufferRequest, LimineHhdmRequest, LimineKernelFileRequest,
-    LimineMemmapRequest, LimineStackSizeRequest,
+use limine::request::{
+    BootTimeRequest, FramebufferRequest, HhdmRequest, KernelFileRequest, MemoryMapRequest,
+    StackSizeRequest,
 };
+
 use x86::{
     controlregs::{self, Cr0, Cr4, Xcr0},
     cpuid::CpuId,
@@ -36,76 +37,50 @@ pub mod task;
 pub mod time;
 
 // static BOOT_INFO: LimineBootInfoRequest = LimineBootInfoRequest::new(0);
-static HHDM: LimineHhdmRequest = LimineHhdmRequest::new(0);
-static STACK: LimineStackSizeRequest =
-    LimineStackSizeRequest::new(0).stack_size(KERNEL_STACK_SIZE as u64);
-static BOOT_TIME: LimineBootTimeRequest = LimineBootTimeRequest::new(0);
-static FB_REQUEST: LimineFramebufferRequest = LimineFramebufferRequest::new(0);
-static MEM_MAP: LimineMemmapRequest = LimineMemmapRequest::new(0);
-static KERNEL_FILE: LimineKernelFileRequest = LimineKernelFileRequest::new(0);
+static HHDM: HhdmRequest = HhdmRequest::new();
+static _STACK: StackSizeRequest = StackSizeRequest::new().with_size(KERNEL_STACK_SIZE as u64);
+static BOOT_TIME: BootTimeRequest = BootTimeRequest::new();
+static FB_REQUEST: FramebufferRequest = FramebufferRequest::new();
+static MEM_MAP: MemoryMapRequest = MemoryMapRequest::new();
+static KERNEL_FILE: KernelFileRequest = KernelFileRequest::new();
 
 // global_asm!(include_str!("boot.S"));
 
 pub fn arch_main() {
-    unsafe {
-        core::ptr::read_volatile(
-            STACK
-                .get_response()
-                .as_ptr()
-                .expect("Expected kernel stack to be readable"),
-        );
-    }
-
     interrupts::disable();
 
     let kernel_file = KERNEL_FILE
         .get_response()
-        .as_ptr()
         .expect("Error getting kernel binary from Limine");
-    let kernel_file = unsafe { &*kernel_file };
-    let kernel_file = unsafe {
-        &*kernel_file
-            .kernel_file
-            .as_ptr()
-            .expect("Expected pointer to kernel ELF file to be valid")
-    };
-    let kernel_file_base = kernel_file
-        .base
-        .as_ptr()
-        .expect("Expected pointer to base of kernel ELF to be valid");
-    let kernel_file_len = kernel_file.length as usize;
+    let kernel_file = kernel_file.file();
+    let kernel_file_base = kernel_file.addr();
+    let kernel_file_len = kernel_file.size() as usize;
     let kernel_file_data =
         unsafe { core::slice::from_raw_parts(kernel_file_base, kernel_file_len) };
     backtrace::KERNEL_ELF.call_once(|| {
         xmas_elf::ElfFile::new(kernel_file_data).expect("Error parsing kernel ELF file data")
     });
 
-    // crate::PHYSICAL_OFFSET.store(HHDM.get_response().get().unwrap().offset as usize, core::sync::atomic::Ordering::Release);
     crate::PHYSICAL_OFFSET.call_once(|| {
         HHDM.get_response()
-            .get()
             .expect("Error getting HHDM response from Limine")
-            .offset as usize
+            .offset() as usize
     });
 
     let memmap = MEM_MAP
         .get_response()
-        .get_mut()
         .expect("Error getting memory map response from Limine")
-        .memmap_mut();
+        .entries();
 
     crate::logging::init();
     log::info!("Logger initialized.");
 
     log::info!("Setting up time structures.");
-    let boot_time = unsafe {
-        &*BOOT_TIME
-            .get_response()
-            .as_ptr()
-            .expect("Error getting boot time response from Limine")
-    }
-    .boot_time;
-    time::init(boot_time);
+    let boot_time = BOOT_TIME
+        .get_response()
+        .expect("Error getting boot time response from Limine")
+        .boot_time();
+    time::init(boot_time.as_secs() as i64);
 
     log::info!("Initializing FPU mechanisms.");
     let features = CpuId::new()
@@ -136,7 +111,6 @@ pub fn arch_main() {
     // let fb_tag = boot_info.framebuffer_tag().expect("No multiboot2 framebuffer tag found");
     let fb_resp = FB_REQUEST
         .get_response()
-        .get()
         .expect("Error getting framebuffer response from Limine");
     log::info!("Initializing kernel frame and page allocators.");
     mem::allocator::init(memmap).expect("Error initializing kernel frame and page allocators");

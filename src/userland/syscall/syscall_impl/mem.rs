@@ -9,7 +9,7 @@ use crate::{
     util::KResult,
 };
 
-impl<'a> SyscallHandler<'a> {
+impl SyscallHandler<'_> {
     pub fn sys_mmap(
         &mut self,
         addr: VirtAddr,

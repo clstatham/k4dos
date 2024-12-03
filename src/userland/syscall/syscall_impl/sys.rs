@@ -6,7 +6,7 @@ use crate::{
 
 const UTS_FIELD_LEN: usize = 65;
 
-impl<'a> SyscallHandler<'a> {
+impl SyscallHandler<'_> {
     pub fn sys_uname(&mut self, buf: VirtAddr) -> KResult<isize> {
         let mut writer = UserBufferWriter::from_vaddr(buf, UTS_FIELD_LEN * 6);
         writer.write_bytes_or_zeroes(b"Linux", UTS_FIELD_LEN)?;

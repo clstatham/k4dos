@@ -20,7 +20,7 @@ const ARG_LEN_MAX: usize = 4096;
 const ENV_MAX: usize = 512;
 const ENV_LEN_MAX: usize = 4096;
 
-impl<'a> SyscallHandler<'a> {
+impl SyscallHandler<'_> {
     pub fn sys_arch_prctl(&mut self, code: i32, uaddr: VirtAddr) -> KResult<isize> {
         arch_prctl(current_task(), code, uaddr)?;
         Ok(0)
@@ -147,7 +147,7 @@ bitflags! {
     }
 }
 
-impl<'a> SyscallHandler<'a> {
+impl SyscallHandler<'_> {
     pub fn sys_wait4(
         &mut self,
         pid: TaskId,

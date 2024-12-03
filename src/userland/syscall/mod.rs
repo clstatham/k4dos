@@ -55,7 +55,7 @@ pub struct SyscallHandler<'a> {
     pub frame: &'a mut InterruptFrame,
 }
 
-impl<'a> SyscallHandler<'a> {
+impl SyscallHandler<'_> {
     #[allow(clippy::too_many_arguments)]
     pub fn dispatch(
         &mut self,

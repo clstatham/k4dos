@@ -176,7 +176,7 @@ struct KadosElfLoader<'a> {
     entry_point: VirtAddr,
 }
 
-impl<'a> ElfLoader for KadosElfLoader<'a> {
+impl ElfLoader for KadosElfLoader<'_> {
     fn allocate(
         &mut self,
         load_headers: elfloader::LoadableHeaders,

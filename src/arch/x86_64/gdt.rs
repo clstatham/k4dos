@@ -28,8 +28,8 @@ static mut STACK: [u8; KERNEL_STACK_SIZE] = [0; KERNEL_STACK_SIZE];
 lazy_static! {
     static ref BOOT_GDT: (GlobalDescriptorTable, [SegmentSelector; 2]) = {
         let mut gdt = GlobalDescriptorTable::new();
-        let kernel_code_sel = gdt.add_entry(Descriptor::kernel_code_segment());
-        let kernel_data_sel = gdt.add_entry(Descriptor::kernel_data_segment());
+        let kernel_code_sel = gdt.append(Descriptor::kernel_code_segment());
+        let kernel_data_sel = gdt.append(Descriptor::kernel_data_segment());
         (gdt, [kernel_code_sel, kernel_data_sel])
     };
 }
@@ -61,21 +61,27 @@ pub fn init() {
 
     let tss = get_tss();
     *tss = TaskStateSegment::new();
-    tss.privilege_stack_table[0] =
-        x86_64::VirtAddr::new(unsafe { STACK.as_ptr() } as u64 + KERNEL_STACK_SIZE as u64);
+
+    tss.privilege_stack_table[0] = x86_64::VirtAddr::new(
+        unsafe {
+            #[allow(static_mut_refs)]
+            STACK.as_mut_ptr()
+        } as u64
+            + KERNEL_STACK_SIZE as u64,
+    );
 
     let gdt = &mut get_kpcr().cpu_local.gdt;
     *gdt = GlobalDescriptorTable::new();
     // kernel code
-    let kernel_cs_sel = gdt.add_entry(Descriptor::kernel_code_segment());
+    let kernel_cs_sel = gdt.append(Descriptor::kernel_code_segment());
     // kernel data
-    let kernel_ds_sel = gdt.add_entry(Descriptor::kernel_data_segment());
+    let kernel_ds_sel = gdt.append(Descriptor::kernel_data_segment());
     // TSS
-    let tss_sel = gdt.add_entry(Descriptor::tss_segment(tss));
+    let tss_sel = gdt.append(Descriptor::tss_segment(tss));
     // user data (syscall)
-    let _user_ds_sel = gdt.add_entry(Descriptor::user_data_segment());
+    let _user_ds_sel = gdt.append(Descriptor::user_data_segment());
     // user code
-    let _user_cs_sel = gdt.add_entry(Descriptor::user_code_segment());
+    let _user_cs_sel = gdt.append(Descriptor::user_code_segment());
 
     gdt.load();
 

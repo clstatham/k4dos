@@ -10,7 +10,7 @@ use crate::{
     util::{ctypes::c_int, errno::Errno, error::KResult},
 };
 
-impl<'a> SyscallHandler<'a> {
+impl SyscallHandler<'_> {
     pub fn sys_rt_sigprocmask(
         &mut self,
         how: usize,

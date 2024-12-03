@@ -88,7 +88,7 @@ pub struct BlockingMutexGuard<'a, T: ?Sized> {
     inner: ManuallyDrop<IrqMutexGuard<'a, T>>,
 }
 
-impl<'a, T: ?Sized> Drop for BlockingMutexGuard<'a, T> {
+impl<T: ?Sized> Drop for BlockingMutexGuard<'_, T> {
     fn drop(&mut self) {
         unsafe {
             ManuallyDrop::drop(&mut self.inner);
@@ -96,14 +96,14 @@ impl<'a, T: ?Sized> Drop for BlockingMutexGuard<'a, T> {
     }
 }
 
-impl<'a, T: ?Sized> Deref for BlockingMutexGuard<'a, T> {
+impl<T: ?Sized> Deref for BlockingMutexGuard<'_, T> {
     type Target = T;
     fn deref(&self) -> &T {
         &self.inner
     }
 }
 
-impl<'a, T: ?Sized> DerefMut for BlockingMutexGuard<'a, T> {
+impl<T: ?Sized> DerefMut for BlockingMutexGuard<'_, T> {
     fn deref_mut(&mut self) -> &mut T {
         &mut self.inner
     }
@@ -173,7 +173,7 @@ pub struct IrqMutexGuard<'a, T: ?Sized> {
     saved_intr_status: ManuallyDrop<SavedInterruptStatus>,
 }
 
-impl<'a, T: ?Sized> Drop for IrqMutexGuard<'a, T> {
+impl<T: ?Sized> Drop for IrqMutexGuard<'_, T> {
     fn drop(&mut self) {
         unsafe {
             ManuallyDrop::drop(&mut self.inner);
@@ -185,14 +185,14 @@ impl<'a, T: ?Sized> Drop for IrqMutexGuard<'a, T> {
     }
 }
 
-impl<'a, T: ?Sized> Deref for IrqMutexGuard<'a, T> {
+impl<T: ?Sized> Deref for IrqMutexGuard<'_, T> {
     type Target = T;
     fn deref(&self) -> &T {
         &self.inner
     }
 }
 
-impl<'a, T: ?Sized> DerefMut for IrqMutexGuard<'a, T> {
+impl<T: ?Sized> DerefMut for IrqMutexGuard<'_, T> {
     fn deref_mut(&mut self) -> &mut T {
         &mut self.inner
     }

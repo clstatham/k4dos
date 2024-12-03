@@ -74,9 +74,9 @@ lazy_static! {
             idt.security_exception
             .set_handler_addr(x86_64::VirtAddr::new(security_exception_handler as u64));
 
-            idt[TIMER_IRQ as usize].set_handler_addr(x86_64::VirtAddr::new(timer_handler as u64));
-            idt[KEYBOARD_IRQ as usize].set_handler_addr(x86_64::VirtAddr::new(keyboard_handler as u64));
-            idt[COM2_IRQ as usize].set_handler_addr(x86_64::VirtAddr::new(com2_handler as u64));
+            idt[TIMER_IRQ].set_handler_addr(x86_64::VirtAddr::new(timer_handler as u64));
+            idt[KEYBOARD_IRQ].set_handler_addr(x86_64::VirtAddr::new(keyboard_handler as u64));
+            idt[COM2_IRQ].set_handler_addr(x86_64::VirtAddr::new(com2_handler as u64));
         }
 
 
@@ -134,13 +134,13 @@ macro_rules! interrupt_handler {
     ($name:ident, $num:literal, $push_error:expr) => {
         #[naked]
         unsafe extern "C" fn $name() {
-            core::arch::asm!(concat!(
+            core::arch::naked_asm!(concat!(
                 $push_error,
                 "
                 test qword ptr [rsp + 16], 0x3
-                jz 1f
+                jz 2f
                 swapgs
-            1:
+            2:
                 xchg [rsp], rax
                 ", crate::push_regs!(),"
                 push rax
@@ -154,14 +154,13 @@ macro_rules! interrupt_handler {
                 ", crate::pop_regs!(),"
 
                 test qword ptr [rsp + 8], 0x3
-                jz 2f
+                jz 3f
                 swapgs
-            2:
+            3:
                 iretq
                 "
             ),
-            num = const($num),
-            options(noreturn))
+            num = const($num))
         }
     };
 }
