@@ -349,8 +349,7 @@ impl File for Tty {
             }
             TCSETS | TCSETSW => {
                 let arg = VirtAddr::new(arg);
-                let termios = arg.read_volatile::<Termios>()?;
-                log::debug!("Termios: {:?}", termios);
+                let termios = unsafe { arg.read_volatile::<Termios>()? };
                 *self.discipline.termios.lock() = termios;
             }
             TIOCGPGRP => {
@@ -368,8 +367,8 @@ impl File for Tty {
             }
             TIOCSPGRP => {
                 let arg = VirtAddr::new(arg);
-                let pgid = arg.read::<c_int>()?;
-                let pg = get_scheduler().find_or_create_group(*pgid);
+                let pgid = unsafe { arg.read::<c_int>()? };
+                let pg = get_scheduler().find_or_create_group(pgid);
                 self.discipline.set_foreground_group(Arc::downgrade(&pg));
             }
             TIOCGWINSZ => {

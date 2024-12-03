@@ -64,9 +64,10 @@ macro_rules! pop_regs {
 #[naked]
 pub unsafe extern "C" fn syscall_entry() {
     use x86_64::structures::tss::TaskStateSegment;
-    core::arch::naked_asm!(
-        concat!(
-            "
+    unsafe {
+        core::arch::naked_asm!(
+            concat!(
+                "
         cli
         swapgs
         mov gs:[{off} + {sp}], rsp
@@ -79,15 +80,15 @@ pub unsafe extern "C" fn syscall_entry() {
 
         push rax
         ",
-            push_regs!(),
-            "
+                push_regs!(),
+                "
         mov rdi, rsp
         cld
         call x64_handle_syscall
         cli
         ",
-            pop_regs!(),
-            "
+                pop_regs!(),
+                "
         test dword ptr [rsp + 4], 0xFFFF8000
         jnz 2f
 
@@ -107,18 +108,19 @@ pub unsafe extern "C" fn syscall_entry() {
         swapgs
         iretq
         "
-        ),
-        off = const(0),
-        sp = const(offset_of!(crate::arch::cpu_local::Kpcr, user_rsp0_tmp)),
-        ksp = const(offset_of!(TaskStateSegment, privilege_stack_table)),
-        ss_sel = const((crate::arch::gdt::USER_DS_IDX << 3) | 3),
-        cs_sel = const((crate::arch::gdt::USER_CS_IDX << 3) | 3),
-    )
+            ),
+            off = const(0),
+            sp = const(offset_of!(crate::arch::cpu_local::Kpcr, user_rsp0_tmp)),
+            ksp = const(offset_of!(TaskStateSegment, privilege_stack_table)),
+            ss_sel = const((crate::arch::gdt::USER_DS_IDX << 3) | 3),
+            cs_sel = const((crate::arch::gdt::USER_CS_IDX << 3) | 3),
+        )
+    }
 }
 
 #[no_mangle]
 unsafe extern "C" fn x64_handle_syscall(ctx: *mut InterruptFrame) -> isize {
-    let context = &*ctx;
+    let context = unsafe { core::ptr::read(ctx) };
     handle_syscall(
         context.rdi,
         context.rsi,
@@ -170,11 +172,13 @@ pub unsafe fn init() {
     let mut star = 0u64;
     star |= (user_ds_offset - 8) << 48;
     star |= kernel_cs_offset << 32;
-    wrmsr(x86::msr::IA32_STAR, star);
-    wrmsr(x86::msr::IA32_LSTAR, syscall_entry as *const u8 as u64);
-    wrmsr(x86::msr::IA32_FMASK, 0x200);
+    unsafe {
+        wrmsr(x86::msr::IA32_STAR, star);
+        wrmsr(x86::msr::IA32_LSTAR, syscall_entry as *const u8 as u64);
+        wrmsr(x86::msr::IA32_FMASK, 0x200);
 
-    wrmsr(x86::msr::IA32_CSTAR, 0);
+        wrmsr(x86::msr::IA32_CSTAR, 0);
 
-    wrmsr(x86::msr::IA32_EFER, rdmsr(x86::msr::IA32_EFER) | 1);
+        wrmsr(x86::msr::IA32_EFER, rdmsr(x86::msr::IA32_EFER) | 1);
+    }
 }

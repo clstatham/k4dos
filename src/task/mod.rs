@@ -326,7 +326,7 @@ impl Task {
         }
 
         if set.value() != 0 {
-            let new_set = set.read_volatile::<[u8; 8]>()?;
+            let new_set = unsafe { set.read_volatile::<[u8; 8]>()? };
             let new_set = SigSet::new(new_set);
             match how {
                 SignalMask::Block => *sigset |= new_set,

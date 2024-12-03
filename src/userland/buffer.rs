@@ -72,37 +72,14 @@ impl<'a> UserBufferMut<'a> {
     }
 }
 
-// unsafe extern "C" fn user_strncpy(_dst: *mut u8, _src: *const u8, _max_len: usize) -> usize {
-//     let out: usize;
-//     core::arch::asm!("
-//         mov rcx, rdx
-//         test rcx, rcx
-//         jz 2f
-//     3:
-//         mov al, [rsi]
-
-//         test al, al
-//         jz 2f
-
-//         mov [rdi], al
-//         add rdi, 1
-//         add rsi, 1
-//         loop 3b
-//     2:
-//         sub rdx, rcx
-//         mov {}, rdx
-//     ", out(reg) out);
-//     out
-// }
-
 pub unsafe fn user_strncpy_rust(dst: *mut u8, src: *const u8, max_len: usize) -> usize {
     let mut read_len = 0usize;
     loop {
-        let byte = src.add(read_len).read_volatile();
+        let byte = unsafe { src.add(read_len).read_volatile() };
         if byte == b'\0' || read_len > max_len {
             break;
         }
-        dst.add(read_len).write_volatile(byte);
+        unsafe { dst.add(read_len).write_volatile(byte) };
         read_len += 1;
     }
     read_len
@@ -163,9 +140,9 @@ impl<'a> UserBufferReader<'a> {
             Inner::Slice(src) => {
                 dst[..read_len].copy_from_slice(&src[self.pos..(self.pos + read_len)])
             }
-            Inner::User { base, .. } => {
+            Inner::User { base, .. } => unsafe {
                 base.add(self.pos).read_bytes(&mut dst[..read_len])?;
-            }
+            },
         }
 
         self.pos += read_len;
@@ -181,7 +158,7 @@ impl<'a> UserBufferReader<'a> {
                 // this could cause a page fault if the inner slice of the buffer isn't mapped to the current page table!
                 unsafe { *(src.as_ptr().add(self.pos) as *const T) }
             }
-            Inner::User { base, .. } => *base.add(self.pos).read()?,
+            Inner::User { base, .. } => unsafe { base.add(self.pos).read()? },
         };
 
         self.pos += size_of::<T>();

@@ -77,7 +77,7 @@ impl<T: ?Sized> BlockingMutex<T> {
     /// # Safety
     /// See `spin::SpinMutex::force_unlock()`
     pub unsafe fn force_unlock(&self) {
-        self.inner.force_unlock();
+        unsafe { self.inner.force_unlock() };
     }
 }
 
@@ -161,7 +161,7 @@ impl<T: ?Sized> IrqMutex<T> {
     /// # Safety
     /// See `spin::SpinMutex::force_unlock()`
     pub unsafe fn force_unlock(&self) {
-        self.inner.force_unlock();
+        unsafe { self.inner.force_unlock() };
     }
 }
 

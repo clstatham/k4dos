@@ -12,6 +12,7 @@
 )]
 #![allow(internal_features)]
 #![allow(clippy::missing_safety_doc)]
+#![deny(unsafe_op_in_unsafe_fn)]
 // #![warn(clippy::unwrap_used)]
 
 extern crate alloc;
@@ -42,12 +43,10 @@ pub static PHYSICAL_OFFSET: Once<usize> = Once::new();
 #[inline]
 pub fn phys_offset() -> VirtAddr {
     VirtAddr::new(*PHYSICAL_OFFSET.get().unwrap())
-    // VirtAddr::new(0xffff800000000000)
 }
 
 #[no_mangle]
 pub extern "C" fn start() -> ! {
-    // let boot_info = unsafe { multiboot2::load(boot_info_addr) }.unwrap();
     arch::arch_main();
 
     hcf();

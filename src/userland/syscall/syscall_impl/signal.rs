@@ -47,10 +47,10 @@ impl SyscallHandler<'_> {
                 SigAction::Terminate => SIG_ERR, // todo?
                 SigAction::Handler { handler } => handler as usize,
             };
-            oldact.write(action)?;
+            unsafe { oldact.write(action) }?;
         }
         if act != VirtAddr::null() {
-            let handler = *act.read::<usize>()?;
+            let handler = unsafe { act.read::<usize>() }?;
             let new_action = match handler {
                 SIG_IGN => SigAction::Ignore,
                 SIG_DFL => match DEFAULT_ACTIONS.get(signum as usize) {

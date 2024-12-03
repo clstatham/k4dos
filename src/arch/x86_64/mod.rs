@@ -36,15 +36,12 @@ pub mod syscall;
 pub mod task;
 pub mod time;
 
-// static BOOT_INFO: LimineBootInfoRequest = LimineBootInfoRequest::new(0);
 static HHDM: HhdmRequest = HhdmRequest::new();
 static _STACK: StackSizeRequest = StackSizeRequest::new().with_size(KERNEL_STACK_SIZE as u64);
 static BOOT_TIME: BootTimeRequest = BootTimeRequest::new();
 static FB_REQUEST: FramebufferRequest = FramebufferRequest::new();
 static MEM_MAP: MemoryMapRequest = MemoryMapRequest::new();
 static KERNEL_FILE: KernelFileRequest = KernelFileRequest::new();
-
-// global_asm!(include_str!("boot.S"));
 
 pub fn arch_main() {
     interrupts::disable();

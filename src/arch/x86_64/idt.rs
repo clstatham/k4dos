@@ -134,33 +134,35 @@ macro_rules! interrupt_handler {
     ($name:ident, $num:literal, $push_error:expr) => {
         #[naked]
         unsafe extern "C" fn $name() {
-            core::arch::naked_asm!(concat!(
-                $push_error,
-                "
-                test qword ptr [rsp + 16], 0x3
-                jz 2f
-                swapgs
-            2:
-                xchg [rsp], rax
-                ", crate::push_regs!(),"
-                push rax
+            unsafe {
+                core::arch::naked_asm!(concat!(
+                    $push_error,
+                    "
+                    test qword ptr [rsp + 16], 0x3
+                    jz 2f
+                    swapgs
+                2:
+                    xchg [rsp], rax
+                    ", crate::push_regs!(),"
+                    push rax
 
-                mov rdi, {num}
-                mov rsi, rsp
+                    mov rdi, {num}
+                    mov rsi, rsp
 
-                call x64_handle_interrupt
+                    call x64_handle_interrupt
 
-                add rsp, 8
-                ", crate::pop_regs!(),"
+                    add rsp, 8
+                    ", crate::pop_regs!(),"
 
-                test qword ptr [rsp + 8], 0x3
-                jz 3f
-                swapgs
-            3:
-                iretq
-                "
-            ),
-            num = const($num))
+                    test qword ptr [rsp + 8], 0x3
+                    jz 3f
+                    swapgs
+                3:
+                    iretq
+                    "
+                ),
+                num = const($num))
+            }
         }
     };
 }

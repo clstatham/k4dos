@@ -70,41 +70,46 @@ pub fn arch_context_switch(prev: &mut ArchTask, next: &mut ArchTask) {
 
 #[naked]
 unsafe extern "C" fn iretq_init() -> ! {
-    core::arch::naked_asm!(
-        "
+    unsafe {
+        core::arch::naked_asm!(
+            "
     cli
     
     add rsp, 8
     ",
-        crate::pop_regs!(),
-        "
+            crate::pop_regs!(),
+            "
     
     iretq
     ",
-    )
+        )
+    }
 }
 
 #[naked]
 unsafe extern "C" fn fork_init() -> ! {
-    core::arch::naked_asm!(concat!(
-        "
+    unsafe {
+        core::arch::naked_asm!(concat!(
+            "
         cli
         
         add rsp, 8
         ",
-        crate::pop_regs!(),
-        "
+            crate::pop_regs!(),
+            "
 
         swapgs
         iretq
     "
-    ),)
+        ),)
+    }
 }
 
 #[naked]
 unsafe extern "C" fn context_switch(_prev: &mut core::ptr::Unique<Context>, _next: &Context) {
-    core::arch::naked_asm!(
-        "
+    unsafe {
+        core::arch::naked_asm!(
+            "
         pushfq
         push rbp
         push rbx
@@ -127,7 +132,8 @@ unsafe extern "C" fn context_switch(_prev: &mut core::ptr::Unique<Context>, _nex
         ret
 
     ",
-    )
+        )
+    }
 }
 
 #[derive(Clone, Debug, Default)]

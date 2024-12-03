@@ -62,9 +62,9 @@ impl SyscallHandler<'_> {
         let mut argv = Vec::new();
         for i in 0..ARG_MAX {
             let ptr = argv_addr.add(i * size_of::<usize>());
-            let str_ptr = ptr.read::<usize>()?;
-            if *str_ptr != 0 {
-                argv.push(UserCStr::new(VirtAddr::new(*str_ptr), ARG_LEN_MAX)?);
+            let str_ptr = unsafe { ptr.read::<usize>() }?;
+            if str_ptr != 0 {
+                argv.push(UserCStr::new(VirtAddr::new(str_ptr), ARG_LEN_MAX)?);
             } else {
                 break;
             }
@@ -73,9 +73,9 @@ impl SyscallHandler<'_> {
         let mut envp = Vec::new();
         for i in 0..ENV_MAX {
             let ptr = envp_addr.add(i * size_of::<usize>());
-            let str_ptr = ptr.read::<usize>()?;
-            if *str_ptr != 0 {
-                envp.push(UserCStr::new(VirtAddr::new(*str_ptr), ENV_LEN_MAX)?);
+            let str_ptr = unsafe { ptr.read::<usize>() }?;
+            if str_ptr != 0 {
+                envp.push(UserCStr::new(VirtAddr::new(str_ptr), ENV_LEN_MAX)?);
             } else {
                 break;
             }
@@ -192,14 +192,14 @@ impl SyscallHandler<'_> {
             .retain(|p| p.pid() != got_pid);
 
         if status.value() != 0 {
-            status.write::<c_int>(status_val)?;
+            unsafe { status.write::<c_int>(status_val) }?;
         }
 
         Ok(got_pid.as_usize() as isize)
     }
 
     pub fn sys_nanosleep(&mut self, req: VirtAddr, _rem: VirtAddr) -> KResult<isize> {
-        let req = req.read_volatile::<TimeSpec>()?;
+        let req = unsafe { req.read_volatile::<TimeSpec>() }?;
         assert_eq!(req.tv_nsec % 1000000, 0);
         let duration = req.tv_sec * 1000 + req.tv_nsec / 1000000;
         #[allow(clippy::redundant_guards)]

@@ -113,14 +113,14 @@ pub struct SockAddrInet {
 }
 
 pub fn read_sockaddr(addr: VirtAddr, len: usize) -> KResult<SockAddrInet> {
-    let family = addr.read_volatile::<u16>()?;
+    let family = unsafe { addr.read_volatile::<u16>()? };
     let sockaddr = match Domain::try_from(family as usize)? {
         Domain::Inet => {
             if len < core::mem::size_of::<SockAddrInet>() {
                 return Err(errno!(Errno::EINVAL, "read_sockaddr(): buffer overflow"));
             }
 
-            addr.read_volatile::<SockAddrInet>()?
+            unsafe { addr.read_volatile::<SockAddrInet>()? }
         }
         Domain::Unix => {
             todo!()

@@ -285,8 +285,10 @@ impl SyscallHandler<'_> {
                     }
                     // log::debug!("revents: {:?}", revents);
 
-                    fds.add(reader.read_len())
-                        .write::<c_short>(revents.bits())?;
+                    unsafe {
+                        fds.add(reader.read_len())
+                            .write::<c_short>(revents.bits())?;
+                    }
 
                     reader.skip(size_of::<c_short>())?;
                 };
@@ -311,20 +313,22 @@ impl SyscallHandler<'_> {
     pub fn sys_stat(&mut self, path: &Path, buf: VirtAddr) -> KResult<isize> {
         // log::debug!("sys_stat-ing path {}", path);
         let stat = current_task().root_fs.lock().lookup(path, true)?.stat()?;
-        buf.write(stat)?;
+        unsafe {
+            buf.write(stat)?;
+        }
         Ok(0)
     }
 
     pub fn sys_lstat(&mut self, path: &Path, buf: VirtAddr) -> KResult<isize> {
         let stat = current_task().root_fs.lock().lookup(path, false)?.stat()?;
-        buf.write(stat)?;
+        unsafe { buf.write(stat) }?;
         Ok(0)
     }
 
     pub fn sys_fstat(&mut self, fd: FileDesc, buf: VirtAddr) -> KResult<isize> {
         let file = current_task().get_opened_file_by_fd(fd)?;
         let stat = file.path().inode.stat()?;
-        buf.write(stat)?;
+        unsafe { buf.write(stat) }?;
         Ok(0)
     }
 
@@ -356,7 +360,7 @@ impl SyscallHandler<'_> {
         let file = current_task().get_opened_file_by_fd(fd)?;
         let mut total: usize = 0;
         for i in 0..iov_count {
-            let mut iov: IoVec = *iov_base.add(i * size_of::<IoVec>()).read::<IoVec>()?;
+            let mut iov: IoVec = unsafe { iov_base.add(i * size_of::<IoVec>()).read::<IoVec>() }?;
 
             match total.checked_add(iov.len) {
                 Some(len) if len > isize::MAX as usize => {
@@ -389,7 +393,7 @@ impl SyscallHandler<'_> {
         let file = current_task().get_opened_file_by_fd(fd)?;
         let mut total: usize = 0;
         for i in 0..iov_count {
-            let mut iov: IoVec = *iov_base.add(i * size_of::<IoVec>()).read::<IoVec>()?;
+            let mut iov: IoVec = unsafe { iov_base.add(i * size_of::<IoVec>()).read::<IoVec>() }?;
 
             match total.checked_add(iov.len) {
                 Some(len) if len > isize::MAX as usize => {

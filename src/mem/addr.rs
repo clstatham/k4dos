@@ -182,23 +182,23 @@ impl VirtAddr {
         Ok(())
     }
 
-    pub fn read<T: Sized>(&self) -> KResult<&T> {
+    pub unsafe fn read<T: Sized + Copy>(&self) -> KResult<T> {
         self.read_ok::<T>()?;
-        Ok(unsafe { &*(self.as_ptr()) })
+        Ok(unsafe { core::ptr::read(self.as_ptr::<T>().cast()) })
     }
 
-    pub fn read_volatile<T: Sized + Copy>(&self) -> KResult<T> {
+    pub unsafe fn read_volatile<T: Sized + Copy>(&self) -> KResult<T> {
         self.read_ok::<T>()?;
         Ok(unsafe { self.as_ptr::<T>().read_volatile() })
     }
 
-    pub fn read_bytes(&self, buf: &mut [u8]) -> KResult<usize> {
+    pub unsafe fn read_bytes(&self, buf: &mut [u8]) -> KResult<usize> {
         self.read_ok::<u8>()?;
         unsafe { core::ptr::copy(self.as_ptr(), buf.as_mut_ptr(), buf.len()) };
         Ok(buf.len())
     }
 
-    pub fn write<T: Sized + Copy>(&self, t: T) -> KResult<()> {
+    pub unsafe fn write<T: Sized + Copy>(&self, t: T) -> KResult<()> {
         if self.addr == 0 {
             return Err(errno!(Errno::EFAULT, "write(): null VirtAddr"));
         }
@@ -242,19 +242,13 @@ impl VirtAddr {
     }
 
     #[inline]
-    pub fn align_down<U>(&self, align: U) -> Self
-    where
-        U: Into<usize>,
-    {
-        VirtAddr::new(align_down(self.addr, align.into()))
+    pub const fn align_down(&self, align: usize) -> Self {
+        VirtAddr::new(align_down(self.addr, align))
     }
 
     #[inline]
-    pub fn align_up<U>(&self, align: U) -> Self
-    where
-        U: Into<usize>,
-    {
-        VirtAddr::new(align_up(self.addr, align.into()))
+    pub const fn align_up(&self, align: usize) -> Self {
+        VirtAddr::new(align_up(self.addr, align))
     }
 
     pub fn p4_index(&self) -> usize {
