@@ -92,6 +92,7 @@ pub struct UserCStr {
 impl UserCStr {
     pub fn new(vaddr: VirtAddr, max_len: usize) -> KResult<UserCStr> {
         vaddr.align_ok::<u8>()?;
+        (vaddr + max_len).user_ok()?;
         let mut tmp = alloc::vec![0; max_len];
         // SAFE: we've validated the length of the string, and confirmed that it won't run into kernel memory
         let read_len = unsafe { user_strncpy_rust(tmp.as_mut_ptr(), vaddr.as_raw_ptr(), max_len) };
@@ -251,7 +252,7 @@ impl<'a> UserBufferWriter<'a> {
         Ok(())
     }
 
-    pub fn write_bytes_or_zeroes(&mut self, buf: &[u8], max_len: usize) -> KResult<()> {
+    pub fn write_bytes_or_zeros(&mut self, buf: &[u8], max_len: usize) -> KResult<()> {
         let zero_start = core::cmp::min(buf.len(), max_len);
         self.check_remaining_len(zero_start)?;
         self.write_bytes(&buf[..zero_start])?;

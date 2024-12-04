@@ -1,4 +1,4 @@
-use core::{alloc::Layout, slice::SlicePattern};
+use core::{alloc::Layout, ptr::Unique, slice::SlicePattern};
 
 use alloc::{alloc::alloc_zeroed, boxed::Box, vec::Vec};
 use x86::{
@@ -106,7 +106,7 @@ unsafe extern "C" fn fork_init() -> ! {
 }
 
 #[naked]
-unsafe extern "C" fn context_switch(_prev: &mut core::ptr::Unique<Context>, _next: &Context) {
+unsafe extern "C" fn context_switch(_prev: &mut Unique<Context>, _next: &Context) {
     unsafe {
         core::arch::naked_asm!(
             "
@@ -191,7 +191,7 @@ unsafe extern "C" fn exec_entry(rcx: usize, rsp: usize, r11: usize) -> ! {
 
 #[repr(C)]
 pub struct ArchTask {
-    context: core::ptr::Unique<Context>,
+    context: Unique<Context>,
     kernel_stack: Box<[u8]>,
     user: bool,
     pub(crate) address_space: AddressSpace,
@@ -204,7 +204,7 @@ pub struct ArchTask {
 impl ArchTask {
     pub fn new_idle() -> ArchTask {
         ArchTask {
-            context: core::ptr::Unique::dangling(),
+            context: Unique::dangling(),
             address_space: AddressSpace::current(),
             kernel_stack: alloc::vec![0u8; KERNEL_STACK_SIZE].into_boxed_slice(),
             user: false,
@@ -242,7 +242,7 @@ impl ArchTask {
         *context = Context::default();
         context.rip = iretq_init as usize;
         Self {
-            context: unsafe { core::ptr::Unique::new_unchecked(context) },
+            context: unsafe { Unique::new_unchecked(context) },
             address_space,
             kernel_stack: alloc::vec![0u8; KERNEL_STACK_SIZE].into_boxed_slice(),
             user: false,
@@ -335,7 +335,7 @@ impl ArchTask {
         assert_eq!(stack.top() % 16, 0);
 
         self.fpu_storage = Some(Self::alloc_fpu_storage());
-        self.context = core::ptr::Unique::dangling();
+        self.context = Unique::dangling();
         self.symtab = userland_entry.symtab;
         unsafe {
             exec_entry(userland_entry.entry_point.value(), stack.top(), 0x200);
@@ -371,12 +371,12 @@ impl ArchTask {
         let mut fpu_storage = Self::alloc_fpu_storage();
         fpu_storage.copy_from_slice(self.fpu_storage.as_ref().unwrap().as_slice());
         Ok(Self {
-            context: unsafe { core::ptr::Unique::new_unchecked(context) },
+            context: unsafe { Unique::new_unchecked(context) },
             address_space,
             user: true,
             kernel_stack: alloc::vec![0u8; KERNEL_STACK_SIZE].into_boxed_slice(),
-            fsbase: unsafe { self.fsbase.alias() },
-            gsbase: unsafe { self.gsbase.alias() },
+            fsbase: self.fsbase,
+            gsbase: self.gsbase,
             fpu_storage: Some(fpu_storage),
             symtab: self.symtab.clone(),
         })
@@ -421,12 +421,12 @@ impl ArchTask {
         fpu_storage.copy_from_slice(self.fpu_storage.as_ref().unwrap().as_slice());
 
         Ok(Self {
-            context: unsafe { core::ptr::Unique::new_unchecked(context) },
+            context: unsafe { Unique::new_unchecked(context) },
             address_space,
             user: true,
             fpu_storage: Some(fpu_storage),
-            gsbase: unsafe { self.gsbase.alias() },
-            fsbase: unsafe { self.fsbase.alias() },
+            gsbase: self.gsbase,
+            fsbase: self.fsbase,
             kernel_stack: alloc::vec![0u8; KERNEL_STACK_SIZE].into_boxed_slice(),
             symtab: self.symtab.clone(),
         })

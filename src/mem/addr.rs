@@ -165,7 +165,6 @@ impl VirtAddr {
     #[inline]
     pub const fn new(addr: usize) -> Self {
         assert!(is_canonical_virtaddr(addr));
-
         unsafe { Self::new_unchecked(addr) }
     }
 
@@ -182,11 +181,6 @@ impl VirtAddr {
     #[inline]
     pub const fn value(&self) -> usize {
         self.addr
-    }
-
-    #[inline]
-    pub const unsafe fn alias(&self) -> Self {
-        unsafe { Self::new_unchecked(self.addr) }
     }
 
     #[inline]
@@ -222,8 +216,8 @@ impl VirtAddr {
     }
 
     #[inline]
-    pub const fn into_ptr<T>(self) -> Ptr<T> {
-        Ptr::new(self)
+    pub const fn as_ptr<T>(self) -> UnsafePtr<T> {
+        UnsafePtr::new(self)
     }
 
     #[inline]
@@ -237,6 +231,23 @@ impl VirtAddr {
         }
         if self.addr % align_of::<T>() != 0 {
             return Err(errno!(Errno::EACCES, "align_ok(): unaligned VirtAddr"));
+        }
+        if !is_canonical_virtaddr(self.addr) {
+            return Err(errno!(Errno::EFAULT, "align_ok(): non-canonical VirtAddr"));
+        }
+
+        Ok(())
+    }
+
+    pub fn user_ok(&self) -> KResult<()> {
+        if self.addr == 0 {
+            return Err(errno!(Errno::EFAULT, "user_ok(): null VirtAddr"));
+        }
+        if !is_canonical_virtaddr(self.addr) {
+            return Err(errno!(Errno::EFAULT, "user_ok(): non-canonical VirtAddr"));
+        }
+        if self >= &crate::mem::consts::MAX_LOW_VADDR {
+            return Err(errno!(Errno::EFAULT, "user_ok(): VirtAddr in kernel space"));
         }
 
         Ok(())
@@ -394,12 +405,15 @@ impl Sub<VirtAddr> for VirtAddr {
     }
 }
 
-pub struct Ptr<T> {
-    ptr: VirtAddr,
+/// Like a `NonNull<T>`, but backed by a `VirtAddr`.
+#[derive(Debug, Clone, Copy)]
+#[repr(transparent)]
+pub struct UnsafePtr<T> {
+    addr: VirtAddr,
     _phantom: core::marker::PhantomData<*mut T>,
 }
 
-impl<T> Ptr<T> {
+impl<T> UnsafePtr<T> {
     pub const fn new(ptr: VirtAddr) -> Self {
         assert!(!ptr.is_null(), "Ptr::new(): null VirtAddr");
         assert!(
@@ -408,21 +422,29 @@ impl<T> Ptr<T> {
         );
 
         Self {
-            ptr,
+            addr: ptr,
             _phantom: core::marker::PhantomData,
         }
     }
 
-    pub fn from_ptr(ptr: *const T) -> Self {
+    pub fn from_ref(data: &T) -> Self {
+        Self::new(VirtAddr::new(data as *const T as usize))
+    }
+
+    pub fn from_mut(data: &mut T) -> Self {
+        Self::new(VirtAddr::new(data as *mut T as usize))
+    }
+
+    pub fn from_raw_ptr(ptr: *mut T) -> Self {
         Self::new(VirtAddr::new(ptr as usize))
     }
 
     pub fn as_raw_ptr(&self) -> *const T {
-        self.ptr.as_raw_ptr()
+        self.addr.as_raw_ptr()
     }
 
-    pub fn as_raw_ptr_mut(&mut self) -> *mut T {
-        self.ptr.as_raw_ptr_mut()
+    pub fn as_raw_ptr_mut(&self) -> *mut T {
+        self.addr.as_raw_ptr_mut()
     }
 
     pub unsafe fn deref(&self) -> &T {
@@ -433,8 +455,20 @@ impl<T> Ptr<T> {
         unsafe { &mut *self.as_raw_ptr_mut() }
     }
 
-    pub fn into_non_null(mut self) -> NonNull<T> {
-        assert!(!self.ptr.is_null(), "Ptr::as_non_null(): null VirtAddr");
+    pub unsafe fn as_ref(&self) -> Ref<'_, T> {
+        Ref::new(unsafe { self.deref() })
+    }
+
+    pub unsafe fn as_mut(&mut self) -> Mut<'_, T> {
+        Mut::new(unsafe { self.deref_mut() })
+    }
+
+    pub fn cast<U>(self) -> UnsafePtr<U> {
+        UnsafePtr::new(self.addr)
+    }
+
+    pub fn into_non_null(self) -> NonNull<T> {
+        assert!(!self.addr.is_null(), "Ptr::as_non_null(): null VirtAddr");
         NonNull::new(self.as_raw_ptr_mut()).unwrap()
     }
 
@@ -442,13 +476,350 @@ impl<T> Ptr<T> {
     where
         T: Copy,
     {
-        unsafe { self.ptr.read() }
+        unsafe { self.addr.read() }
     }
 
     pub fn read_volatile(&self) -> KResult<T>
     where
         T: Copy,
     {
-        unsafe { self.ptr.read_volatile() }
+        unsafe { self.addr.read_volatile() }
+    }
+}
+
+impl<T> fmt::Pointer for UnsafePtr<T> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        fmt::Pointer::fmt(&self.as_raw_ptr(), f)
+    }
+}
+
+/// Like a `NonNull<[T]>`, but backed by a `VirtAddr`.
+#[derive(Debug, Clone, Copy)]
+pub struct UnsafeSlice<T> {
+    addr: VirtAddr,
+    len: usize,
+    _phantom: core::marker::PhantomData<*mut [T]>,
+}
+
+impl<T> UnsafeSlice<T> {
+    pub fn new(ptr: VirtAddr, len: usize) -> Self {
+        assert!(!ptr.is_null(), "Slice::new(): null VirtAddr");
+        assert!(
+            ptr.value() % align_of::<T>() == 0,
+            "Slice::new(): unaligned VirtAddr"
+        );
+
+        Self {
+            addr: ptr,
+            len,
+            _phantom: core::marker::PhantomData,
+        }
+    }
+
+    pub fn len(&self) -> usize {
+        self.len
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len == 0
+    }
+
+    pub fn as_ptr(&self) -> UnsafePtr<T> {
+        UnsafePtr::new(self.addr)
+    }
+
+    pub unsafe fn as_slice(&self) -> &[T] {
+        unsafe { core::slice::from_raw_parts(self.addr.as_raw_ptr(), self.len) }
+    }
+
+    pub unsafe fn as_mut_slice(&mut self) -> &mut [T] {
+        unsafe { core::slice::from_raw_parts_mut(self.addr.as_raw_ptr_mut(), self.len) }
+    }
+
+    pub fn into_raw_parts(self) -> (VirtAddr, usize) {
+        (self.addr, self.len)
+    }
+}
+
+/// Like a `&T`, but backed by a `VirtAddr`.
+#[derive(Debug, Clone, Copy)]
+pub struct Ref<'a, T> {
+    addr: VirtAddr,
+    _phantom: core::marker::PhantomData<&'a T>,
+}
+
+impl<'a, T> Ref<'a, T> {
+    pub fn new(data: &'a T) -> Self {
+        Self {
+            addr: VirtAddr::new(data as *const T as usize),
+            _phantom: core::marker::PhantomData,
+        }
+    }
+
+    pub fn addr(&self) -> VirtAddr {
+        self.addr
+    }
+
+    #[allow(clippy::should_implement_trait)]
+    pub fn deref(&self) -> &'a T {
+        unsafe { &*self.as_raw_ptr() }
+    }
+
+    pub fn as_ptr(&self) -> UnsafePtr<T> {
+        self.addr.as_ptr()
+    }
+
+    pub fn as_raw_ptr(&self) -> *const T {
+        self.addr.as_raw_ptr()
+    }
+
+    pub fn as_raw_ptr_mut(&self) -> *mut T {
+        self.addr.as_raw_ptr_mut()
+    }
+}
+
+impl<T> Deref for Ref<'_, T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        <Ref<T>>::deref(self)
+    }
+}
+
+impl<T> fmt::Pointer for Ref<'_, T> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        fmt::Pointer::fmt(&self.as_raw_ptr(), f)
+    }
+}
+
+/// Like a `&mut T`, but backed by a `VirtAddr`.
+#[derive(Debug)]
+pub struct Mut<'a, T> {
+    addr: VirtAddr,
+    _phantom: core::marker::PhantomData<&'a mut T>,
+}
+
+impl<'a, T> Mut<'a, T> {
+    pub fn new(data: &'a mut T) -> Self {
+        Self {
+            addr: VirtAddr::new(data as *mut T as usize),
+            _phantom: core::marker::PhantomData,
+        }
+    }
+
+    pub fn addr(&self) -> VirtAddr {
+        self.addr
+    }
+
+    pub fn as_ptr(&self) -> UnsafePtr<T> {
+        self.addr.as_ptr()
+    }
+
+    #[allow(clippy::should_implement_trait)]
+    pub fn deref(&self) -> &'a T {
+        unsafe { &*self.as_raw_ptr() }
+    }
+
+    #[allow(clippy::should_implement_trait)]
+    pub fn deref_mut(&mut self) -> &'a mut T {
+        unsafe { &mut *self.as_raw_ptr_mut() }
+    }
+
+    pub fn as_raw_ptr(&self) -> *const T {
+        self.addr.as_raw_ptr()
+    }
+
+    pub fn as_raw_ptr_mut(&self) -> *mut T {
+        self.addr.as_raw_ptr_mut()
+    }
+}
+
+impl<T> fmt::Pointer for Mut<'_, T> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        fmt::Pointer::fmt(&self.as_raw_ptr(), f)
+    }
+}
+
+impl<T> Deref for Mut<'_, T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        <Mut<T>>::deref(self)
+    }
+}
+
+impl<T> DerefMut for Mut<'_, T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        <Mut<T>>::deref_mut(self)
+    }
+}
+
+/// Like a `&[T]`, but backed by a `VirtAddr`.
+#[derive(Debug, Clone, Copy)]
+pub struct Slice<'a, T> {
+    addr: VirtAddr,
+    len: usize,
+    _phantom: core::marker::PhantomData<&'a [T]>,
+}
+
+impl<'a, T> Slice<'a, T> {
+    pub fn new(data: &'a [T]) -> Self {
+        Self {
+            addr: VirtAddr::new(data.as_ptr() as usize),
+            len: data.len(),
+            _phantom: core::marker::PhantomData,
+        }
+    }
+
+    pub unsafe fn from_raw_parts(addr: VirtAddr, len: usize) -> Self {
+        addr.align_ok::<T>().unwrap();
+        Self {
+            addr,
+            len,
+            _phantom: core::marker::PhantomData,
+        }
+    }
+
+    pub fn addr(&self) -> VirtAddr {
+        self.addr
+    }
+
+    pub fn len(&self) -> usize {
+        self.len
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len == 0
+    }
+
+    pub fn as_ptr(&self) -> UnsafePtr<T> {
+        self.addr.as_ptr()
+    }
+
+    pub fn as_slice(&self) -> &'a [T] {
+        unsafe { core::slice::from_raw_parts(self.addr.as_raw_ptr(), self.len) }
+    }
+
+    pub fn as_raw_ptr(&self) -> *const T {
+        self.addr.as_raw_ptr()
+    }
+
+    pub fn as_raw_ptr_mut(&self) -> *mut T {
+        self.addr.as_raw_ptr_mut()
+    }
+}
+
+impl<T> fmt::Pointer for Slice<'_, T> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        fmt::Pointer::fmt(&self.as_raw_ptr(), f)
+    }
+}
+
+impl<T> Deref for Slice<'_, T> {
+    type Target = [T];
+
+    fn deref(&self) -> &Self::Target {
+        self.as_slice()
+    }
+}
+
+impl<T> Index<usize> for Slice<'_, T> {
+    type Output = T;
+
+    fn index(&self, index: usize) -> &Self::Output {
+        &self.as_slice()[index]
+    }
+}
+
+/// Like a `&mut [T]`, but backed by a `VirtAddr`.
+#[derive(Debug)]
+pub struct SliceMut<'a, T> {
+    addr: VirtAddr,
+    len: usize,
+    _phantom: core::marker::PhantomData<&'a mut [T]>,
+}
+
+impl<'a, T> SliceMut<'a, T> {
+    pub fn new(data: &'a mut [T]) -> Self {
+        Self {
+            addr: VirtAddr::new(data.as_mut_ptr() as usize),
+            len: data.len(),
+            _phantom: core::marker::PhantomData,
+        }
+    }
+
+    pub unsafe fn from_raw_parts(addr: VirtAddr, len: usize) -> Self {
+        addr.align_ok::<T>().unwrap();
+        Self {
+            addr,
+            len,
+            _phantom: core::marker::PhantomData,
+        }
+    }
+
+    pub fn addr(&self) -> VirtAddr {
+        self.addr
+    }
+
+    pub fn len(&self) -> usize {
+        self.len
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len == 0
+    }
+
+    pub fn as_ptr(&self) -> UnsafePtr<T> {
+        self.addr.as_ptr()
+    }
+
+    pub fn as_slice(&self) -> &'a [T] {
+        unsafe { core::slice::from_raw_parts(self.addr.as_raw_ptr(), self.len) }
+    }
+
+    pub fn as_mut_slice(&mut self) -> &'a mut [T] {
+        unsafe { core::slice::from_raw_parts_mut(self.addr.as_raw_ptr_mut(), self.len) }
+    }
+
+    pub fn as_raw_ptr(&self) -> *const T {
+        self.addr.as_raw_ptr()
+    }
+
+    pub fn as_raw_ptr_mut(&self) -> *mut T {
+        self.addr.as_raw_ptr_mut()
+    }
+}
+
+impl<T> fmt::Pointer for SliceMut<'_, T> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        fmt::Pointer::fmt(&self.as_raw_ptr(), f)
+    }
+}
+
+impl<T> Deref for SliceMut<'_, T> {
+    type Target = [T];
+
+    fn deref(&self) -> &Self::Target {
+        self.as_slice()
+    }
+}
+
+impl<T> DerefMut for SliceMut<'_, T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        self.as_mut_slice()
+    }
+}
+
+impl<T> Index<usize> for SliceMut<'_, T> {
+    type Output = T;
+
+    fn index(&self, index: usize) -> &Self::Output {
+        &self.as_slice()[index]
+    }
+}
+
+impl<T> IndexMut<usize> for SliceMut<'_, T> {
+    fn index_mut(&mut self, index: usize) -> &mut Self::Output {
+        &mut self.as_mut_slice()[index]
     }
 }
