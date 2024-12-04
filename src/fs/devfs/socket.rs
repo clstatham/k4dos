@@ -135,10 +135,10 @@ pub fn write_sockaddr(
     socklen: Option<VirtAddr>,
 ) -> KResult<()> {
     if let Some(dst) = dst {
-        dst.write_volatile(sockaddr)?;
+        unsafe { dst.write_volatile(sockaddr) }?;
     }
     if let Some(socklen) = socklen {
-        socklen.write_volatile(core::mem::size_of::<SockAddrInet>() as u32)?;
+        unsafe { socklen.write_volatile(core::mem::size_of::<SockAddrInet>() as u32) }?;
     }
     Ok(())
 }

@@ -3,7 +3,6 @@ use x86_64::structures::paging::PageTableFlags;
 use crate::util::KResult;
 
 use self::{
-    addr::VirtAddr,
     addr_space::AddressSpace,
     allocator::{alloc_kernel_pages_at, GLOBAL_ALLOC},
     consts::{KERNEL_HEAP_SIZE, KERNEL_HEAP_START, PAGE_SIZE},
@@ -32,9 +31,8 @@ pub fn remap_kernel() -> KResult<AddressSpace> {
 }
 
 pub fn init_heap(kernel_mapper: &mut Mapper) -> KResult<MappedPages> {
-    let heap_start = VirtAddr::new(KERNEL_HEAP_START);
     let heap_ap = alloc_kernel_pages_at(
-        Page::containing_address(heap_start),
+        Page::containing_address(KERNEL_HEAP_START),
         KERNEL_HEAP_SIZE / PAGE_SIZE,
     )?;
     let heap_mp = kernel_mapper.map(

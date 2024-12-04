@@ -1,3 +1,5 @@
+use super::addr::VirtAddr;
+
 pub const PAGE_SHIFT: usize = 12;
 pub const PAGE_SIZE: usize = 0x1000;
 pub const PAGE_TABLE_ENTRIES: usize = 512;
@@ -11,16 +13,16 @@ pub const USER_STACK_SIZE: usize = PAGE_SIZE * 64;
 
 /// The maximum canonical virtual address in low (user) address space.
 /// All user virtual addresses are less than this value.
-pub const MAX_LOW_VADDR: usize = 0x0000700000000000;
+pub const MAX_LOW_VADDR: VirtAddr = unsafe { VirtAddr::new_unchecked(0x0000700000000000) };
 
 /// The minimum canonical virtual address in high (kernel) address space.
 /// All kernel virtual addresses are greater than or equal to this value.
-pub const MIN_HIGH_VADDR: usize = 0xffff800000000000;
+pub const MIN_HIGH_VADDR: VirtAddr = unsafe { VirtAddr::new_unchecked(0xffff800000000000) };
 
-pub const USER_VALLOC_BASE: usize = 0x0000_000a_0000_0000;
-pub const USER_VALLOC_END: usize = 0x0000_0fff_0000_0000;
-pub const USER_STACK_TOP: usize = 0x7fffffffe000;
-pub const USER_STACK_BOTTOM: usize = USER_STACK_TOP - USER_STACK_SIZE;
+pub const USER_VALLOC_BASE: VirtAddr = unsafe { VirtAddr::new_unchecked(0x0000_000a_0000_0000) };
+pub const USER_VALLOC_END: VirtAddr = unsafe { VirtAddr::new_unchecked(0x0000_0fff_0000_0000) };
+pub const USER_STACK_TOP: VirtAddr = unsafe { VirtAddr::new_unchecked(0x7fffffffe000) };
+pub const USER_STACK_BOTTOM: VirtAddr = USER_STACK_TOP.const_sub(USER_STACK_SIZE);
 
-pub const KERNEL_HEAP_START: usize = 0xFFFF_FE80_0000_0000;
+pub const KERNEL_HEAP_START: VirtAddr = unsafe { VirtAddr::new_unchecked(0xFFFF_FE80_0000_0000) };
 pub const KERNEL_HEAP_SIZE: usize = 1024 * 1024 * 1024; // 1024 MiB

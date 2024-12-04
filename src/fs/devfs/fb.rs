@@ -83,7 +83,7 @@ impl File for FbDevice {
                     bpp: fb.bpp() as u32,
                     ..FbVarScreenInfo::default()
                 };
-                VirtAddr::new(arg).write_volatile(info)?;
+                unsafe { VirtAddr::new(arg).write_volatile(info) }?;
             }
             // FBIOGET_FSCREENINFO => {
 

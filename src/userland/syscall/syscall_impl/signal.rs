@@ -15,7 +15,7 @@ impl SyscallHandler<'_> {
         &mut self,
         how: usize,
         set: VirtAddr,
-        oldset: VirtAddr,
+        mut oldset: VirtAddr,
         length: usize,
     ) -> KResult<isize> {
         if length != 8 {
@@ -29,7 +29,7 @@ impl SyscallHandler<'_> {
             _ => return Err(errno!(Errno::EINVAL, "sys_rt_sigprocmask(): invalid mask")),
         };
 
-        current_task().set_signal_mask(how, set, oldset, length)?;
+        current_task().set_signal_mask(how, set, &mut oldset, length)?;
 
         Ok(0)
     }

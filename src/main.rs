@@ -42,7 +42,7 @@ pub static PHYSICAL_OFFSET: Once<usize> = Once::new();
 
 #[inline]
 pub fn phys_offset() -> VirtAddr {
-    VirtAddr::new(*PHYSICAL_OFFSET.get().unwrap())
+    unsafe { VirtAddr::new_unchecked(*PHYSICAL_OFFSET.get().unwrap()) }
 }
 
 #[no_mangle]

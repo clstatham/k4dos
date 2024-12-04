@@ -82,8 +82,8 @@ pub fn init(memmap: &[&Entry]) -> KResult<()> {
         let start = entry.base as usize;
         let end = start + entry.length as usize;
         let frames = FrameRange::new(
-            Frame::containing_address(PhysAddr::new(start)),
-            Frame::containing_address(PhysAddr::new(end)),
+            Frame::containing_address(PhysAddr::new(start).unwrap()),
+            Frame::containing_address(PhysAddr::new(end).unwrap()),
         );
         unsafe { frame_alloc.insert_free_region(frames) };
     }
@@ -92,11 +92,11 @@ pub fn init(memmap: &[&Entry]) -> KResult<()> {
     let mut page_alloc = PageAllocator::new_static();
     let pages = PageRange::new(
         Page::at_index(PageIndex(1)),
-        Page::containing_address(VirtAddr::new(MAX_LOW_VADDR) - 1),
+        Page::containing_address(MAX_LOW_VADDR - 1),
     );
     unsafe { page_alloc.insert_free_region(pages) };
     let pages = PageRange::new(
-        Page::containing_address(VirtAddr::new(MIN_HIGH_VADDR)),
+        Page::containing_address(MIN_HIGH_VADDR),
         Page::containing_address(VirtAddr::new(align_down(usize::MAX, PAGE_SIZE))),
     );
     unsafe { page_alloc.insert_free_region(pages) };

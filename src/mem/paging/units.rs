@@ -30,7 +30,7 @@ impl PageIndex {
 
     #[inline]
     pub fn as_physaddr(self) -> PhysAddr {
-        PhysAddr::new(self.0 * PAGE_SIZE)
+        PhysAddr::new(self.0 * PAGE_SIZE).unwrap()
     }
 
     #[inline]
@@ -88,12 +88,12 @@ macro_rules! unit_impl {
 
             #[inline]
             pub fn start_address(self) -> $addr {
-                $addr::new(self.index.0 * PAGE_SIZE)
+                unsafe { $addr::new_unchecked(self.index.0 * PAGE_SIZE) }
             }
 
             #[inline]
             pub fn inclusive_end_address(self) -> $addr {
-                $addr::new(self.index.0 * PAGE_SIZE + PAGE_SIZE - 1)
+                unsafe { $addr::new_unchecked(self.index.0 * PAGE_SIZE + PAGE_SIZE - 1) }
             }
 
             #[inline]

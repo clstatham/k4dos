@@ -96,7 +96,10 @@ pub fn god_mode_repl() {
                     continue;
                 };
 
-                let ptr = PhysAddr::new(start).as_hhdm_virt().as_ptr::<u64>();
+                let ptr = PhysAddr::new(start)
+                    .unwrap()
+                    .as_hhdm_virt()
+                    .as_raw_ptr::<u64>();
 
                 let max_i = PAGE_SIZE / core::mem::size_of::<u64>();
                 serial1_println!("Dumping frame at {:#x}.", start);

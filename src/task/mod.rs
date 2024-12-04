@@ -159,9 +159,9 @@ impl Task {
         // interrupts::disable();
         {
             self.opened_files.lock().close_cloexec_files();
-            self.vmem
-                .lock()
-                .clear(&mut self.arch_mut().address_space.mapper());
+            self.arch_mut().address_space.with_mapper(|mut mapper| {
+                self.vmem.lock().clear(&mut mapper);
+            });
             *self.signals.lock() = SignalDelivery::new();
             *self.sigset.lock() = SigSet::ZERO;
             self.signaled_frame.store(None);
@@ -305,24 +305,25 @@ impl Task {
         reason: PageFaultErrorCode,
     ) -> KResult<()> {
         let addr_space = &mut self.arch_mut().address_space;
-        let mut mapper = addr_space.mapper();
-        self.vmem
-            .lock()
-            .handle_page_fault(&mut mapper, faulted_addr, stack_frame, reason)
+        addr_space.with_mapper(|mut mapper| {
+            self.vmem
+                .lock()
+                .handle_page_fault(&mut mapper, faulted_addr, stack_frame, reason)
+        })
     }
 
     pub fn set_signal_mask(
         &self,
         how: SignalMask,
         set: VirtAddr,
-        oldset: VirtAddr,
+        oldset: &mut VirtAddr,
         _length: usize,
     ) -> KResult<()> {
         let mut sigset = self.sigset.lock();
         if oldset.value() != 0 {
             let slice = sigset.as_raw_slice();
             assert_eq!(slice.len(), 8);
-            oldset.write_bytes(slice)?;
+            unsafe { oldset.write_bytes(slice) }?;
         }
 
         if set.value() != 0 {

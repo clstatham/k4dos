@@ -345,7 +345,7 @@ impl File for Tty {
             TCGETS => {
                 let termios = *self.discipline.termios.lock();
                 let arg = VirtAddr::new(arg);
-                arg.write_volatile(termios)?;
+                unsafe { arg.write_volatile(termios) }?;
             }
             TCSETS | TCSETSW => {
                 let arg = VirtAddr::new(arg);
@@ -353,17 +353,13 @@ impl File for Tty {
                 *self.discipline.termios.lock() = termios;
             }
             TIOCGPGRP => {
-                // let group = self.discipline.foreground_group().ok_or(errno!(
-                //     Errno::ENOENT,
-                //     "ioctl(): no foreground process group for tty"
-                // ))?;
                 let group = self
                     .discipline
                     .foreground_group()
                     .unwrap_or(current_task().group.borrow().upgrade().unwrap());
                 let id = group.lock().pgid();
                 let arg = VirtAddr::new(arg);
-                arg.write_volatile(id)?;
+                unsafe { arg.write_volatile(id) }?;
             }
             TIOCSPGRP => {
                 let arg = VirtAddr::new(arg);
@@ -379,7 +375,7 @@ impl File for Tty {
                     ws_ypixel: 0,
                 };
                 let arg = VirtAddr::new(arg);
-                arg.write_volatile(winsize)?;
+                unsafe { arg.write_volatile(winsize) }?;
             }
             _ => return Err(errno!(Errno::ENOSYS, "ioctl(): command not found")),
         }

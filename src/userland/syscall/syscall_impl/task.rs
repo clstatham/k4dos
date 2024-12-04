@@ -217,20 +217,14 @@ impl SyscallHandler<'_> {
     }
 
     pub fn sys_clock_gettime(&mut self, clk_id: usize, tp: VirtAddr) -> KResult<isize> {
-        // if clk_id == 0 {
-        //     return Err(errno!(
-        //         Errno::ENOSYS,
-        //         "sys_clock_gettime(): not yet implemented"
-        //     ));
-        // }
         match clk_id {
             0 => {
                 let ts = time::get_rt_clock();
-                tp.write_volatile(ts)?;
+                unsafe { tp.write_volatile(ts) }?;
             }
             1 => {
                 let ts = time::get_rt_clock();
-                tp.write_volatile(ts)?;
+                unsafe { tp.write_volatile(ts) }?;
             }
             2 => {
                 let current = current_task();
@@ -240,7 +234,7 @@ impl SyscallHandler<'_> {
                     tv_sec: delta_sec as isize,
                     tv_nsec: (delta_ns % 1000000000) as isize,
                 };
-                tp.write_volatile(ts)?;
+                unsafe { tp.write_volatile(ts) }?;
             }
             3 => {
                 let current = current_task();
@@ -250,7 +244,7 @@ impl SyscallHandler<'_> {
                     tv_sec: delta_sec as isize,
                     tv_nsec: (delta_ns % 1000000000) as isize,
                 };
-                tp.write_volatile(ts)?;
+                unsafe { tp.write_volatile(ts) }?;
             }
             _ => unreachable!(),
         }

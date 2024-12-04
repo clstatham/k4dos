@@ -61,7 +61,7 @@ pub fn load_elf(file: FileRef) -> KResult<UserlandEntry> {
     // let mp = addr_space.mapper().map(pages, PageTableFlags::PRESENT | PageTableFlags::WRITABLE)?;
     let buf = unsafe {
         core::slice::from_raw_parts_mut(
-            frames.start_address().as_hhdm_virt().as_mut_ptr(),
+            frames.start_address().as_hhdm_virt().as_raw_ptr_mut(),
             frames.size_in_bytes(),
         )
     };
@@ -203,16 +203,11 @@ impl ElfLoader for KadosElfLoader<'_> {
                     size: header.file_size() as usize,
                 };
                 log::debug!("Mapping region {:?} .. {:?}", start, mem_end);
-                self.vmem
-                    .map_area(
-                        start,
-                        mem_end,
-                        flags,
-                        prot,
-                        kind,
-                        &mut self.addr_space.mapper(),
-                    )
-                    .unwrap();
+                self.addr_space.with_mapper(|mut mapper| {
+                    self.vmem
+                        .map_area(start, mem_end, flags, prot, kind, &mut mapper)
+                        .unwrap();
+                });
             } else if header.get_type().unwrap() == Type::Interp {
                 let ld = get_root()
                     .unwrap()
@@ -252,7 +247,7 @@ impl ElfLoader for KadosElfLoader<'_> {
             prot |= MMapProt::PROT_EXEC;
         }
         // this should be safe since the pages should already be mapped and writable in allocate()
-        region_start.write_bytes(region).unwrap();
+        unsafe { region_start.write_bytes(region).unwrap() };
         // set the correct protections now
         area.prot = prot;
         Ok(())

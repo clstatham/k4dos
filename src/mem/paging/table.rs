@@ -19,7 +19,7 @@ use super::units::Frame;
 
 fn frame_to_table(frame: Frame) -> *mut PageTable {
     let virt = crate::phys_offset() + frame.start_address().value();
-    virt.as_mut_ptr()
+    virt.as_raw_ptr_mut()
 }
 
 #[derive(Clone, Copy)]
@@ -50,7 +50,7 @@ impl PageTableEntry {
     }
 
     pub fn addr(&self) -> PhysAddr {
-        PhysAddr::new(self.data & Self::ADDRESS_MASK)
+        PhysAddr::new(self.data & Self::ADDRESS_MASK).unwrap()
     }
 
     pub fn frame(&self) -> Option<Frame> {
@@ -189,6 +189,6 @@ impl Debug for PageTable {
 }
 
 pub fn active_table() -> &'static mut PageTable {
-    let cr3 = PhysAddr::new(Cr3::read().0.start_address().as_u64() as usize);
-    unsafe { &mut *cr3.as_hhdm_virt().as_mut_ptr() }
+    let cr3 = PhysAddr::new(Cr3::read().0.start_address().as_u64() as usize).unwrap();
+    unsafe { &mut *cr3.as_hhdm_virt().as_raw_ptr_mut() }
 }

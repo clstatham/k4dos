@@ -91,10 +91,10 @@ pub struct UserCStr {
 
 impl UserCStr {
     pub fn new(vaddr: VirtAddr, max_len: usize) -> KResult<UserCStr> {
-        vaddr.read_ok::<u8>()?;
+        vaddr.align_ok::<u8>()?;
         let mut tmp = alloc::vec![0; max_len];
         // SAFE: we've validated the length of the string, and confirmed that it won't run into kernel memory
-        let read_len = unsafe { user_strncpy_rust(tmp.as_mut_ptr(), vaddr.as_ptr(), max_len) };
+        let read_len = unsafe { user_strncpy_rust(tmp.as_mut_ptr(), vaddr.as_raw_ptr(), max_len) };
         let string = core::str::from_utf8(&tmp[..read_len])
             .map_err(|_| errno!(Errno::EINVAL, "UserCStr: UTF-8 parsing error"))?
             .to_string();
@@ -220,7 +220,7 @@ impl<'a> UserBufferWriter<'a> {
                 dst[self.pos..(self.pos + copy_len)].copy_from_slice(&src[..copy_len]);
             }
             InnerMut::User { base, .. } => {
-                base.add(self.pos).write_bytes(&src[..copy_len])?;
+                unsafe { base.add(self.pos).write_bytes(&src[..copy_len]) }?;
             }
         }
 
@@ -243,7 +243,7 @@ impl<'a> UserBufferWriter<'a> {
                 dst[self.pos..(self.pos + len)].fill(value);
             }
             InnerMut::User { base, .. } => {
-                base.add(self.pos).fill(value, len)?;
+                unsafe { base.add(self.pos).fill(value, len) }?;
             }
         }
 

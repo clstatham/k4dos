@@ -37,11 +37,11 @@ pub struct Mapper<'a> {
 }
 
 impl<'a> Mapper<'a> {
-    pub unsafe fn new(p4: &'a mut PageTable) -> Self {
+    pub fn new(p4: &'a mut PageTable) -> Self {
         Self { p4 }
     }
 
-    pub fn p4(&'a mut self) -> &'a mut PageTable {
+    pub fn into_inner(self) -> &'a mut PageTable {
         self.p4
     }
 

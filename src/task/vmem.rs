@@ -97,6 +97,16 @@ impl VmemArea {
         }
     }
 
+    pub const fn null() -> Self {
+        Self {
+            start_addr: VirtAddr::null(),
+            end_addr: VirtAddr::null(),
+            flags: MMapFlags::empty(),
+            prot: MMapProt::PROT_NONE,
+            kind: MMapKind::Anonymous,
+        }
+    }
+
     pub fn contains_addr(&self, addr: VirtAddr) -> bool {
         (self.start_addr..self.end_addr).contains(&addr)
     }
@@ -114,7 +124,7 @@ impl VmemArea {
     }
 
     pub fn size_in_bytes(&self) -> usize {
-        self.end_addr - self.start_addr
+        self.end_addr.value() - self.start_addr.value()
     }
 
     pub fn merge_with(&mut self, other: Self) -> KResult<()> {
@@ -147,7 +157,7 @@ impl Vmem {
         unsafe {
             page_allocator.insert_free_region(PageRange::new(
                 Page::containing_address(VirtAddr::new(PAGE_SIZE)),
-                Page::containing_address(VirtAddr::new(USER_STACK_TOP)),
+                Page::containing_address(USER_STACK_TOP),
             ))
         }
         Self {
@@ -193,46 +203,31 @@ impl Vmem {
             kind,
         });
         self.areas.retain(|a| a.start_addr != a.end_addr);
-        self.areas.sort_by_key(|area| area.start_address());
+        self.areas.sort_by_key(|area| area.start_address().value());
         self.merge_contiguous_chunks();
         Ok(())
     }
 
     pub fn merge_contiguous_chunks(&mut self) {
-        let mut merge1 = None;
-        let mut merge2 = None;
-        for (i, chunk) in self.areas.iter().enumerate() {
-            if let Some(next_chunk) = self.areas.get(i + 1) {
-                if chunk.flags == next_chunk.flags && chunk.prot == next_chunk.prot {
-                    if chunk.start_address() == next_chunk.end_address() {
-                        merge1 = Some(chunk.clone());
-                        merge2 = Some(next_chunk.clone());
-                        break;
-                    } else if chunk.end_address() == next_chunk.start_address() {
-                        merge1 = Some(next_chunk.clone());
-                        merge2 = Some(chunk.clone());
-                        break;
-                    }
+        let mut i = 0;
+        while i < self.areas.len() - 1 {
+            let mut j = i + 1;
+            while j < self.areas.len() {
+                if self.areas[i]
+                    .overlaps_range(self.areas[j].start_address(), self.areas[j].end_address())
+                {
+                    let old = self.areas.remove(j);
+                    self.areas[i].merge_with(old).expect("Error merging pages");
+                } else {
+                    j += 1;
                 }
             }
-        }
-        if let Some(ref mut merge1) = merge1 {
-            let merge2 = merge2.unwrap();
-            self.areas.retain(|chunk| {
-                chunk.start_address() != merge1.start_address()
-                    && chunk.start_address() != merge2.start_address()
-            });
-            if merge1.merge_with(merge2).is_err() {
-                panic!("Error merging chunks");
-            }
-            self.areas.push(merge1.clone());
-            self.areas.sort_by_key(|a| a.start_addr);
-            self.merge_contiguous_chunks();
+            i += 1;
         }
     }
 
-    fn zero_memory(&self, mut start_addr: VirtAddr, end_addr: VirtAddr) -> KResult<()> {
-        start_addr.fill(0, end_addr.value() - start_addr.value())?;
+    fn zero_memory(&self, start_addr: VirtAddr, end_addr: VirtAddr) -> KResult<()> {
+        unsafe { start_addr.fill(0, end_addr.value() - start_addr.value()) }?;
         Ok(())
     }
 
@@ -297,12 +292,8 @@ impl Vmem {
             kind: _,
         } = old_area;
 
-        let new_addr = self.mmap(VirtAddr::new(0), new_size, prot, flags, -1, 0)?;
-        // unsafe {
-        //     new_addr
-        //         .as_mut_ptr::<u8>()
-        //         .copy_from(start_addr.as_ptr(), old_area.size_in_bytes());
-        // }
+        let new_addr = self.mmap(VirtAddr::null(), new_size, prot, flags, -1, 0)?;
+
         let old_pages = PageRange::new(
             Page::containing_address(start_addr),
             Page::containing_address(end_addr),
@@ -345,7 +336,7 @@ impl Vmem {
 
         let size_aligned = align_up(size, PAGE_SIZE);
         if start_addr == VirtAddr::null() {
-            let start = self.find_free_space_above(VirtAddr::new(USER_VALLOC_BASE), size_aligned);
+            let start = self.find_free_space_above(USER_VALLOC_BASE, size_aligned);
             if let Some((start, prev)) = start {
                 if let Some(prev_idx) = prev {
                     let prev = &mut self.areas[prev_idx];
@@ -628,13 +619,16 @@ impl Vmem {
                 let new_frame = alloc_kernel_frames(1)?;
                 let new_page = unsafe {
                     core::slice::from_raw_parts_mut(
-                        new_frame.start_address().as_hhdm_virt().as_mut_ptr::<u8>(),
+                        new_frame
+                            .start_address()
+                            .as_hhdm_virt()
+                            .as_raw_ptr_mut::<u8>(),
                         PAGE_SIZE,
                     )
                 };
                 let old_page = unsafe {
                     core::slice::from_raw_parts(
-                        faulted_addr.align_down(PAGE_SIZE).as_ptr::<u8>(),
+                        faulted_addr.align_down(PAGE_SIZE).as_raw_ptr::<u8>(),
                         PAGE_SIZE,
                     )
                 };

@@ -37,22 +37,20 @@ impl SyscallHandler<'_> {
 
     pub fn sys_munmap(&mut self, addr: VirtAddr, size: usize) -> KResult<isize> {
         let current = current_task();
-        current.vmem().lock().munmap(
-            &mut current.arch_mut().address_space.mapper(),
-            addr,
-            addr + size,
-        )?;
+        current.arch_mut().address_space.with_mapper(|mut mapper| {
+            current.vmem().lock().munmap(&mut mapper, addr, addr + size)
+        })?;
         Ok(0)
     }
 
     pub fn sys_mremap(&mut self, addr: VirtAddr, old_size: usize, size: usize) -> KResult<isize> {
         let current = current_task();
-        let new_addr = current.vmem().lock().mremap(
-            addr,
-            old_size,
-            size,
-            &mut current.arch_mut().address_space.mapper(),
-        )?;
+        let new_addr = current.arch_mut().address_space.with_mapper(|mut mapper| {
+            current
+                .vmem()
+                .lock()
+                .mremap(addr, old_size, size, &mut mapper)
+        })?;
         Ok(new_addr.value() as isize)
     }
 }

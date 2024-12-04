@@ -83,7 +83,7 @@ impl FrameBuffer {
     pub fn present(&mut self) {
         unsafe {
             self.start_addr
-                .as_mut_ptr::<u32>()
+                .as_raw_ptr_mut::<u32>()
                 .copy_from_nonoverlapping(self.back_buffer.as_ptr(), self.width * self.height);
         }
     }

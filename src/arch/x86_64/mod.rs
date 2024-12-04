@@ -116,7 +116,8 @@ pub fn arch_main() {
     let mut kernel_addr_space = mem::remap_kernel().expect("Error remapping kernel");
 
     log::info!("Setting up kernel heap.");
-    let _heap_mp = mem::init_heap(&mut kernel_addr_space.mapper()).expect("Error setting up heap");
+    let _heap_mp = kernel_addr_space
+        .with_mapper(|mut mapper| mem::init_heap(&mut mapper).expect("Error setting up heap"));
 
     log::info!("Converting kernel frame and page allocators to use heap.");
     {

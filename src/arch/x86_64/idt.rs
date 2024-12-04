@@ -314,7 +314,7 @@ extern "C" fn x64_handle_interrupt(vector: u8, stack_frame: *mut InterruptErrorF
             if let Some(current) = current {
                 if current
                     .handle_page_fault(
-                        VirtAddr::new(accessed_address as usize),
+                        unsafe { VirtAddr::new_unchecked(accessed_address as usize) },
                         *stack_frame,
                         error_code,
                     )

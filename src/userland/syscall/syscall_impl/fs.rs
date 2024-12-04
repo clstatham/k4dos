@@ -129,7 +129,7 @@ impl SyscallHandler<'_> {
         unsafe {
             rdrand_slice(&mut v);
         }
-        buf.write_bytes(&v)?;
+        unsafe { buf.write_bytes(&v) }?;
         Ok(bufflen as isize)
     }
 }

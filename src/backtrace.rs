@@ -49,7 +49,6 @@ pub fn unwind_user_stack_from(mut rbp: usize, mut rip: usize) {
     let _guard = SavedInterruptStatus::save();
     interrupts::disable();
     let mut addr_space = AddressSpace::current();
-    let pt = addr_space.mapper();
 
     if rbp == 0 {
         serial0_println!("<empty backtrace>");
@@ -75,12 +74,14 @@ pub fn unwind_user_stack_from(mut rbp: usize, mut rip: usize) {
     print_symbol(rip, &symtab, 0);
     for depth in 1..17 {
         if let Some(rip_rbp) = rbp.checked_add(size_of::<usize>()) {
-            if rip_rbp < PAGE_SIZE || pt.translate(VirtAddr::new(rip_rbp)).is_none() {
+            let rip_rbp = VirtAddr::new(rip_rbp);
+            let translated = addr_space.with_mapper(|mapper| mapper.translate(rip_rbp));
+            if rip_rbp.value() < PAGE_SIZE || translated.is_none() {
                 serial0_println!("{:>2}: <guard page>", depth);
                 break;
             }
 
-            rip = unsafe { *(rip_rbp as *const usize) };
+            rip = unsafe { rip_rbp.read::<usize>().unwrap_unchecked() };
             if rip == 0 || rbp == 0 {
                 break;
             }
@@ -101,7 +102,6 @@ pub fn unwind_stack() -> KResult<()> {
     let _guard = SavedInterruptStatus::save();
     interrupts::disable();
     let mut addr_space = AddressSpace::current();
-    let pt = addr_space.mapper();
 
     let kernel_elf = KERNEL_ELF
         .get()
@@ -134,12 +134,14 @@ pub fn unwind_stack() -> KResult<()> {
     serial0_println!("---BEGIN BACKTRACE---");
     for depth in 0..16 {
         if let Some(rip_rbp) = rbp.checked_add(size_of::<usize>()) {
-            if pt.translate(VirtAddr::new(rip_rbp)).is_none() {
+            let rip_rbp = VirtAddr::new(rip_rbp);
+            let translated = addr_space.with_mapper(|mapper| mapper.translate(rip_rbp));
+            if translated.is_none() {
                 serial0_println!("{:>2}: <guard page>", depth);
                 break;
             }
 
-            let rip = unsafe { *(rip_rbp as *const usize) };
+            let rip = unsafe { rip_rbp.read::<usize>().unwrap_unchecked() };
             if rip == 0 || rbp == 0 {
                 break;
             }

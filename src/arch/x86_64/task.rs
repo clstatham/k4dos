@@ -201,8 +201,6 @@ pub struct ArchTask {
     pub symtab: Option<Vec<SymTabEntry>>,
 }
 
-unsafe impl Sync for ArchTask {}
-
 impl ArchTask {
     pub fn new_idle() -> ArchTask {
         ArchTask {
@@ -229,7 +227,7 @@ impl ArchTask {
 
         let address_space = AddressSpace::current();
 
-        let mut stack_ptr = switch_stack.as_mut_ptr::<u8>() as usize;
+        let mut stack_ptr = switch_stack.value();
         let mut stack = Stack::new(&mut stack_ptr);
 
         let kframe = unsafe { stack.offset::<InterruptErrorFrame>() };
@@ -249,7 +247,7 @@ impl ArchTask {
             kernel_stack: alloc::vec![0u8; KERNEL_STACK_SIZE].into_boxed_slice(),
             user: false,
             fsbase: VirtAddr::null(),
-            gsbase: unsafe { VirtAddr::new(rdmsr(IA32_GS_BASE) as usize) },
+            gsbase: unsafe { VirtAddr::new_unchecked(rdmsr(IA32_GS_BASE) as usize) },
             fpu_storage: None,
             symtab: None,
         }
@@ -267,7 +265,7 @@ impl ArchTask {
 
         self.kernel_stack = alloc::vec![0u8; KERNEL_STACK_SIZE].into_boxed_slice();
         self.fsbase = userland_entry.fsbase.unwrap_or(VirtAddr::null());
-        self.gsbase = unsafe { VirtAddr::new(rdmsr(IA32_GS_BASE) as usize) };
+        self.gsbase = unsafe { VirtAddr::new_unchecked(rdmsr(IA32_GS_BASE) as usize) };
 
         self.user = true;
         self.address_space = userland_entry.addr_space;
@@ -277,16 +275,19 @@ impl ArchTask {
         self.address_space.switch();
 
         // userland_entry
-        vmem.map_area(
-            VirtAddr::new(USER_STACK_BOTTOM),
-            VirtAddr::new(USER_STACK_TOP),
-            MMapFlags::empty(),
-            MMapProt::PROT_READ | MMapProt::PROT_WRITE | MMapProt::PROT_EXEC,
-            MMapKind::Anonymous,
-            &mut self.address_space.mapper(),
-        )?;
+        self.address_space.with_mapper(|mut mapper| {
+            vmem.map_area(
+                USER_STACK_BOTTOM,
+                USER_STACK_TOP,
+                MMapFlags::empty(),
+                MMapProt::PROT_READ | MMapProt::PROT_WRITE | MMapProt::PROT_EXEC,
+                MMapKind::Anonymous,
+                &mut mapper,
+            )
+        })?;
 
-        let mut stack_addr = USER_STACK_TOP - core::mem::size_of::<usize>();
+        let stack_addr = USER_STACK_TOP - core::mem::size_of::<usize>();
+        let mut stack_addr = stack_addr.value();
         let mut stack = Stack::new(&mut stack_addr);
 
         fn push_strs(strs: &[&[u8]], stack: &mut Stack) -> Vec<usize> {
@@ -347,7 +348,7 @@ impl ArchTask {
         let address_space = AddressSpace::current().fork(true)?;
         unsafe { tlb::flush_all() };
 
-        let switch_stack = Self::alloc_switch_stack()?.as_mut_ptr::<u8>();
+        let switch_stack = Self::alloc_switch_stack()?.as_raw_ptr_mut::<u8>();
         let mut old_rsp = self.kernel_stack.as_ptr() as usize + self.kernel_stack.len();
         let mut old_stack = Stack::new(&mut old_rsp);
 
@@ -374,8 +375,8 @@ impl ArchTask {
             address_space,
             user: true,
             kernel_stack: alloc::vec![0u8; KERNEL_STACK_SIZE].into_boxed_slice(),
-            fsbase: self.fsbase,
-            gsbase: self.gsbase,
+            fsbase: unsafe { self.fsbase.alias() },
+            gsbase: unsafe { self.gsbase.alias() },
             fpu_storage: Some(fpu_storage),
             symtab: self.symtab.clone(),
         })
@@ -393,7 +394,7 @@ impl ArchTask {
         assert!(self.user, "Cannot clone a kernel task");
 
         let address_space = AddressSpace::current().fork(true)?;
-        let switch_stack = Self::alloc_switch_stack()?.as_mut_ptr::<u8>();
+        let switch_stack = Self::alloc_switch_stack()?.as_raw_ptr_mut::<u8>();
 
         let mut new_rsp = switch_stack as usize;
         let mut new_stack = Stack::new(&mut new_rsp);
@@ -424,8 +425,8 @@ impl ArchTask {
             address_space,
             user: true,
             fpu_storage: Some(fpu_storage),
-            gsbase: self.gsbase,
-            fsbase: self.fsbase,
+            gsbase: unsafe { self.gsbase.alias() },
+            fsbase: unsafe { self.fsbase.alias() },
             kernel_stack: alloc::vec![0u8; KERNEL_STACK_SIZE].into_boxed_slice(),
             symtab: self.symtab.clone(),
         })
@@ -450,7 +451,7 @@ impl ArchTask {
     pub fn set_fsbase(&mut self, addr: VirtAddr) {
         self.fsbase = addr;
         unsafe {
-            wrmsr(IA32_FS_BASE, addr.value() as u64);
+            wrmsr(IA32_FS_BASE, self.fsbase.value() as u64);
         }
     }
 
