@@ -4,7 +4,7 @@ use alloc::{borrow::ToOwned, string::String, sync::Arc};
 use x86::random::rdrand_slice;
 
 use crate::{
-    bitflags_from_user, errno,
+    bitflags_from_user,
     fs::{
         alloc_inode_no,
         initramfs::{dir::InitRamFsDir, file::InitRamFsFile},
@@ -12,6 +12,7 @@ use crate::{
         path::Path,
         FileMode, INode, PollStatus, O_RDWR, O_WRONLY, POLL_WAIT_QUEUE, S_IFDIR, S_IFREG,
     },
+    kbail, kerror,
     mem::addr::VirtAddr,
     task::current_task,
     userland::{
@@ -62,7 +63,7 @@ impl SyscallHandler<'_> {
                 Ok(fd as isize)
             }
             F_SETLK => Ok(0),
-            _ => Err(errno!(Errno::ENOSYS, "sys_fctnl(): unknown command")),
+            _ => Err(kerror!(ENOSYS, "sys_fctnl(): unknown command")),
         }
     }
 
@@ -70,7 +71,7 @@ impl SyscallHandler<'_> {
         let cwd = current_task().root_fs.lock().cwd_path().resolve_abs_path();
 
         if len < cwd.as_str().len() {
-            return Err(errno!(Errno::ERANGE, "sys_getcwd(): buffer too small"));
+            return Err(kerror!(ERANGE, "sys_getcwd(): buffer too small"));
         }
 
         let mut cwd = String::from(cwd.as_str());
@@ -141,7 +142,7 @@ fn create(path: &Path, _flags: OpenFlags, mode: FileMode) -> KResult<INode> {
 
     let (parent_dir, name) = path
         .parent_and_basename()
-        .ok_or(errno!(Errno::EEXIST, "create(): invalid path"))?;
+        .ok_or(kerror!(EINVAL, "create(): invalid path"))?;
 
     let current = current_task();
     let root = current.root_fs.lock();
@@ -156,7 +157,7 @@ fn create(path: &Path, _flags: OpenFlags, mode: FileMode) -> KResult<INode> {
             alloc_inode_no(),
         )))
     } else {
-        return Err(errno!(Errno::EINVAL, "create(): invalid flags"));
+        return Err(kerror!(EINVAL, "create(): invalid flags"));
     };
     root.lookup(parent_dir, true)?
         .as_dir()?
@@ -183,11 +184,11 @@ impl SyscallHandler<'_> {
         let mut opened_files = current.opened_files.lock();
         let path_comp = root.lookup_path(path, true)?;
         if flags.contains(OpenFlags::O_DIRECTORY) && !path_comp.inode.is_dir() {
-            return Err(errno!(Errno::ENOTDIR, "sys_open(): not a directory"));
+            kbail!(ENOTDIR, "sys_open(): not a directory");
         }
         let access_mode = mode.access_mode();
         if path_comp.inode.is_dir() && (access_mode == O_WRONLY || access_mode == O_RDWR) {
-            return Err(errno!(Errno::EISDIR, "sys_open(): is a directory"));
+            kbail!(EISDIR, "sys_open(): is a directory");
         }
 
         let fd = opened_files.open(path_comp, flags)?;
@@ -214,7 +215,7 @@ impl SyscallHandler<'_> {
 
     pub fn sys_pipe(&mut self, fds: VirtAddr) -> KResult<isize> {
         if fds == VirtAddr::null() {
-            return Err(errno!(Errno::EFAULT, "sys_pipe(): null VirtAddr"));
+            kbail!(EINVAL, "sys_pipe(): fds was NULL");
         }
 
         let current = current_task();
@@ -232,7 +233,7 @@ impl SyscallHandler<'_> {
 
     pub fn sys_unlink(&mut self, path: &Path) -> KResult<isize> {
         if path.is_empty() {
-            return Err(errno!(Errno::ENOENT));
+            kbail!(EINVAL, "sys_unlink(): path was empty");
         }
         let current = current_task();
         let root = current.root_fs.lock();
@@ -268,10 +269,7 @@ impl SyscallHandler<'_> {
                 let events = bitflags_from_user!(PollStatus, reader.read::<c_short>()?);
 
                 if fd < 0 || events.is_empty() {
-                    return Err(errno!(
-                        Errno::EINVAL,
-                        "sys_poll(): invalid fd or events was NULL"
-                    ));
+                    kbail!(EINVAL, "sys_poll(): invalid fd or events");
                 } else {
                     // log::debug!("events: {:?}", events);
                     let current = current_task();
@@ -465,7 +463,7 @@ impl SyscallHandler<'_> {
             SOL_SOCKET => {
                 // todo
             }
-            _ => return Err(errno!(Errno::EINVAL, "invalid socket option level")),
+            _ => kbail!(EINVAL, "sys_setsockopt(): unknown level"),
         }
         Ok(0)
     }

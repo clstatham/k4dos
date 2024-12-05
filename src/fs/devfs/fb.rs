@@ -2,12 +2,12 @@ use alloc::sync::Arc;
 use spin::Once;
 
 use crate::{
-    errno,
     fs::{initramfs::get_root, opened_file::OpenFlags, File, FsNode, INode},
     graphics::fb,
+    kerror,
     mem::addr::VirtAddr,
     userland::buffer::{UserBuffer, UserBufferMut, UserBufferReader, UserBufferWriter},
-    util::{errno::Errno, KResult},
+    util::KResult,
 };
 
 pub static DEV_FB0: Once<Arc<FbDevice>> = Once::new();
@@ -88,7 +88,7 @@ impl File for FbDevice {
             // FBIOGET_FSCREENINFO => {
 
             // }
-            _ => return Err(errno!(Errno::EINVAL, "ioctl(): unknown cmd")),
+            _ => return Err(kerror!(EINVAL, "ioctl(): unknown cmd")),
         }
         Ok(0)
     }

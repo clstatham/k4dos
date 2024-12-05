@@ -4,67 +4,58 @@ use super::errno::Errno;
 
 pub type KResult<T> = Result<T, KError<'static>>;
 
-#[derive(Clone)]
-pub enum KError<'a> {
-    Message { msg: &'a str },
-    Errno { errno: Errno, msg: Option<&'a str> },
+#[derive(Clone, Default, Debug)]
+pub struct KError<'a> {
+    pub(crate) msg: Option<&'a str>,
+    pub(crate) errno: Option<Errno>,
 }
 
 impl<'a> KError<'a> {
     pub fn msg(&self) -> Option<&'a str> {
-        match self {
-            KError::Message { msg } => Some(msg),
-            KError::Errno { msg, .. } => *msg,
-        }
+        self.msg
     }
 
     pub fn errno(&self) -> Option<Errno> {
-        match self {
-            KError::Errno { errno, .. } => Some(*errno),
-            _ => None,
-        }
-    }
-}
-
-impl Debug for KError<'_> {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        match self {
-            // KError::Error { err } => write!(f, "{:?}", err),
-            // KError::ErrorWithMessage { err, msg } => write!(f, "{:?}: {}", err, msg),
-            KError::Message { msg } => write!(f, "{}", msg),
-            KError::Errno { errno, msg } => match msg {
-                Some(msg) => write!(f, "{:?}: {}", errno, msg),
-                None => write!(f, "{:?}", errno),
-            },
-        }
+        self.errno
     }
 }
 
 impl Display for KError<'_> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        write!(f, "{:?}", self)
+        match (self.errno, self.msg) {
+            (Some(errno), Some(msg)) => write!(f, "{:?}: {}", errno, msg),
+            (Some(errno), None) => write!(f, "{:?}", errno),
+            (None, Some(msg)) => write!(f, "{}", msg),
+            (None, None) => write!(f, "Unknown error"),
+        }
     }
 }
 
 #[macro_export]
-macro_rules! kerrmsg {
-    ($s:expr) => {
-        $crate::util::error::KError::Message { msg: $s }
+macro_rules! kerror {
+    ($e:ident) => {
+        $crate::util::error::KError {
+            errno: Some($crate::util::errno::Errno::$e),
+            msg: None,
+        }
+    };
+    ($e:ident, $($tts:tt)*) => {
+        $crate::util::error::KError {
+            errno: Some($crate::util::errno::Errno::$e),
+            msg: format_args!($($tts)*).as_str(),
+        }
+    };
+    ($($tts:tt)*) => {
+        $crate::util::error::KError {
+            errno: None,
+            msg: format_args!($($tts)*).as_str(),
+        }
     };
 }
 
 #[macro_export]
-macro_rules! errno {
-    ($e:expr) => {
-        $crate::util::error::KError::Errno {
-            errno: $e,
-            msg: None,
-        }
-    };
-    ($e:expr, $msg:expr) => {
-        $crate::util::error::KError::Errno {
-            errno: $e,
-            msg: Some($msg),
-        }
+macro_rules! kbail {
+    ($($e:tt)*) => {
+        return Err($crate::kerror!($($e)*))
     };
 }

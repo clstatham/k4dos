@@ -3,9 +3,9 @@ use core::{mem::size_of, ops::Add};
 use alloc::string::{String, ToString};
 
 use crate::{
-    errno,
+    kbail, kerror,
     mem::addr::VirtAddr,
-    util::{align_up, errno::Errno, error::KResult},
+    util::{align_up, error::KResult},
 };
 
 #[allow(dead_code)]
@@ -85,21 +85,22 @@ pub unsafe fn user_strncpy_rust(dst: *mut u8, src: *const u8, max_len: usize) ->
     read_len
 }
 
-pub struct UserCStr {
+pub struct CStr {
     string: String,
 }
 
-impl UserCStr {
-    pub fn new(vaddr: VirtAddr, max_len: usize) -> KResult<UserCStr> {
+impl CStr {
+    pub fn new(vaddr: VirtAddr, max_len: usize, is_user: bool) -> KResult<CStr> {
         vaddr.align_ok::<u8>()?;
-        (vaddr + max_len).user_ok()?;
+        if is_user {
+            (vaddr + max_len).user_ok()?;
+        }
         let mut tmp = alloc::vec![0; max_len];
-        // SAFE: we've validated the length of the string, and confirmed that it won't run into kernel memory
         let read_len = unsafe { user_strncpy_rust(tmp.as_mut_ptr(), vaddr.as_raw_ptr(), max_len) };
         let string = core::str::from_utf8(&tmp[..read_len])
-            .map_err(|_| errno!(Errno::EINVAL, "UserCStr: UTF-8 parsing error"))?
+            .map_err(|_| kerror!(EINVAL, "UserCStr: UTF-8 parsing error"))?
             .to_string();
-        Ok(UserCStr { string })
+        Ok(CStr { string })
     }
 
     pub fn as_bytes(&self) -> &[u8] {
@@ -171,10 +172,7 @@ impl<'a> UserBufferReader<'a> {
         if len <= self.remaining_len() {
             Ok(())
         } else {
-            Err(errno!(
-                Errno::EINVAL,
-                "check_remaining_len(): len out of bounds"
-            ))
+            kbail!(EINVAL, "check_remaining_len(): len out of bounds");
         }
     }
 
@@ -264,10 +262,7 @@ impl<'a> UserBufferWriter<'a> {
         if len <= self.remaining_len() {
             Ok(())
         } else {
-            Err(errno!(
-                Errno::EINVAL,
-                "check_remaining_len(): len out of bounds"
-            ))
+            kbail!(EINVAL, "check_remaining_len(): len out of bounds");
         }
     }
 

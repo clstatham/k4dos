@@ -1,10 +1,10 @@
 use core::sync::atomic::{AtomicUsize, Ordering};
 
 use crate::{
-    errno,
     fs::{File, FsNode},
+    kerror,
     mem::addr::VirtAddr,
-    util::{errno::Errno, KError, KResult},
+    util::{KError, KResult},
 };
 
 pub fn init() {}
@@ -22,7 +22,7 @@ impl TryFrom<usize> for Domain {
         match value {
             0 => Ok(Self::Unix),
             2 => Ok(Self::Inet),
-            _ => Err(errno!(Errno::EINVAL, "invalid socket domain")),
+            _ => Err(kerror!(EINVAL, "invalid socket domain")),
         }
     }
 }
@@ -46,7 +46,7 @@ impl TryFrom<usize> for SocketType {
             3 => Ok(Self::Raw),
             5 => Ok(Self::SeqPacket),
             10 => Ok(Self::Packet),
-            _ => Err(errno!(Errno::EINVAL, "invalid socket type")),
+            _ => Err(kerror!(EINVAL, "invalid socket type")),
         }
     }
 }
@@ -66,7 +66,7 @@ impl TryFrom<usize> for Protocol {
             4 => Ok(Self::Ipv4),
             6 => Ok(Self::Tcp),
             17 => Ok(Self::Udp),
-            _ => Err(errno!(Errno::EINVAL, "invalid socket protocol")),
+            _ => Err(kerror!(EINVAL, "invalid socket protocol")),
         }
     }
 }
@@ -117,7 +117,7 @@ pub fn read_sockaddr(addr: VirtAddr, len: usize) -> KResult<SockAddrInet> {
     let sockaddr = match Domain::try_from(family as usize)? {
         Domain::Inet => {
             if len < core::mem::size_of::<SockAddrInet>() {
-                return Err(errno!(Errno::EINVAL, "read_sockaddr(): buffer overflow"));
+                return Err(kerror!(EINVAL, "read_sockaddr(): buffer overflow"));
             }
 
             unsafe { addr.read_volatile::<SockAddrInet>()? }
@@ -150,7 +150,7 @@ impl File for Socket {
             FIONBIO => {
                 // todo: set/clear non block flag
             }
-            _ => return Err(errno!(Errno::EINVAL, "ioctl(): unknown cmd for socket")),
+            _ => return Err(kerror!(EINVAL, "ioctl(): unknown cmd for socket")),
         }
         Ok(0)
     }

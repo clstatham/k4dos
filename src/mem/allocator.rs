@@ -11,7 +11,8 @@ use super::consts::{MAX_LOW_VADDR, MIN_HIGH_VADDR, PAGE_SIZE};
 use super::paging::units::{
     AllocatedFrames, AllocatedPages, Frame, FrameRange, Page, PageIndex, PageRange,
 };
-use crate::kerrmsg;
+
+use crate::kerror;
 use crate::util::{align_down, IrqMutex, KResult};
 
 pub static KERNEL_FRAME_ALLOCATOR: Once<IrqMutex<FrameAllocator>> = Once::new();
@@ -23,7 +24,7 @@ pub static GLOBAL_ALLOC: LockedHeap<32> = LockedHeap::new();
 pub fn alloc_kernel_frames(count: usize) -> KResult<AllocatedFrames> {
     KERNEL_FRAME_ALLOCATOR
         .get()
-        .ok_or(kerrmsg!("KERNEL_FRAME_ALLOCATOR not initialized"))?
+        .ok_or(kerror!("KERNEL_FRAME_ALLOCATOR not initialized"))?
         .try_lock()?
         .allocate(count)
 }
@@ -31,7 +32,7 @@ pub fn alloc_kernel_frames(count: usize) -> KResult<AllocatedFrames> {
 pub fn alloc_kernel_frames_at(start: Frame, count: usize) -> KResult<AllocatedFrames> {
     KERNEL_FRAME_ALLOCATOR
         .get()
-        .ok_or(kerrmsg!("KERNEL_FRAME_ALLOCATOR not initialized"))?
+        .ok_or(kerror!("KERNEL_FRAME_ALLOCATOR not initialized"))?
         .try_lock()?
         .allocate_at(start, count)
 }
@@ -39,7 +40,7 @@ pub fn alloc_kernel_frames_at(start: Frame, count: usize) -> KResult<AllocatedFr
 pub fn alloc_kernel_pages(count: usize) -> KResult<AllocatedPages> {
     KERNEL_PAGE_ALLOCATOR
         .get()
-        .ok_or(kerrmsg!("KERNEL_PAGE_ALLOCATOR not initialized"))?
+        .ok_or(kerror!("KERNEL_PAGE_ALLOCATOR not initialized"))?
         .try_lock()?
         .allocate(count)
 }
@@ -47,7 +48,7 @@ pub fn alloc_kernel_pages(count: usize) -> KResult<AllocatedPages> {
 pub fn alloc_kernel_pages_at(start: Page, count: usize) -> KResult<AllocatedPages> {
     KERNEL_PAGE_ALLOCATOR
         .get()
-        .ok_or(kerrmsg!("KERNEL_PAGE_ALLOCATOR not initialized"))?
+        .ok_or(kerror!("KERNEL_PAGE_ALLOCATOR not initialized"))?
         .try_lock()?
         .allocate_at(start, count)
 }
@@ -55,7 +56,7 @@ pub fn alloc_kernel_pages_at(start: Page, count: usize) -> KResult<AllocatedPage
 pub fn free_kernel_frames(frames: &mut AllocatedFrames, merge: bool) -> KResult<()> {
     KERNEL_FRAME_ALLOCATOR
         .get()
-        .ok_or(kerrmsg!("KERNEL_FRAME_ALLOCATOR not initialized"))?
+        .ok_or(kerror!("KERNEL_FRAME_ALLOCATOR not initialized"))?
         .try_lock()?
         .free(frames, merge);
     Ok(())
@@ -64,7 +65,7 @@ pub fn free_kernel_frames(frames: &mut AllocatedFrames, merge: bool) -> KResult<
 pub fn free_kernel_pages(pages: &mut AllocatedPages, merge: bool) -> KResult<()> {
     KERNEL_PAGE_ALLOCATOR
         .get()
-        .ok_or(kerrmsg!("KERNEL_PAGE_ALLOCATOR not initialized"))?
+        .ok_or(kerror!("KERNEL_PAGE_ALLOCATOR not initialized"))?
         .try_lock()?
         .free(pages, merge);
     Ok(())
@@ -284,7 +285,7 @@ macro_rules! allocator_impl {
 
                 let allocation = match allocation {
                     Some(a) => a,
-                    None => return Err(kerrmsg!("couldn't find chunk for allocation")),
+                    None => return Err(kerror!(ENOMEM, "Failed to allocate")),
                 };
                 let index_to_remove = index_to_remove.unwrap();
                 self.free_chunks.remove(index_to_remove);

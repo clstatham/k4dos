@@ -6,9 +6,9 @@ use bitflags::bitflags;
 use crossbeam_utils::atomic::AtomicCell;
 
 use crate::{
-    errno,
+    kerror,
     userland::buffer::{UserBuffer, UserBufferMut},
-    util::{ctypes::c_int, errno::Errno, error::KResult},
+    util::{ctypes::c_int, error::KResult},
 };
 
 use super::{
@@ -196,7 +196,7 @@ impl OpenedFileTable {
     pub fn get(&self, fd: FileDesc) -> KResult<&Arc<OpenedFile>> {
         match self.files.get(fd as usize) {
             Some(Some(LocalOpenedFile { opened_file, .. })) => Ok(opened_file),
-            _ => Err(errno!(Errno::EBADF, "get(): file not opened")),
+            _ => Err(kerror!(EBADF, "get(): file not opened")),
         }
     }
 
@@ -236,15 +236,13 @@ impl OpenedFileTable {
         }
 
         match self.files.get_mut(fd as usize) {
-            Some(Some(_)) => {
-                return Err(errno!(Errno::EBADF, "open_with_fd(): file already opened"))
-            }
+            Some(Some(_)) => return Err(kerror!(EBADF, "open_with_fd(): file already opened")),
             Some(entry @ None) => {
                 *entry = Some(LocalOpenedFile { opened_file });
             }
             None if fd >= FD_MAX => {
-                return Err(errno!(
-                    Errno::EBADF,
+                return Err(kerror!(
+                    ENFILE,
                     "open_with_fd(): maximum file descriptor reached"
                 ))
             }
@@ -271,10 +269,7 @@ impl OpenedFileTable {
             i = (i + 1) % FD_MAX;
         }
 
-        Err(errno!(
-            Errno::ENFILE,
-            "alloc_fd(): cannot alloc file descriptor"
-        ))
+        Err(kerror!(ENFILE, "alloc_fd(): cannot alloc file descriptor"))
     }
 
     pub fn close_all(&mut self) {
@@ -307,7 +302,7 @@ impl OpenedFileTable {
     pub fn close(&mut self, fd: FileDesc) -> KResult<()> {
         match self.files.get_mut(fd as usize) {
             Some(opened_file) => *opened_file = None,
-            _ => return Err(errno!(Errno::EBADF, "close(): file not opened")),
+            _ => return Err(kerror!(EBADF, "close(): file not opened")),
         }
         Ok(())
     }
@@ -315,7 +310,7 @@ impl OpenedFileTable {
     pub fn dup(&mut self, fd: FileDesc, gte: Option<i32>, options: OpenFlags) -> KResult<FileDesc> {
         let file = match self.files.get(fd as usize) {
             Some(Some(file)) => file.opened_file.clone(),
-            _ => return Err(errno!(Errno::EBADF, "dup(): file not opened")),
+            _ => return Err(kerror!(EBADF, "dup(): file not opened")),
         };
 
         self.alloc_fd(gte)
@@ -327,7 +322,7 @@ impl OpenedFileTable {
             .files
             .get(oldfd as usize)
             .and_then(|file| file.as_ref().map(|file| file.opened_file.clone()))
-            .ok_or(errno!(Errno::EBADF, "dup2(): file not opened"))?;
+            .ok_or(kerror!(EBADF, "dup2(): file not opened"))?;
         let options = old_file.options();
         self.open_with_fd(newfd, old_file, options)?;
         Ok(newfd)

@@ -5,9 +5,9 @@ use x86_64::structures::{idt::PageFaultErrorCode, paging::PageTableFlags};
 
 use crate::{
     arch::idt::InterruptErrorFrame,
-    backtrace, errno,
+    backtrace,
     fs::{opened_file::FileDesc, FileRef},
-    kerrmsg,
+    kbail, kerror,
     mem::{
         addr::VirtAddr,
         allocator::{
@@ -20,7 +20,7 @@ use crate::{
         },
     },
     task::{current_task, get_scheduler, signal::SIGSEGV},
-    util::{align_up, errno::Errno, KResult},
+    util::{align_up, KResult},
 };
 
 bitflags::bitflags! {
@@ -132,7 +132,7 @@ impl VmemArea {
             return Ok(());
         }
         if other.start_addr != self.end_addr && other.end_addr != self.start_addr {
-            return Err(kerrmsg!("Error merging pages"));
+            kbail!("Cannot merge non-contiguous areas");
         }
         if other.start_addr < self.start_addr {
             self.start_addr = other.start_addr;
@@ -239,10 +239,7 @@ impl Vmem {
     ) -> KResult<()> {
         let area = self
             .area_containing_mut(start_addr, start_addr + size - 1)
-            .ok_or(errno!(
-                Errno::ENOMEM,
-                "mprotect(): no areas containing address"
-            ))?;
+            .ok_or(kerror!(EINVAL, "mprotect(): no areas containing address"))?;
         area.prot = protection;
         Ok(())
     }
@@ -255,7 +252,7 @@ impl Vmem {
         active_mapper: &mut Mapper,
     ) -> KResult<VirtAddr> {
         if new_size == 0 {
-            return Err(errno!(Errno::EINVAL, "mremap(): new_size is zero"));
+            return Err(kerror!(EINVAL, "mremap(): new_size is zero"));
         }
 
         // let new_size_aligned = align_up(new_size, PAGE_SIZE);
@@ -277,10 +274,7 @@ impl Vmem {
                 return Ok(old_area.start_addr);
             }
         } else {
-            return Err(errno!(
-                Errno::EFAULT,
-                "mremap(): address not owned by this process"
-            ));
+            kbail!(EFAULT, "mremap(): address not owned by task");
         }
         self.log();
         let old_area = self.area_containing(old_addr, old_addr).unwrap().clone();
@@ -325,13 +319,10 @@ impl Vmem {
         _offset: usize,
     ) -> KResult<VirtAddr> {
         if size == 0 {
-            return Err(errno!(Errno::EFAULT, "mmap(): size is 0"));
+            kbail!(EINVAL, "mmap(): size is zero");
         }
         if flags.contains(MMapFlags::MAP_FIXED) {
-            return Err(errno!(
-                Errno::ENOSYS,
-                "mmap(): MMAP_FIXED not yet implemented"
-            ));
+            kbail!(ENOSYS, "mmap(): MAP_FIXED not yet implemented");
         }
 
         let size_aligned = align_up(size, PAGE_SIZE);
@@ -340,14 +331,8 @@ impl Vmem {
             if let Some((start, prev)) = start {
                 if let Some(prev_idx) = prev {
                     let prev = &mut self.areas[prev_idx];
-                    if prev.end_addr == start
-                    // && prev.flags == flags
-                    // todo: ???
-                    && prev.prot == protection
-                    // && matches!(prev.kind, MMapKind::Anonymous)
-                    {
+                    if prev.end_addr == start && prev.prot == protection {
                         assert_eq!(prev.flags, flags);
-                        // assert_eq!(prev.prot, protection);
                         assert!(matches!(prev.kind, MMapKind::Anonymous));
                         prev.end_addr = start + size_aligned;
                         return Ok(start);
@@ -373,12 +358,10 @@ impl Vmem {
             }
 
             self.log();
-            return Err(errno!(Errno::ENOMEM, "mmap(): no free space big enough"));
+            kbail!(ENOMEM, "mmap(): no free space big enough");
         }
-        Err(errno!(
-            Errno::ENOSYS,
-            "mmap(): not yet implemented for start_addr != 0"
-        ))
+
+        kbail!(ENOSYS, "mmap(): not yet implemented for start_addr != null");
     }
 
     fn find_free_space_above(
@@ -475,10 +458,7 @@ impl Vmem {
             .enumerate()
             .find(|(_idx, area)| area.contains_addr(start_addr))
             .map(|(idx, _area)| idx)
-            .ok_or(errno!(
-                Errno::EINVAL,
-                "munmap(): address range not owned by task"
-            ))?;
+            .ok_or(kerror!(EINVAL, "munmap(): address range not owned by task"))?;
         let area_clone = self.areas[area_idx].clone();
         if start_addr <= area_clone.start_addr && end_addr >= area_clone.end_addr {
             // remove the whole area and continue recursively unmapping until the whole range is unmapped
@@ -651,10 +631,7 @@ impl Vmem {
             dump_and_exit()
         }
 
-        Err(errno!(
-            Errno::EFAULT,
-            "handle_page_fault(): couldn't handle page fault"
-        ))
+        kbail!(EFAULT, "handle_page_fault(): couldn't handle page fault");
     }
 }
 

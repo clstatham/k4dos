@@ -1,8 +1,8 @@
 use bitvec::prelude::*;
 
 use crate::{
-    errno,
-    util::{ctypes::c_int, errno::Errno, error::KResult},
+    kbail,
+    util::{ctypes::c_int, error::KResult},
 };
 
 pub type Signal = c_int;
@@ -143,7 +143,7 @@ impl SignalDelivery {
 
     pub fn set_action(&mut self, signal: Signal, action: SigAction) -> KResult<()> {
         if signal > SIGMAX {
-            return Err(errno!(Errno::EINVAL, "set_action(): signal out of range"));
+            kbail!(EINVAL, "set_action(): signal out of range");
         }
 
         self.actions[signal as usize] = action;

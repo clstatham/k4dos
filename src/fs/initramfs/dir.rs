@@ -5,12 +5,12 @@ use alloc::{
 };
 
 use crate::{
-    errno,
     fs::{
         alloc_inode_no, DirEntry, Directory, FileMode, FileRef, FileType, FsNode, INode, Stat,
         S_IFDIR,
     },
-    util::{errno::Errno, lock::IrqMutex, KResult},
+    kerror,
+    util::{lock::IrqMutex, KResult},
 };
 
 pub struct DirInner {
@@ -68,7 +68,7 @@ impl Directory for InitRamFsDir {
             .iter()
             .find(|child| child.get_name() == *name)
             .cloned()
-            .ok_or(errno!(Errno::ENOENT, "lookup(): not found"))?;
+            .ok_or(kerror!(ENOENT, "lookup(): not found"))?;
         Ok(inode)
     }
 

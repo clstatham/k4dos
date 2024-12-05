@@ -8,14 +8,14 @@ use xmas_elf::{
 };
 
 use crate::{
-    errno,
     fs::{initramfs::get_root, opened_file::OpenFlags, path::Path, FileRef},
+    kerror,
     mem::{
         addr::VirtAddr, addr_space::AddressSpace, allocator::alloc_kernel_frames, consts::PAGE_SIZE,
     },
     task::vmem::{MMapFlags, MMapKind, MMapProt, Vmem},
     userland::buffer::UserBufferMut,
-    util::{align_up, errno::Errno, KResult},
+    util::{align_up, KResult},
 };
 
 pub fn gen_stack_canary() -> [u8; 16] {
@@ -68,8 +68,7 @@ pub fn load_elf(file: FileRef) -> KResult<UserlandEntry> {
     let ubuf = UserBufferMut::from_slice(buf);
     file.read(0, ubuf, &OpenFlags::empty())?;
     current.switch();
-    let elf =
-        ElfBinary::new(buf).map_err(|_e| errno!(Errno::EBADF, "load_elf(): elf loader error"))?;
+    let elf = ElfBinary::new(buf).map_err(|_e| kerror!("load_elf(): elf loader error"))?;
 
     let mut start_of_image = usize::MAX;
     let mut end_of_image = 0;

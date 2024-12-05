@@ -5,8 +5,8 @@ use spin::mutex::{SpinMutex, SpinMutexGuard};
 use x86::current::rflags::{self, RFlags};
 use x86_64::instructions::interrupts;
 
+use crate::backtrace;
 use crate::task::wait_queue::WaitQueue;
-use crate::{backtrace, kerrmsg};
 
 use super::error::KResult;
 
@@ -49,7 +49,7 @@ impl<T: ?Sized> BlockingMutex<T> {
 
     pub fn try_lock(&self) -> KResult<BlockingMutexGuard<'_, T>> {
         if self.inner.is_locked() {
-            Err(kerrmsg!("Cannot relock BlockingMutex")) // todo: more verbose error message
+            Err(kerror!("Cannot relock BlockingMutex")) // todo: more verbose error message
         } else {
             Ok(BlockingMutexGuard {
                 inner: ManuallyDrop::new(self.inner.lock()),
@@ -128,7 +128,7 @@ impl<T: ?Sized> IrqMutex<T> {
 
     pub fn try_lock(&self) -> KResult<IrqMutexGuard<'_, T>> {
         if self.inner.is_locked() {
-            Err(kerrmsg!("Cannot relock IrqMutex")) // todo: more verbose error message
+            Err(kerror!("Cannot relock IrqMutex")) // todo: more verbose error message
         } else {
             Ok(self.lock())
         }

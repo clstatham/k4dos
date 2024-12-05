@@ -2,12 +2,12 @@ use alloc::borrow::ToOwned;
 
 use crate::{
     arch::idt::InterruptFrame,
-    errno,
     fs::{
         opened_file::{FileDesc, OpenFlags},
         path::{Path, PathBuf},
         FileMode,
     },
+    kerror,
     mem::addr::VirtAddr,
     task::{
         current_task, get_scheduler,
@@ -18,12 +18,11 @@ use crate::{
     userland::syscall::syscall_impl::task::WaitOptions,
     util::{
         ctypes::{c_int, c_nfds},
-        errno::Errno,
         KError, KResult,
     },
 };
 
-use super::buffer::UserCStr;
+use super::buffer::CStr;
 
 pub mod syscall_impl;
 
@@ -215,7 +214,10 @@ impl SyscallHandler<'_> {
                 a5,
             ),
             SYS_MADVISE => Ok(0), // todo
-            _ => Err(errno!(Errno::ENOSYS, "dispatch(): syscall not implemented")),
+            _ => Err(kerror!(
+                ENOSYS,
+                "SyscallHandler::dispatch(): syscall not implemented"
+            )),
         };
 
         if let Err(err) = get_scheduler().try_delivering_signal(self.frame, errno_to_isize(&res)) {
@@ -240,8 +242,8 @@ macro_rules! bitflags_from_user {
                     bits
                 );
 
-                Err($crate::errno!(
-                    $crate::util::errno::Errno::ENOSYS,
+                Err($crate::kerror!(
+                    ENOSYS,
                     "bitflags_from_user(): unsupported bitflags"
                 ))?
             }
@@ -251,7 +253,7 @@ macro_rules! bitflags_from_user {
 
 #[inline]
 fn resolve_path(uaddr: usize) -> KResult<PathBuf> {
-    Ok(Path::new(UserCStr::new(VirtAddr::new(uaddr), 512)?.as_str()).into())
+    Ok(Path::new(CStr::new(VirtAddr::new(uaddr), 512, false)?.as_str()).into())
 }
 
 pub fn syscall_name_by_number(n: usize) -> &'static str {

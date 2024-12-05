@@ -5,12 +5,12 @@ use bitflags::bitflags;
 
 use crate::{
     arch::time,
-    errno,
     fs::path::Path,
+    kbail, kerror,
     mem::addr::VirtAddr,
     task::{current_task, get_scheduler, group::PgId, Task, TaskId, TaskState, JOIN_WAIT_QUEUE},
-    userland::{buffer::UserCStr, syscall::SyscallHandler},
-    util::{ctypes::c_int, errno::Errno, KError, KResult},
+    userland::{buffer::CStr, syscall::SyscallHandler},
+    util::{ctypes::c_int, errno::Errno, KResult},
 };
 
 use super::time::TimeSpec;
@@ -64,7 +64,7 @@ impl SyscallHandler<'_> {
             let ptr = argv_addr.add(i * size_of::<usize>());
             let str_ptr = unsafe { ptr.read::<usize>() }?;
             if str_ptr != 0 {
-                argv.push(UserCStr::new(VirtAddr::new(str_ptr), ARG_LEN_MAX)?);
+                argv.push(CStr::new(VirtAddr::new(str_ptr), ARG_LEN_MAX, false)?);
             } else {
                 break;
             }
@@ -75,7 +75,7 @@ impl SyscallHandler<'_> {
             let ptr = envp_addr.add(i * size_of::<usize>());
             let str_ptr = unsafe { ptr.read::<usize>() }?;
             if str_ptr != 0 {
-                envp.push(UserCStr::new(VirtAddr::new(str_ptr), ENV_LEN_MAX)?);
+                envp.push(CStr::new(VirtAddr::new(str_ptr), ENV_LEN_MAX, false)?);
             } else {
                 break;
             }
@@ -110,7 +110,7 @@ impl SyscallHandler<'_> {
         } else {
             Ok(get_scheduler()
                 .find_task(pid)
-                .ok_or(errno!(Errno::ESRCH))?
+                .ok_or(kerror!(ESRCH, "sys_getpgid(): task not found"))?
                 .pgid()
                 .unwrap() as isize)
         }
@@ -128,7 +128,7 @@ impl SyscallHandler<'_> {
         } else {
             get_scheduler()
                 .find_task(pid)
-                .ok_or(errno!(Errno::ESRCH))?
+                .ok_or(kerror!(ESRCH, "sys_setpgid(): task not found"))?
                 .group
                 .borrow_mut()
                 .upgrade()
@@ -159,10 +159,7 @@ impl SyscallHandler<'_> {
             let current = current_task();
             let children = current.children.lock();
             if children.is_empty() {
-                return Err(errno!(
-                    Errno::ECHILD,
-                    "sys_wait4(): all subprocesses have exited"
-                ));
+                kbail!(ECHILD, "sys_wait4(): all subprocesses have exited");
             }
             for child in children.iter() {
                 if pid.as_usize() as isize > 0 && pid != child.pid() {
@@ -205,7 +202,7 @@ impl SyscallHandler<'_> {
         #[allow(clippy::redundant_guards)]
         match get_scheduler().sleep(Some(duration as usize)) {
             Ok(_) => {}
-            Err(KError::Errno { errno, .. }) if errno == Errno::EINTR => {
+            Err(e) if e.errno == Some(Errno::EINTR) => {
                 todo!()
                 // return Err(KError::Errno { errno: Errno::EINTR, msg })
             }
@@ -260,7 +257,7 @@ fn arch_prctl(current_task: Arc<Task>, code: i32, addr: VirtAddr) -> KResult<()>
         ARCH_SET_FS => {
             current_task.arch_mut().set_fsbase(addr);
         }
-        _ => return Err(errno!(Errno::EINVAL, "arch_prctl(): unknown code")),
+        _ => kbail!(EINVAL, "arch_prctl(): unknown code"),
     }
 
     Ok(())

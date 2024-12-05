@@ -1,8 +1,8 @@
 use alloc::{collections::VecDeque, sync::Arc};
 
 use crate::{
-    arch, errno,
-    util::{errno::Errno, IrqMutex, KResult},
+    arch, kbail,
+    util::{IrqMutex, KResult},
 };
 
 use super::{current_task, get_scheduler, Task, TaskState};
@@ -47,10 +47,10 @@ impl WaitQueue {
             if current.has_pending_signals() {
                 scheduler.resume_task(current.clone());
                 self.queue.lock().retain(|t| t.pid != current.pid);
-                return Err(errno!(
-                    Errno::EINTR,
+                kbail!(
+                    EINTR,
                     "sleep_signalable_until(): interrupted by pending signals"
-                ));
+                );
             }
 
             let ret_value = match sleep_if_none() {
@@ -70,10 +70,7 @@ impl WaitQueue {
 
             if let Some(timeout) = timeout {
                 if arch::time::get_uptime_ms() >= start_time + timeout {
-                    return Err(errno!(
-                        Errno::EINTR,
-                        "sleep_signalable_until(): timeout reached"
-                    ));
+                    kbail!(EINTR, "sleep_signalable_until(): timeout reached");
                 }
             }
         }

@@ -2,7 +2,7 @@ use x86::tlb;
 use x86_64::structures::paging::PageTableFlags;
 
 use crate::{
-    kerrmsg,
+    kbail,
     mem::{
         addr::{PhysAddr, VirtAddr},
         allocator::alloc_kernel_frames,
@@ -71,7 +71,7 @@ impl<'a> Mapper<'a> {
         let p1 = p2.next_table_create(addr.p2_index(), insert_flags)?;
         let entry = &mut p1[addr.p1_index()];
         if !entry.is_unused() {
-            return Err(kerrmsg!("Page already mapped"));
+            kbail!(ENOMEM, "Page already mapped");
         }
         entry.set_frame(frame, flags);
         unsafe { tlb::flush(addr.value()) }

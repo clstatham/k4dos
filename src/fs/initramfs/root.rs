@@ -1,13 +1,13 @@
 use alloc::{borrow::ToOwned, string::String, sync::Arc};
 
 use crate::{
-    errno,
     fs::{
         path::{Path, PathComponent},
         pipe::PIPE_FS,
         DirRef, INode,
     },
-    util::{errno::Errno, KResult},
+    kbail,
+    util::KResult,
 };
 
 use super::dir::InitRamFsDir;
@@ -68,7 +68,7 @@ impl RootFs {
 
     pub fn lookup_path(&self, path: &Path, follow_symlinks: bool) -> KResult<Arc<PathComponent>> {
         if path.is_empty() {
-            return Err(errno!(Errno::ENOENT, "lookup_path(): not found"));
+            kbail!(ENOENT, "lookup_path(): empty path");
         }
 
         let lookup_from = if path.is_absolute() {
@@ -120,10 +120,7 @@ impl RootFs {
                     }
                     INode::Symlink(link) if follow_symlinks => {
                         if symlink_follow_limit == 0 {
-                            return Err(errno!(
-                                Errno::ELOOP,
-                                "lookup_path(): maximum symlink depth reached"
-                            ));
+                            kbail!("lookup_path(): maximum symlink depth reached");
                         }
                         let dst = link.link_location()?;
                         let follow_from = if dst.is_absolute() {
@@ -142,28 +139,22 @@ impl RootFs {
                         match dst_path.inode {
                             INode::Dir(_) => dst_path,
                             _ => {
-                                return Err(errno!(
-                                    Errno::ENOTDIR,
-                                    "lookup_path(): not a directory"
-                                ))
+                                kbail!(ENOTDIR, "lookup_path(): not a directory");
                             }
                         }
                     }
                     INode::Symlink(_) => {
-                        return Err(errno!(Errno::ENOTDIR, "lookup_path(): not a directory"))
+                        kbail!(ENOTDIR, "lookup_path(): not a directory");
                     }
                     INode::File(_) => {
-                        return Err(errno!(Errno::ENOTDIR, "lookup_path(): not a directory"))
+                        kbail!(ENOTDIR, "lookup_path(): not a directory");
                     }
                 }
             } else {
                 match &path_comp.inode {
                     INode::Symlink(link) if follow_symlinks => {
                         if symlink_follow_limit == 0 {
-                            return Err(errno!(
-                                Errno::ELOOP,
-                                "lookup_path(): maximum symlink depth reached"
-                            ));
+                            kbail!("lookup_path(): maximum symlink depth reached");
                         }
                         let dst = link.link_location()?;
                         let follow_from = if dst.is_absolute() {

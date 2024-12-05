@@ -6,7 +6,7 @@ use core::{
 use x86_64::{registers::control::Cr3, structures::paging::PageTableFlags};
 
 use crate::{
-    kerrmsg,
+    kbail,
     mem::{
         addr::{PhysAddr, VirtAddr},
         allocator::alloc_kernel_frames,
@@ -134,7 +134,7 @@ impl PageTable {
                     created = true;
                 }
                 Err(_e) => {
-                    return Err(kerrmsg!("Failed to allocate frame for new page table"));
+                    kbail!("Could not allocate frame for new page table")
                 }
             }
         } else {
@@ -145,9 +145,7 @@ impl PageTable {
         let page_table = match self.next_table_mut(index) {
             Some(pt) => pt,
             None => {
-                return Err(kerrmsg!(
-                    "Could not create next page table, likely due to a huge page"
-                ))
+                kbail!("Could not get mutable reference to new page table, likely due to huge page")
             }
         };
 

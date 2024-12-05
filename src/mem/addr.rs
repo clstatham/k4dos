@@ -3,8 +3,7 @@ use core::mem::align_of;
 use core::ops::*;
 use core::ptr::NonNull;
 
-use crate::errno;
-use crate::util::errno::Errno;
+use crate::kbail;
 use crate::util::{align_down, align_up, KResult};
 
 use super::consts::PAGE_SIZE;
@@ -53,6 +52,16 @@ impl PhysAddr {
     #[inline]
     pub const fn null() -> Self {
         unsafe { Self::new_unchecked(0) }
+    }
+
+    #[inline]
+    pub const fn is_null(&self) -> bool {
+        self.addr == 0
+    }
+
+    #[inline]
+    pub const fn is_canonical(&self) -> bool {
+        is_canonical_physaddr(self.addr)
     }
 
     #[inline]
@@ -179,6 +188,11 @@ impl VirtAddr {
     }
 
     #[inline]
+    pub const fn is_canonical(&self) -> bool {
+        is_canonical_virtaddr(self.addr)
+    }
+
+    #[inline]
     pub const fn value(&self) -> usize {
         self.addr
     }
@@ -227,13 +241,13 @@ impl VirtAddr {
 
     pub const fn align_ok<T: Sized>(&self) -> KResult<()> {
         if self.addr == 0 {
-            return Err(errno!(Errno::EFAULT, "align_ok(): null VirtAddr"));
+            kbail!(EFAULT, "align_ok(): null VirtAddr");
         }
         if self.addr % align_of::<T>() != 0 {
-            return Err(errno!(Errno::EACCES, "align_ok(): unaligned VirtAddr"));
+            kbail!(EFAULT, "align_ok(): unaligned VirtAddr");
         }
         if !is_canonical_virtaddr(self.addr) {
-            return Err(errno!(Errno::EFAULT, "align_ok(): non-canonical VirtAddr"));
+            kbail!(EFAULT, "align_ok(): non-canonical VirtAddr");
         }
 
         Ok(())
@@ -241,13 +255,13 @@ impl VirtAddr {
 
     pub fn user_ok(&self) -> KResult<()> {
         if self.addr == 0 {
-            return Err(errno!(Errno::EFAULT, "user_ok(): null VirtAddr"));
+            kbail!(EFAULT, "user_ok(): null VirtAddr");
         }
         if !is_canonical_virtaddr(self.addr) {
-            return Err(errno!(Errno::EFAULT, "user_ok(): non-canonical VirtAddr"));
+            kbail!(EFAULT, "user_ok(): non-canonical VirtAddr");
         }
         if self >= &crate::mem::consts::MAX_LOW_VADDR {
-            return Err(errno!(Errno::EFAULT, "user_ok(): VirtAddr in kernel space"));
+            kbail!(EFAULT, "user_ok(): VirtAddr in kernel memory");
         }
 
         Ok(())
@@ -283,7 +297,7 @@ impl VirtAddr {
 
     pub unsafe fn write_bytes(&self, bytes: &[u8]) -> KResult<usize> {
         if self.is_null() {
-            return Err(errno!(Errno::EFAULT, "write_bytes(): null VirtAddr"));
+            kbail!(EFAULT, "write_bytes(): null VirtAddr");
         }
         unsafe {
             core::slice::from_raw_parts_mut(self.as_raw_ptr_mut(), bytes.len())
@@ -294,7 +308,7 @@ impl VirtAddr {
 
     pub unsafe fn fill(&self, value: u8, len: usize) -> KResult<usize> {
         if self.is_null() {
-            return Err(errno!(Errno::EFAULT, "fill(): null VirtAddr"));
+            kbail!(EFAULT, "fill(): null VirtAddr");
         }
         unsafe { (self.value() as *mut u8).write_bytes(value, len) };
         Ok(len)
@@ -414,15 +428,19 @@ pub struct UnsafePtr<T> {
 }
 
 impl<T> UnsafePtr<T> {
-    pub const fn new(ptr: VirtAddr) -> Self {
-        assert!(!ptr.is_null(), "Ptr::new(): null VirtAddr");
+    pub const fn new(addr: VirtAddr) -> Self {
+        assert!(!addr.is_null(), "UnsafePtr::new(): null VirtAddr");
         assert!(
-            ptr.value() % align_of::<T>() == 0,
-            "Ptr::new(): unaligned VirtAddr"
+            addr.value() % align_of::<T>() == 0,
+            "UnsafePtr::new(): unaligned VirtAddr"
+        );
+        assert!(
+            is_canonical_virtaddr(addr.value()),
+            "UnsafePtr::new(): non-canonical VirtAddr"
         );
 
         Self {
-            addr: ptr,
+            addr,
             _phantom: core::marker::PhantomData,
         }
     }
@@ -468,7 +486,10 @@ impl<T> UnsafePtr<T> {
     }
 
     pub fn into_non_null(self) -> NonNull<T> {
-        assert!(!self.addr.is_null(), "Ptr::as_non_null(): null VirtAddr");
+        assert!(
+            !self.addr.is_null(),
+            "UnsafePtr::as_non_null(): null VirtAddr"
+        );
         NonNull::new(self.as_raw_ptr_mut()).unwrap()
     }
 
@@ -502,15 +523,19 @@ pub struct UnsafeSlice<T> {
 }
 
 impl<T> UnsafeSlice<T> {
-    pub fn new(ptr: VirtAddr, len: usize) -> Self {
-        assert!(!ptr.is_null(), "Slice::new(): null VirtAddr");
+    pub fn new(addr: VirtAddr, len: usize) -> Self {
+        assert!(!addr.is_null(), "UnsafeSlice::new(): null VirtAddr");
         assert!(
-            ptr.value() % align_of::<T>() == 0,
-            "Slice::new(): unaligned VirtAddr"
+            addr.value() % align_of::<T>() == 0,
+            "UnsafeSlice::new(): unaligned VirtAddr"
+        );
+        assert!(
+            is_canonical_virtaddr(addr.value()),
+            "UnsafeSlice::new(): non-canonical VirtAddr"
         );
 
         Self {
-            addr: ptr,
+            addr,
             len,
             _phantom: core::marker::PhantomData,
         }

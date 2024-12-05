@@ -210,7 +210,7 @@ macro_rules! range_impl {
                     return Ok(());
                 }
                 if other.start != self.end + 1 && other.end + 1 != self.start {
-                    return Err($crate::kerrmsg!("Error merging pages"));
+                    return Err($crate::kerror!("Error merging pages"));
                 }
                 if other.start < self.start {
                     self.start = other.start;

@@ -10,7 +10,7 @@ use xmas_elf::{
 };
 
 use crate::{
-    kerrmsg,
+    kerror,
     mem::{addr::VirtAddr, addr_space::AddressSpace, consts::PAGE_SIZE},
     task::get_scheduler,
     userland::elf::SymTabEntry,
@@ -105,14 +105,14 @@ pub fn unwind_stack() -> KResult<()> {
 
     let kernel_elf = KERNEL_ELF
         .get()
-        .ok_or(kerrmsg!("KERNEL_ELF not initialized"))?;
+        .ok_or(kerror!("KERNEL_ELF not initialized"))?;
     let mut symbol_table = None;
 
     for section in kernel_elf.section_iter() {
         if section.get_type() == Ok(ShType::SymTab) {
             let section_data = section
                 .get_data(kernel_elf)
-                .map_err(|_| kerrmsg!("Failed to get kernel section data"))?;
+                .map_err(|_| kerror!("Failed to get kernel section data"))?;
 
             if let SectionData::SymbolTable64(symtab) = section_data {
                 symbol_table = Some(symtab);
@@ -120,7 +120,7 @@ pub fn unwind_stack() -> KResult<()> {
         }
     }
 
-    let symbol_table = symbol_table.ok_or(kerrmsg!("No symbol table available"))?;
+    let symbol_table = symbol_table.ok_or(kerror!("No symbol table available"))?;
     let mut rbp: usize;
     unsafe {
         core::arch::asm!("mov {}, rbp", out(reg) rbp);

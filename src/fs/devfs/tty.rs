@@ -11,8 +11,9 @@ use bitflags::bitflags;
 use spin::Once;
 
 use crate::{
-    errno, fb_print,
+    fb_print,
     graphics::{self, render_text_buf},
+    kerror,
     mem::addr::VirtAddr,
     task::{current_task, get_scheduler, group::TaskGroup, signal::SIGINT, wait_queue::WaitQueue},
     userland::buffer::{UserBuffer, UserBufferMut, UserBufferReader, UserBufferWriter},
@@ -377,7 +378,7 @@ impl File for Tty {
                 let arg = VirtAddr::new(arg);
                 unsafe { arg.write_volatile(winsize) }?;
             }
-            _ => return Err(errno!(Errno::ENOSYS, "ioctl(): command not found")),
+            _ => return Err(kerror!(EINVAL, "ioctl(): command not found")),
         }
 
         Ok(0)
@@ -393,22 +394,19 @@ impl File for Tty {
 
     fn read(&self, _offset: usize, buf: UserBufferMut, options: &OpenFlags) -> KResult<usize> {
         let read_len = self.discipline.read(buf, options);
-        if let Ok(read_len) = read_len {
-            if read_len > 0 {
-                get_scheduler().wake_all(&POLL_WAIT_QUEUE);
+        match read_len {
+            Ok(read_len) => {
+                if read_len > 0 {
+                    get_scheduler().wake_all(&POLL_WAIT_QUEUE);
+                }
+                Ok(read_len)
             }
-            Ok(read_len)
-        } else if matches!(
-            read_len,
-            Err(KError::Errno {
-                errno: Errno::EINTR,
-                ..
-            })
-        ) && options.contains(OpenFlags::O_NONBLOCK)
-        {
-            Ok(0)
-        } else {
-            read_len
+            Err(KError { errno, .. })
+                if options.contains(OpenFlags::O_NONBLOCK) && errno == Some(Errno::EINTR) =>
+            {
+                Ok(0)
+            }
+            Err(e) => Err(e),
         }
     }
 

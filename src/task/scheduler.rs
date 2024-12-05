@@ -14,11 +14,11 @@ use crate::{
         task::{arch_context_switch, ArchTask},
         time,
     },
-    errno,
     fs::POLL_WAIT_QUEUE,
+    kerror,
     mem::addr::VirtAddr,
     task::JOIN_WAIT_QUEUE,
-    util::{ctypes::c_int, errno::Errno, IrqMutex, KResult},
+    util::{ctypes::c_int, IrqMutex, KResult},
 };
 
 use super::{
@@ -333,7 +333,7 @@ impl Scheduler {
         self.preempt();
 
         if task.has_pending_signals() {
-            Err(errno!(Errno::EINTR, "sleep(): pending signals"))
+            Err(kerror!(EINTR, "sleep(): pending signals"))
         } else {
             Ok(())
         }

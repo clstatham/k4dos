@@ -1,10 +1,10 @@
 use alloc::{format, sync::Arc, vec::Vec};
 
 use crate::{
-    errno,
+    kerror,
     task::wait_queue::WaitQueue,
     userland::buffer::{UserBuffer, UserBufferMut, UserBufferReader, UserBufferWriter},
-    util::{errno::Errno, ringbuffer::RingBuffer, IrqMutex, KResult},
+    util::{ringbuffer::RingBuffer, IrqMutex, KResult},
 };
 
 use super::{opened_file::FileDesc, path::Path, File, FsNode};
@@ -126,6 +126,6 @@ impl PipeFs {
             .iter()
             .find(|pipe| pipe.get_name() == path.pipe_name().unwrap())
             .cloned()
-            .ok_or(errno!(Errno::ENOENT, "pipe does not exist"))
+            .ok_or(kerror!(ENOENT, "pipe does not exist"))
     }
 }
