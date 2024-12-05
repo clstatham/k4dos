@@ -120,7 +120,7 @@ impl RootFs {
                     }
                     INode::Symlink(link) if follow_symlinks => {
                         if symlink_follow_limit == 0 {
-                            kbail!("lookup_path(): maximum symlink depth reached");
+                            kbail!(ELOOP, "lookup_path(): maximum symlink depth reached");
                         }
                         let dst = link.link_location()?;
                         let follow_from = if dst.is_absolute() {
@@ -154,7 +154,7 @@ impl RootFs {
                 match &path_comp.inode {
                     INode::Symlink(link) if follow_symlinks => {
                         if symlink_follow_limit == 0 {
-                            kbail!("lookup_path(): maximum symlink depth reached");
+                            kbail!(ELOOP, "lookup_path(): maximum symlink depth reached");
                         }
                         let dst = link.link_location()?;
                         let follow_from = if dst.is_absolute() {

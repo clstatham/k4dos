@@ -265,23 +265,21 @@ impl SyscallHandler<'_> {
             let mut reader = UserBufferReader::from(UserBuffer::from_vaddr(fds, fds_len));
             for _ in 0..nfds {
                 let fd = reader.read::<FileDesc>()?;
-                // log::debug!("fd: {:?}", fd);
                 let events = bitflags_from_user!(PollStatus, reader.read::<c_short>()?);
 
-                if fd < 0 || events.is_empty() {
-                    kbail!(EINVAL, "sys_poll(): invalid fd or events");
+                if fd < 0 {
+                    kbail!(EINVAL, "sys_poll(): invalid fd");
+                } else if events.is_empty() {
+                    kbail!(EINVAL, "sys_poll(): invalid events");
                 } else {
-                    // log::debug!("events: {:?}", events);
                     let current = current_task();
                     let opened_files = current.opened_files.lock();
                     let status = opened_files.get(fd)?.poll()?;
 
-                    // log::debug!("status: {:?}", status);
                     let revents = events & status;
                     if !revents.is_empty() {
                         ready_fds += 1;
                     }
-                    // log::debug!("revents: {:?}", revents);
 
                     unsafe {
                         fds.add(reader.read_len())

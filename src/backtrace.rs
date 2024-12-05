@@ -74,7 +74,7 @@ pub fn unwind_user_stack_from(mut rbp: usize, mut rip: usize) {
     print_symbol(rip, &symtab, 0);
     for depth in 1..17 {
         if let Some(rip_rbp) = rbp.checked_add(size_of::<usize>()) {
-            let rip_rbp = VirtAddr::new(rip_rbp);
+            let rip_rbp = unsafe { VirtAddr::new_unchecked(rip_rbp) };
             let translated = addr_space.with_mapper(|mapper| mapper.translate(rip_rbp));
             if rip_rbp.value() < PAGE_SIZE || translated.is_none() {
                 serial0_println!("{:>2}: <guard page>", depth);
@@ -134,7 +134,7 @@ pub fn unwind_stack() -> KResult<()> {
     serial0_println!("---BEGIN BACKTRACE---");
     for depth in 0..16 {
         if let Some(rip_rbp) = rbp.checked_add(size_of::<usize>()) {
-            let rip_rbp = VirtAddr::new(rip_rbp);
+            let rip_rbp = unsafe { VirtAddr::new_unchecked(rip_rbp) };
             let translated = addr_space.with_mapper(|mapper| mapper.translate(rip_rbp));
             if translated.is_none() {
                 serial0_println!("{:>2}: <guard page>", depth);

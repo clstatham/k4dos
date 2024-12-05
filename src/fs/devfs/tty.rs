@@ -378,7 +378,7 @@ impl File for Tty {
                 let arg = VirtAddr::new(arg);
                 unsafe { arg.write_volatile(winsize) }?;
             }
-            _ => return Err(kerror!(EINVAL, "ioctl(): command not found")),
+            _ => return Err(kerror!(ENOTTY, "ioctl(): command not found")),
         }
 
         Ok(0)

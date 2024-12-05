@@ -96,7 +96,7 @@ pub const DEFAULT_ACTIONS: [SigAction; SIGMAX as usize] = [
     /* SIGUSR1 */ SigAction::Ignore,
     /* SIGSEGV */ SigAction::Terminate,
     /* SIGUSR2 */ SigAction::Ignore,
-    /* SIGPIPE */ SigAction::Terminate,
+    /* SIGPIPE */ SigAction::Ignore,
     /* SIGALRM */ SigAction::Ignore,
     /* SIGTERM */ SigAction::Terminate,
     /* SIGSTKFLT */ SigAction::Ignore,

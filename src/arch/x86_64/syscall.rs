@@ -152,10 +152,9 @@ fn handle_syscall(
     if let Err(ref err) = res {
         if !QUIET_SYSCALLS.contains(&n) {
             log::error!(
-                "Syscall handler for `{}` returned Err {:?} with msg: {:?}",
+                "Syscall handler for `{}` returned Err: {}",
                 syscall_name_by_number(n),
-                err.errno(),
-                err.msg()
+                err
             );
         }
     }
