@@ -9,7 +9,8 @@ use spin::Once;
 use super::addr::{PhysAddr, VirtAddr};
 use super::consts::{MAX_LOW_VADDR, MIN_HIGH_VADDR, PAGE_SIZE};
 use super::paging::units::{
-    AllocatedFrames, AllocatedPages, Frame, FrameRange, Page, PageIndex, PageRange,
+    Allocated, AllocatedFrames, AllocatedPages, Frame, FrameRange, MemoryRange, MemoryUnit, Page,
+    PageIndex, PageRange,
 };
 
 use crate::kerror;
@@ -83,8 +84,8 @@ pub fn init(memmap: &[&Entry]) -> KResult<()> {
         let start = entry.base as usize;
         let end = start + entry.length as usize;
         let frames = FrameRange::new(
-            Frame::containing_address(PhysAddr::new(start).unwrap()),
-            Frame::containing_address(PhysAddr::new(end).unwrap()),
+            Frame::containing_address(PhysAddr::new(start)),
+            Frame::containing_address(PhysAddr::new(end)),
         );
         unsafe { frame_alloc.insert_free_region(frames) };
     }
@@ -196,180 +197,106 @@ impl<T: Clone, const CAP: usize> IndexMut<usize> for StaticListOrVec<T, CAP> {
     }
 }
 
-macro_rules! allocator_impl {
-    ($name:ident, $unit:ident, $range:ident, $allocated:ident) => {
-        /// Even though this implements Clone, you should be very careful about cloning allocators.
-        #[derive(Clone)]
-        pub struct $name {
-            pub(crate) free_chunks: StaticListOrVec<$range, 256>,
-        }
-
-        impl $name {
-            pub const fn new_static() -> $name {
-                $name {
-                    free_chunks: StaticListOrVec::new_static(),
-                }
-            }
-            pub const fn new_vec() -> $name {
-                $name {
-                    free_chunks: StaticListOrVec::new_vec(),
-                }
-            }
-
-            pub fn convert_to_heap_allocated(&mut self) {
-                self.free_chunks.convert_to_vec();
-            }
-
-            pub fn is_region_free(&self, range: $range) -> bool {
-                self.free_chunks.iter().any(|chunk| chunk.consumes(range))
-            }
-
-            /// # Safety
-            /// Caller must ensure the given memory region is not in use by anything else.
-            pub unsafe fn insert_free_region(&mut self, range: $range) {
-                self.free_chunks.push(range)
-            }
-
-            pub fn next_free_location(&self) -> Option<&$range> {
-                self.free_chunks.iter().min_by_key(|chunk| chunk.start())
-            }
-
-            pub fn max_unreserved_location(&self) -> Option<$unit> {
-                self.free_chunks
-                    .iter()
-                    .max_by_key(|c| c.end())
-                    .map(|c| c.end())
-            }
-
-            fn allocate_internal(
-                &mut self,
-                start: Option<$unit>,
-                count: usize,
-            ) -> KResult<$allocated> {
-                let mut allocation: Option<$allocated> = None;
-                let mut index_to_remove: Option<usize> = None;
-                let mut before: Option<$range> = None;
-                let mut after: Option<$range> = None;
-
-                for (i, available_chunk) in self.free_chunks.iter().enumerate() {
-                    let start = start.unwrap_or(available_chunk.start());
-                    let end = start + count - 1;
-                    let range_to_allocate = $range::new(start, end);
-                    if available_chunk.consumes(range_to_allocate) {
-                        index_to_remove = Some(i);
-                        allocation =
-                            Some(unsafe { $allocated::assume_allocated(range_to_allocate) });
-                        if allocation
-                            .as_ref()
-                            .unwrap()
-                            .start()
-                            .index()
-                            .0
-                            .saturating_sub(available_chunk.start().index().0)
-                            > 0
-                        {
-                            before = Some($range::new(available_chunk.start(), start));
-                        }
-                        if available_chunk
-                            .end()
-                            .index()
-                            .0
-                            .saturating_sub(allocation.as_ref().unwrap().end().index().0)
-                            > 0
-                        {
-                            after = Some($range::new(end + 1, available_chunk.end()));
-                        }
-                        break;
-                    }
-                }
-
-                let allocation = match allocation {
-                    Some(a) => a,
-                    None => return Err(kerror!(ENOMEM, "Failed to allocate")),
-                };
-                let index_to_remove = index_to_remove.unwrap();
-                self.free_chunks.remove(index_to_remove);
-                if let Some(before) = before {
-                    self.free_chunks.push(before);
-                }
-                if let Some(after) = after {
-                    self.free_chunks.push(after);
-                }
-
-                for i in 0..self.free_chunks.len() {
-                    for j in 0..self.free_chunks.len() - i - 1 {
-                        if self.free_chunks[j + 1].start() < self.free_chunks[j].start() {
-                            self.free_chunks.swap(j, j + 1);
-                        }
-                    }
-                }
-
-                Ok(allocation)
-            }
-
-            pub fn merge_contiguous_chunks(&mut self) {
-                let mut merge1 = None;
-                let mut merge2 = None;
-                for (i, chunk) in self.free_chunks.iter().enumerate() {
-                    if let Some(next_chunk) = self.free_chunks.get(i + 1) {
-                        if chunk.start() == next_chunk.end() + 1 {
-                            merge1 = Some(*chunk);
-                            merge2 = Some(*next_chunk);
-                            break;
-                        } else if chunk.end() + 1 == next_chunk.start() {
-                            merge1 = Some(*next_chunk);
-                            merge2 = Some(*chunk);
-                            break;
-                        }
-                    }
-                }
-                if let Some(ref mut merge1) = merge1 {
-                    let merge2 = merge2.unwrap();
-                    match &mut self.free_chunks {
-                        StaticListOrVec::StaticList(a) => a.retain(|chunk| {
-                            chunk.start() != merge1.start() && chunk.start() != merge2.start()
-                        }),
-                        StaticListOrVec::Vec(v) => v.retain(|chunk| {
-                            chunk.start() != merge1.start() && chunk.start() != merge2.start()
-                        }),
-                    }
-                    if merge1.merge_with(merge2).is_err() {
-                        panic!("Error merging chunks");
-                    }
-                    self.free_chunks.push(*merge1);
-
-                    self.merge_contiguous_chunks();
-                }
-            }
-
-            pub fn allocate(&mut self, count: usize) -> KResult<$allocated> {
-                self.allocate_internal(None, count)
-            }
-
-            pub fn allocate_at(&mut self, start: $unit, count: usize) -> KResult<$allocated> {
-                self.allocate_internal(Some(start), count)
-            }
-
-            pub fn allocate_range(&mut self, range: $range) -> KResult<$allocated> {
-                let count = range.size_in_pages();
-                self.allocate_internal(Some(range.start()), count)
-            }
-
-            pub fn free(&mut self, allocation: &mut $allocated, merge: bool) {
-                if allocation.is_empty() {
-                    return;
-                }
-                // log::debug!("Freeing frame {:?}", allocation.start());
-                unsafe {
-                    self.insert_free_region(**allocation);
-                }
-                if merge {
-                    self.merge_contiguous_chunks();
-                }
-            }
-        }
-    };
+#[derive(Clone)]
+pub struct Allocator<T: MemoryUnit> {
+    free_regions: StaticListOrVec<MemoryRange<T>, 32>,
 }
 
-allocator_impl!(FrameAllocator, Frame, FrameRange, AllocatedFrames);
-allocator_impl!(PageAllocator, Page, PageRange, AllocatedPages);
+impl<T: MemoryUnit> Allocator<T> {
+    pub fn new_static() -> Self {
+        Self {
+            free_regions: StaticListOrVec::new_static(),
+        }
+    }
+
+    pub fn new_vec() -> Self {
+        Self {
+            free_regions: StaticListOrVec::new_vec(),
+        }
+    }
+
+    pub fn convert_to_heap_allocated(&mut self) {
+        self.free_regions.convert_to_vec();
+    }
+
+    pub fn free_regions(&self) -> impl Iterator<Item = &MemoryRange<T>> {
+        self.free_regions.iter()
+    }
+
+    pub unsafe fn insert_free_region(&mut self, range: MemoryRange<T>) {
+        self.free_regions.push(range);
+    }
+
+    pub fn allocate(&mut self, count: usize) -> KResult<Allocated<T>> {
+        if count == 0 {
+            return Err(kerror!("Cannot allocate 0 units"));
+        }
+
+        let mut best_fit = None;
+        for region in self.free_regions.iter() {
+            if region.size_in_pages() >= count {
+                best_fit = Some(*region);
+                break;
+            }
+        }
+        let best_fit = best_fit.ok_or(kerror!("Out of memory"))?;
+        let new_region = MemoryRange::new(best_fit.start, best_fit.start + count);
+        if best_fit.size_in_pages() == count {
+            self.free_regions.remove(0);
+        } else {
+            self.free_regions[0] = MemoryRange::new(best_fit.start + count, best_fit.end);
+        }
+        Ok(unsafe { Allocated::assume_allocated(new_region) })
+    }
+
+    pub fn allocate_at(&mut self, start: T, count: usize) -> KResult<Allocated<T>> {
+        if count == 0 {
+            return Err(kerror!("Cannot allocate 0 units"));
+        }
+
+        let mut best_fit = None;
+        for region in self.free_regions.iter() {
+            if region.start() <= start && region.end() >= start + count {
+                best_fit = Some(*region);
+                break;
+            }
+        }
+        let best_fit = best_fit.ok_or(kerror!("Out of memory"))?;
+        let new_region = MemoryRange::new(start, start + count);
+        if best_fit.start() == start {
+            if best_fit.size_in_pages() == count {
+                self.free_regions.remove(0);
+            } else {
+                self.free_regions[0] = MemoryRange::new(start + count, best_fit.end);
+            }
+        } else if best_fit.end() == start + count {
+            self.free_regions[0] = MemoryRange::new(best_fit.start, start);
+        } else {
+            self.free_regions[0] = MemoryRange::new(best_fit.start, start);
+            self.free_regions
+                .push(MemoryRange::new(start + count, best_fit.end));
+        }
+        Ok(unsafe { Allocated::assume_allocated(new_region) })
+    }
+
+    pub fn free(&mut self, allocated: &mut Allocated<T>, merge: bool) {
+        let mut new_region = allocated.range;
+        if merge {
+            for region in self.free_regions.iter_mut() {
+                if region.start() == new_region.end() {
+                    new_region = MemoryRange::new(new_region.start(), region.end());
+                    *region = new_region;
+                    return;
+                } else if region.end() == new_region.start() {
+                    new_region = MemoryRange::new(region.start(), new_region.end());
+                    *region = new_region;
+                    return;
+                }
+            }
+        }
+        self.free_regions.push(new_region);
+    }
+}
+
+pub type FrameAllocator = Allocator<Frame>;
+pub type PageAllocator = Allocator<Page>;

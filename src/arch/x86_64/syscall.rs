@@ -2,6 +2,7 @@ use core::mem::offset_of;
 
 use x86::msr::{rdmsr, wrmsr};
 
+use crate::mem::kernel_addr_space_scope;
 use crate::userland::syscall::{
     errno_to_isize, syscall_name_by_number, SyscallHandler, QUIET_SYSCALLS,
 };
@@ -148,7 +149,10 @@ fn handle_syscall(
         frame: unsafe { &mut *frame },
     };
 
+    let guard = kernel_addr_space_scope().unwrap();
     let res = handler.dispatch(a1, a2, a3, a4, a5, a6, n);
+    drop(guard);
+
     if let Err(ref err) = res {
         if !QUIET_SYSCALLS.contains(&n) {
             log::error!(

@@ -4,9 +4,10 @@ use limine::request::{
     StackSizeRequest,
 };
 
+use spin::Once;
 use x86::{
-    controlregs::{self, Cr0, Cr4, Xcr0},
-    cpuid::CpuId,
+    controlregs::{self, Cr0, Cr4},
+    cpuid::{CpuId, FeatureInfo},
 };
 use x86_64::instructions::interrupts;
 
@@ -18,7 +19,7 @@ use crate::{
         opened_file::{OpenFlags, OpenedFile},
         path::Path,
     },
-    god_mode::{self, GOD_MODE_FIFO},
+    god_mode::GOD_MODE_FIFO,
     graphics,
     mem::{
         self,
@@ -42,6 +43,16 @@ static BOOT_TIME: BootTimeRequest = BootTimeRequest::new();
 static FB_REQUEST: FramebufferRequest = FramebufferRequest::new();
 static MEM_MAP: MemoryMapRequest = MemoryMapRequest::new();
 static KERNEL_FILE: KernelFileRequest = KernelFileRequest::new();
+
+pub static CPUID_FEATURE_INFO: Once<FeatureInfo> = Once::new();
+
+pub fn get_cpuid_feature_info() -> &'static FeatureInfo {
+    CPUID_FEATURE_INFO.call_once(|| {
+        CpuId::new()
+            .get_feature_info()
+            .expect("Error getting CPUID feature info")
+    })
+}
 
 pub fn arch_main() {
     interrupts::disable();
@@ -80,26 +91,27 @@ pub fn arch_main() {
     time::init(boot_time.as_secs() as i64);
 
     log::info!("Initializing FPU mechanisms.");
-    let features = CpuId::new()
-        .get_feature_info()
-        .expect("Error getting CPUID feature info");
-    assert!(features.has_xsave(), "XSAVE not available");
+    let features = get_cpuid_feature_info();
+    assert!(features.has_fxsave_fxstor(), "FXSAVE/FXRSTOR not available");
     assert!(features.has_mmx(), "MMX not available");
     assert!(features.has_fpu(), "FPU not available");
     assert!(features.has_sse(), "SSE not available");
     unsafe {
-        controlregs::cr4_write(controlregs::cr4() | Cr4::CR4_ENABLE_OS_XSAVE);
-        x86_64::registers::control::Cr4::write_raw(
-            x86_64::registers::control::Cr4::read_raw() | (3 << 9),
-        );
-        controlregs::xcr0_write(
-            controlregs::xcr0()
-                | Xcr0::XCR0_SSE_STATE
-                | Xcr0::XCR0_FPU_MMX_STATE
-                | Xcr0::XCR0_AVX_STATE,
-        );
+        // enable FXSAVE and FXRSTOR
+        controlregs::cr4_write(controlregs::cr4() | Cr4::CR4_ENABLE_SSE | Cr4::CR4_UNMASKED_SSE);
+        log::trace!("CR4_ENABLE_SSE and CR4_UNMASKED_SSE set.");
+
+        // controlregs::xcr0_write(
+        //     controlregs::xcr0()
+        //         | Xcr0::XCR0_SSE_STATE
+        //         | Xcr0::XCR0_FPU_MMX_STATE
+        //         | Xcr0::XCR0_AVX_STATE,
+        // );
+        // log::trace!("XCR0_SSE_STATE, XCR0_FPU_MMX_STATE, and XCR0_AVX_STATE set.");
         controlregs::cr0_write(controlregs::cr0() & !Cr0::CR0_EMULATE_COPROCESSOR);
+        log::trace!("CR0_EMULATE_COPROCESSOR cleared.");
         controlregs::cr0_write(controlregs::cr0() | Cr0::CR0_MONITOR_COPROCESSOR);
+        log::trace!("CR0_MONITOR_COPROCESSOR set.");
     }
 
     log::info!("Initializing boot GDT.");
@@ -113,10 +125,11 @@ pub fn arch_main() {
     mem::allocator::init(memmap).expect("Error initializing kernel frame and page allocators");
 
     log::info!("Remapping kernel to new page table.");
-    let mut kernel_addr_space = mem::remap_kernel().expect("Error remapping kernel");
+    let kernel_addr_space = mem::remap_kernel().expect("Error remapping kernel");
 
     log::info!("Setting up kernel heap.");
     let _heap_mp = kernel_addr_space
+        .lock()
         .with_mapper(|mut mapper| mem::init_heap(&mut mapper).expect("Error setting up heap"));
 
     log::info!("Converting kernel frame and page allocators to use heap.");
@@ -167,7 +180,7 @@ pub fn arch_main() {
         sched.push_runnable(task, true);
     }
 
-    god_mode::init();
+    // god_mode::init();
 
     loop {
         interrupts::enable_and_hlt();
@@ -237,6 +250,12 @@ fn poll_serial1() {
                 interrupts::enable_and_hlt();
             }
         }
+        interrupts::enable_and_hlt();
+    }
+}
+
+pub fn idle() {
+    loop {
         interrupts::enable_and_hlt();
     }
 }

@@ -43,6 +43,7 @@ smoltcp = { version = "0.12.0", default-features = false, features = [
     "medium-ethernet",
 ] }
 lazy_static = { version = "1.5.0", features = ["spin_no_std"] }
+embedded-profiling = { version = "0.3.0", features = ["proc-macros"] }
 
 [profile.release]
 debug = 1

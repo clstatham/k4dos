@@ -231,30 +231,30 @@ extern "C" fn x64_handle_interrupt(vector: u8, stack_frame: *mut InterruptErrorF
         }
         DIVIDE_ERROR_VECTOR => {
             log::error!("\nEXCEPTION: DIVIDE ERROR\n{:#x?}", stack_frame);
-            panic!()
+            panic!("Divide error");
         }
         DEBUG_VECTOR => {
             log::error!("\nEXCEPTION: DEBUG EXCEPTION\n{:#x?}", stack_frame);
         }
         NONMASKABLE_INTERRUPT_VECTOR => {
             log::error!("\nEXCEPTION: NON-MASKABLE INTERRUPT\n{:#x?}", stack_frame);
-            panic!()
+            panic!("Non-maskable interrupt");
         }
         OVERFLOW_VECTOR => {
             log::error!("\nEXCEPTION: OVERFLOW\n{:#x?}", stack_frame);
-            panic!()
+            panic!("Overflow");
         }
         BOUND_RANGE_EXCEEDED_VECTOR => {
             log::error!("\nEXCEPTION: BOUND RANGE EXCEEDED\n{:#x?}", stack_frame);
-            panic!()
+            panic!("Bound range exceeded");
         }
         INVALID_OPCODE_VECTOR => {
             log::error!("\nEXCEPTION: INVALID OPCODE\n{:#x?}", stack_frame);
-            panic!()
+            panic!("Invalid opcode");
         }
         DEVICE_NOT_AVAILABLE_VECTOR => {
             log::error!("\nEXCEPTION: DEVICE NOT AVAILABLE\n{:#x?}", stack_frame);
-            panic!()
+            panic!("Device not available");
         }
         DOUBLE_FAULT_VECTOR => {
             log::error!(
@@ -263,7 +263,7 @@ extern "C" fn x64_handle_interrupt(vector: u8, stack_frame: *mut InterruptErrorF
                 error_code,
                 Cr3::read_raw().0.start_address().as_u64()
             );
-            panic!()
+            panic!("Double fault");
         }
         INVALID_TSS_VECTOR => {
             log::error!(
@@ -271,7 +271,7 @@ extern "C" fn x64_handle_interrupt(vector: u8, stack_frame: *mut InterruptErrorF
                 stack_frame,
                 error_code
             );
-            panic!()
+            panic!("Invalid TSS");
         }
         SEGMENT_NOT_PRESENT_VECTOR => {
             log::error!(
@@ -279,7 +279,7 @@ extern "C" fn x64_handle_interrupt(vector: u8, stack_frame: *mut InterruptErrorF
                 stack_frame,
                 error_code
             );
-            panic!()
+            panic!("Segment not present");
         }
         STACK_SEGEMENT_FAULT_VECTOR => {
             log::error!(
@@ -287,7 +287,7 @@ extern "C" fn x64_handle_interrupt(vector: u8, stack_frame: *mut InterruptErrorF
                 stack_frame,
                 error_code
             );
-            panic!()
+            panic!("Stack segment fault");
         }
         GENERAL_PROTECTION_FAULT_VECTOR => {
             log::error!(
@@ -297,14 +297,13 @@ extern "C" fn x64_handle_interrupt(vector: u8, stack_frame: *mut InterruptErrorF
             );
             unsafe {
                 let fsbase = rdmsr(IA32_FS_BASE);
-                // let gsbase = rdmsr(IA32_GS_BASE);
                 log::debug!("FSBASE: {:#x}", fsbase);
             }
             if stack_frame.frame.is_user_mode() {
                 backtrace::unwind_user_stack_from(stack_frame.frame.rbp, stack_frame.frame.rip);
                 get_scheduler().exit_current(1);
             }
-            panic!()
+            panic!("General Protection Fault");
         }
         PAGE_FAULT_VECTOR => {
             let accessed_address = x86_64::registers::control::Cr2::read_raw();
@@ -312,14 +311,11 @@ extern "C" fn x64_handle_interrupt(vector: u8, stack_frame: *mut InterruptErrorF
             let error_code = PageFaultErrorCode::from_bits_truncate(error_code as u64);
             let current = get_scheduler().current_task_opt();
             if let Some(current) = current {
-                if current
-                    .handle_page_fault(
-                        unsafe { VirtAddr::new_unchecked(accessed_address as usize) },
-                        *stack_frame,
-                        error_code,
-                    )
-                    .is_err()
-                {
+                if let Err(e) = current.handle_page_fault(
+                    unsafe { VirtAddr::new_unchecked(accessed_address as usize) },
+                    *stack_frame,
+                    error_code,
+                ) {
                     log::error!(
                         "\nEXCEPTION: USER PAGE FAULT while accessing {:#x}\n\
                         error code: {:?}\ncr3: {:#x}\n{:#x?}",
@@ -330,8 +326,9 @@ extern "C" fn x64_handle_interrupt(vector: u8, stack_frame: *mut InterruptErrorF
                     );
                     let rip = stack_frame.frame.rip;
                     log::error!("Exception IP {:#x}", rip);
-                    log::error!("Faulted access address {:#x}", accessed_address,);
-                    panic!()
+                    log::error!("Faulted access address {:#x}", accessed_address);
+                    log::error!("Error: {:?}", e);
+                    panic!("User page fault");
                 }
             } else {
                 log::error!(
@@ -345,12 +342,12 @@ extern "C" fn x64_handle_interrupt(vector: u8, stack_frame: *mut InterruptErrorF
                 let rip = stack_frame.frame.rip;
                 log::error!("Exception IP {:#x}", rip);
                 log::error!("Faulted access address {:#x}", accessed_address,);
-                panic!()
+                panic!("Kernel page fault");
             }
         }
         X87_FPU_VECTOR => {
             log::error!("\nEXCEPTION: x87 FLOATING POINT\n{:#x?}", stack_frame);
-            panic!()
+            panic!("x87 floating point exception");
         }
         ALIGNMENT_CHECK_VECTOR => {
             log::error!(
@@ -358,7 +355,7 @@ extern "C" fn x64_handle_interrupt(vector: u8, stack_frame: *mut InterruptErrorF
                 stack_frame,
                 error_code
             );
-            panic!()
+            panic!("Alignment check");
         }
         MACHINE_CHECK_VECTOR => {
             log::error!("\nEXCEPTION: MACHINE CHECK\n{:#x?}", stack_frame);
@@ -366,11 +363,11 @@ extern "C" fn x64_handle_interrupt(vector: u8, stack_frame: *mut InterruptErrorF
         }
         SIMD_FLOATING_POINT_VECTOR => {
             log::error!("\nEXCEPTION: SIMD FLOATING POINT\n{:#x?}", stack_frame);
-            panic!()
+            panic!("SIMD floating point exception");
         }
         VIRTUALIZATION_VECTOR => {
             log::error!("\nEXCEPTION: VIRTUALIZATION\n{:#x?}", stack_frame);
-            panic!()
+            panic!("Virtualization exception");
         }
         0x1D => {
             log::error!(
@@ -378,7 +375,7 @@ extern "C" fn x64_handle_interrupt(vector: u8, stack_frame: *mut InterruptErrorF
                 stack_frame,
                 error_code
             );
-            panic!()
+            panic!("VMM communication exception");
         }
         0x1E => {
             log::error!(
@@ -386,7 +383,7 @@ extern "C" fn x64_handle_interrupt(vector: u8, stack_frame: *mut InterruptErrorF
                 stack_frame,
                 error_code
             );
-            panic!()
+            panic!("Security exception");
         }
         _ => log::warn!("Unhandled interrupt: {}", vector),
     }

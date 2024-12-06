@@ -170,6 +170,8 @@ impl SignalDelivery {
 }
 
 pub type SigSet = BitArray<[u8; 8], LocalBits>;
+
+#[derive(Clone, Copy, Debug)]
 pub enum SignalMask {
     Block,
     Unblock,

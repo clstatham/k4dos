@@ -47,7 +47,7 @@ impl File for NullDevice {
         buf: crate::userland::buffer::UserBufferMut,
         _options: &OpenFlags,
     ) -> crate::util::KResult<usize> {
-        let mut writer = UserBufferWriter::from(buf);
+        let mut writer = UserBufferWriter::from_buf(buf);
         writer.write_bytes(&[0x05])?; // EOF
         Ok(writer.written_len())
     }

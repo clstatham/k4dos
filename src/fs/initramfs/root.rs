@@ -1,4 +1,4 @@
-use alloc::{borrow::ToOwned, string::String, sync::Arc};
+use alloc::{borrow::ToOwned, boxed::Box, string::String, sync::Arc};
 
 use crate::{
     fs::{
@@ -14,35 +14,27 @@ use super::dir::InitRamFsDir;
 
 const MAX_SYMLINK_FOLLOW_DEPTH: usize = 20;
 
+#[derive(Clone)]
 pub struct RootFs {
-    root_path: Arc<PathComponent>,
-    cwd_path: Arc<PathComponent>,
-}
-
-impl Clone for RootFs {
-    fn clone(&self) -> Self {
-        Self {
-            root_path: Arc::new(self.root_path.as_ref().clone()),
-            cwd_path: Arc::new(self.cwd_path.as_ref().clone()),
-        }
-    }
+    root_path: PathComponent,
+    cwd_path: PathComponent,
 }
 
 impl RootFs {
     pub fn new(root: Arc<InitRamFsDir>) -> RootFs {
-        let root_path = Arc::new(PathComponent {
+        let root_path = PathComponent {
             parent_dir: None,
-            name: String::new(),
+            name: Arc::new(String::new()),
             inode: INode::Dir(root),
-        });
+        };
         RootFs {
             root_path: root_path.clone(),
             cwd_path: root_path,
         }
     }
 
-    pub fn cwd_path(&self) -> Arc<PathComponent> {
-        self.cwd_path.clone()
+    pub fn cwd_path(&self) -> &PathComponent {
+        &self.cwd_path
     }
 
     pub fn root_dir(&self) -> DirRef {
@@ -66,7 +58,7 @@ impl RootFs {
             .map(|cmp| cmp.inode.clone())
     }
 
-    pub fn lookup_path(&self, path: &Path, follow_symlinks: bool) -> KResult<Arc<PathComponent>> {
+    pub fn lookup_path(&self, path: &Path, follow_symlinks: bool) -> KResult<PathComponent> {
         if path.is_empty() {
             kbail!(ENOENT, "lookup_path(): empty path");
         }
@@ -87,11 +79,11 @@ impl RootFs {
 
     fn do_lookup_path(
         &self,
-        lookup_from: &Arc<PathComponent>,
+        lookup_from: &PathComponent,
         path: &Path,
         follow_symlinks: bool,
         symlink_follow_limit: usize,
-    ) -> KResult<Arc<PathComponent>> {
+    ) -> KResult<PathComponent> {
         let mut parent = lookup_from.clone();
         let mut components = path.components().peekable();
         while let Some(name) = components.next() {
@@ -99,16 +91,16 @@ impl RootFs {
                 "." => continue,
                 ".." => parent
                     .parent_dir
-                    .as_ref()
+                    .as_deref()
                     .unwrap_or(&self.root_path)
                     .clone(),
                 _ => {
                     let inode = parent.inode.as_dir()?.lookup(name)?;
-                    Arc::new(PathComponent {
-                        parent_dir: Some(parent.clone()),
-                        name: name.to_owned(),
+                    PathComponent {
+                        parent_dir: Some(Box::new(parent.clone())),
+                        name: Arc::new(name.to_owned()),
                         inode,
-                    })
+                    }
                 }
             };
 

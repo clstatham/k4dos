@@ -19,7 +19,7 @@ use crate::{
     },
     fs::{
         initramfs::{get_root, root::RootFs},
-        opened_file::{FileDesc, OpenedFile, OpenedFileTable},
+        opened_file::{FileDesc, LocalOpenedFile, OpenedFileTable},
         FileRef,
     },
     mem::addr::VirtAddr,
@@ -156,7 +156,6 @@ impl Task {
     }
 
     pub fn exec(&self, file: FileRef, argv: &[&[u8]], envp: &[&[u8]]) -> KResult<()> {
-        // interrupts::disable();
         {
             self.opened_files.lock().close_cloexec_files();
             self.arch_mut().address_space.with_mapper(|mut mapper| {
@@ -290,7 +289,7 @@ impl Task {
         Weak::ptr_eq(&self.group.borrow(), pg)
     }
 
-    pub fn get_opened_file_by_fd(&self, fd: FileDesc) -> KResult<Arc<OpenedFile>> {
+    pub fn get_opened_file_by_fd(&self, fd: FileDesc) -> KResult<LocalOpenedFile> {
         Ok(self.opened_files.lock().get(fd)?.clone())
     }
 
@@ -305,11 +304,9 @@ impl Task {
         reason: PageFaultErrorCode,
     ) -> KResult<()> {
         let addr_space = &mut self.arch_mut().address_space;
-        addr_space.with_mapper(|mut mapper| {
-            self.vmem
-                .lock()
-                .handle_page_fault(&mut mapper, faulted_addr, stack_frame, reason)
-        })
+        self.vmem
+            .try_lock()?
+            .handle_page_fault(addr_space, faulted_addr, stack_frame, reason)
     }
 
     pub fn set_signal_mask(
@@ -320,14 +317,14 @@ impl Task {
         _length: usize,
     ) -> KResult<()> {
         let mut sigset = self.sigset.lock();
-        if oldset.value() != 0 {
+        if !oldset.is_null() {
             let slice = sigset.as_raw_slice();
             assert_eq!(slice.len(), 8);
-            unsafe { oldset.write_bytes(slice) }?;
+            unsafe { oldset.write_bytes_user(slice) }?;
         }
 
-        if set.value() != 0 {
-            let new_set = unsafe { set.read_volatile::<[u8; 8]>()? };
+        if !set.is_null() {
+            let new_set = unsafe { set.read_user::<[u8; 8]>()? };
             let new_set = SigSet::new(new_set);
             match how {
                 SignalMask::Block => *sigset |= new_set,

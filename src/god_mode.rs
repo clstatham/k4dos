@@ -59,7 +59,7 @@ pub fn god_mode_repl() {
                 serial1_println!("Dumping free physical memory.");
                 let fa = KERNEL_FRAME_ALLOCATOR.get().unwrap().lock();
                 let mut total_space_pages = 0;
-                for area in fa.free_chunks.iter() {
+                for area in fa.free_regions() {
                     total_space_pages += area.size_in_pages();
                     serial1_println!("Free chunk at {:?}", area);
                 }
@@ -96,10 +96,7 @@ pub fn god_mode_repl() {
                     continue;
                 };
 
-                let ptr = PhysAddr::new(start)
-                    .unwrap()
-                    .as_hhdm_virt()
-                    .as_raw_ptr::<u64>();
+                let ptr = PhysAddr::new(start).as_hhdm_virt().as_raw_ptr::<u64>();
 
                 let max_i = PAGE_SIZE / core::mem::size_of::<u64>();
                 serial1_println!("Dumping frame at {:#x}.", start);

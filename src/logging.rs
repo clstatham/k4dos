@@ -40,6 +40,19 @@ impl Log for KaDOSLogger {
     fn flush(&self) {}
 }
 
+struct KaDOSProfiler;
+
+impl embedded_profiling::EmbeddedProfiler for KaDOSProfiler {
+    fn read_clock(&self) -> embedded_profiling::EPInstant {
+        let uptime = crate::arch::x86_64::time::get_uptime_ns();
+        embedded_profiling::EPInstant::from_ticks(uptime as u32)
+    }
+
+    fn log_snapshot(&self, snapshot: &embedded_profiling::EPSnapshot) {
+        crate::serial0_println!("{}", snapshot);
+    }
+}
+
 pub fn init() {
     log::set_logger(&KaDOSLogger).expect("error setting logger");
     let level = if let Some(level) = option_env!("RUST_LOG")
@@ -58,4 +71,6 @@ pub fn init() {
         log::LevelFilter::Info
     };
     log::set_max_level(level);
+
+    unsafe { embedded_profiling::set_profiler(&KaDOSProfiler).expect("error setting profiler") };
 }

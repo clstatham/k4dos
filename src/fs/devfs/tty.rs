@@ -184,7 +184,7 @@ impl LineDiscipline {
         let mut current_line = self.current_line.lock();
         let mut ringbuf = self.buf.lock();
         let mut written_len = 0;
-        let mut reader = UserBufferReader::from(buf);
+        let mut reader = UserBufferReader::from_buf(buf);
         while reader.remaining_len() > 0 {
             let mut tmp = [0; 1];
             let copied_len = reader.read_bytes(&mut tmp)?;
@@ -241,7 +241,7 @@ impl LineDiscipline {
     }
 
     pub fn read(&self, dst: UserBufferMut<'_>, options: &OpenFlags) -> KResult<usize> {
-        let mut writer = UserBufferWriter::from(dst);
+        let mut writer = UserBufferWriter::from_buf(dst);
         let timeout = if options.contains(OpenFlags::O_NONBLOCK) {
             Some(0)
         } else {
@@ -346,11 +346,11 @@ impl File for Tty {
             TCGETS => {
                 let termios = *self.discipline.termios.lock();
                 let arg = VirtAddr::new(arg);
-                unsafe { arg.write_volatile(termios) }?;
+                unsafe { arg.write_user(termios) }?;
             }
             TCSETS | TCSETSW => {
                 let arg = VirtAddr::new(arg);
-                let termios = unsafe { arg.read_volatile::<Termios>()? };
+                let termios = unsafe { arg.read_user::<Termios>()? };
                 *self.discipline.termios.lock() = termios;
             }
             TIOCGPGRP => {
@@ -360,11 +360,11 @@ impl File for Tty {
                     .unwrap_or(current_task().group.borrow().upgrade().unwrap());
                 let id = group.lock().pgid();
                 let arg = VirtAddr::new(arg);
-                unsafe { arg.write_volatile(id) }?;
+                unsafe { arg.write_user(id) }?;
             }
             TIOCSPGRP => {
                 let arg = VirtAddr::new(arg);
-                let pgid = unsafe { arg.read::<c_int>()? };
+                let pgid = unsafe { arg.read_user::<c_int>()? };
                 let pg = get_scheduler().find_or_create_group(pgid);
                 self.discipline.set_foreground_group(Arc::downgrade(&pg));
             }
@@ -376,7 +376,7 @@ impl File for Tty {
                     ws_ypixel: 0,
                 };
                 let arg = VirtAddr::new(arg);
-                unsafe { arg.write_volatile(winsize) }?;
+                unsafe { arg.write_user(winsize) }?;
             }
             _ => return Err(kerror!(ENOTTY, "ioctl(): command not found")),
         }
@@ -413,7 +413,7 @@ impl File for Tty {
     fn write(&self, _offset: usize, buf: UserBuffer<'_>, _options: &OpenFlags) -> KResult<usize> {
         // let mut tmp = [0; 1];
         // let mut total_len = 0;
-        let reader = UserBufferReader::from(buf);
+        let reader = UserBufferReader::from_buf(buf);
         let total_len = parse(reader)?;
         if total_len > 0 {
             render_text_buf();
@@ -638,7 +638,7 @@ impl FsNode for PtyMaster {
 
 impl File for PtyMaster {
     fn read(&self, _offset: usize, buf: UserBufferMut<'_>, options: &OpenFlags) -> KResult<usize> {
-        let mut writer = UserBufferWriter::from(buf);
+        let mut writer = UserBufferWriter::from_buf(buf);
         let timeout = if options.contains(OpenFlags::O_NONBLOCK) {
             Some(0)
         } else {
@@ -737,7 +737,7 @@ impl File for PtySlave {
     fn write(&self, _offset: usize, buf: UserBuffer<'_>, _options: &OpenFlags) -> KResult<usize> {
         let mut written_len = 0;
         let mut master_buf = self.master.buf.lock();
-        let mut reader = UserBufferReader::from(buf);
+        let mut reader = UserBufferReader::from_buf(buf);
 
         while reader.remaining_len() > 0 {
             let mut tmp = [0; 1];

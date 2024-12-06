@@ -27,7 +27,9 @@ impl SyscallHandler<'_> {
     }
 
     pub fn sys_fork(&mut self) -> KResult<isize> {
-        let child = current_task().fork();
+        let current = current_task();
+        let _guard = current.arch_mut().address_space.temporarily_switch();
+        let child = current.fork();
         Ok(child.pid().as_usize() as isize)
     }
 
@@ -51,8 +53,9 @@ impl SyscallHandler<'_> {
         envp_addr: VirtAddr,
     ) -> KResult<isize> {
         let current = current_task();
+        let _guard = current.arch_mut().address_space.temporarily_switch();
         log::debug!("Statting path {}", path);
-        let exefile = current_task()
+        let exefile = current
             .root_fs
             .lock()
             .lookup(path, true)?
@@ -62,7 +65,7 @@ impl SyscallHandler<'_> {
         let mut argv = Vec::new();
         for i in 0..ARG_MAX {
             let ptr = argv_addr.add(i * size_of::<usize>());
-            let str_ptr = unsafe { ptr.read::<usize>() }?;
+            let str_ptr = unsafe { ptr.read_user::<usize>() }?;
             if str_ptr != 0 {
                 argv.push(CStr::new(VirtAddr::new(str_ptr), ARG_LEN_MAX, false)?);
             } else {
@@ -73,7 +76,7 @@ impl SyscallHandler<'_> {
         let mut envp = Vec::new();
         for i in 0..ENV_MAX {
             let ptr = envp_addr.add(i * size_of::<usize>());
-            let str_ptr = unsafe { ptr.read::<usize>() }?;
+            let str_ptr = unsafe { ptr.read_user::<usize>() }?;
             if str_ptr != 0 {
                 envp.push(CStr::new(VirtAddr::new(str_ptr), ENV_LEN_MAX, false)?);
             } else {
@@ -196,7 +199,7 @@ impl SyscallHandler<'_> {
     }
 
     pub fn sys_nanosleep(&mut self, req: VirtAddr, _rem: VirtAddr) -> KResult<isize> {
-        let req = unsafe { req.read_volatile::<TimeSpec>() }?;
+        let req = unsafe { req.read_user::<TimeSpec>() }?;
         assert_eq!(req.tv_nsec % 1000000, 0);
         let duration = req.tv_sec * 1000 + req.tv_nsec / 1000000;
         #[allow(clippy::redundant_guards)]
@@ -217,11 +220,11 @@ impl SyscallHandler<'_> {
         match clk_id {
             0 => {
                 let ts = time::get_rt_clock();
-                unsafe { tp.write_volatile(ts) }?;
+                unsafe { tp.write_user(ts) }?;
             }
             1 => {
                 let ts = time::get_rt_clock();
-                unsafe { tp.write_volatile(ts) }?;
+                unsafe { tp.write_user(ts) }?;
             }
             2 => {
                 let current = current_task();
@@ -231,7 +234,7 @@ impl SyscallHandler<'_> {
                     tv_sec: delta_sec as isize,
                     tv_nsec: (delta_ns % 1000000000) as isize,
                 };
-                unsafe { tp.write_volatile(ts) }?;
+                unsafe { tp.write_user(ts) }?;
             }
             3 => {
                 let current = current_task();
@@ -241,7 +244,7 @@ impl SyscallHandler<'_> {
                     tv_sec: delta_sec as isize,
                     tv_nsec: (delta_ns % 1000000000) as isize,
                 };
-                unsafe { tp.write_volatile(ts) }?;
+                unsafe { tp.write_user(ts) }?;
             }
             _ => unreachable!(),
         }

@@ -1,25 +1,29 @@
 use core::sync::atomic::AtomicUsize;
 
 use alloc::vec::Vec;
+use x86::controlregs::cr3;
 use x86_64::structures::{idt::PageFaultErrorCode, paging::PageTableFlags};
 
 use crate::{
     arch::idt::InterruptErrorFrame,
     backtrace,
-    fs::{opened_file::FileDesc, FileRef},
+    fs::{
+        opened_file::{FileDesc, OpenFlags},
+        FileRef,
+    },
     kbail, kerror,
     mem::{
         addr::VirtAddr,
-        allocator::{
-            alloc_kernel_frames, free_kernel_frames, PageAllocator, KERNEL_FRAME_ALLOCATOR,
-        },
+        addr_space::AddressSpace,
+        allocator::{alloc_kernel_frames, free_kernel_frames, PageAllocator},
         consts::{PAGE_SIZE, USER_STACK_TOP, USER_VALLOC_BASE},
         paging::{
             mapper::Mapper,
-            units::{AllocatedFrames, Frame, FrameRange, Page, PageRange},
+            units::{AllocatedFrames, Frame, FrameRange, MemoryUnit, Page, PageRange},
         },
     },
     task::{current_task, get_scheduler, signal::SIGSEGV},
+    userland::buffer::UserBufferMut,
     util::{align_up, KResult},
 };
 
@@ -239,7 +243,7 @@ impl Vmem {
     ) -> KResult<()> {
         let area = self
             .area_containing_mut(start_addr, start_addr + size - 1)
-            .ok_or(kerror!(EINVAL, "mprotect(): no areas containing address"))?;
+            .ok_or(kerror!(ENOMEM, "mprotect(): no areas containing address"))?;
         area.prot = protection;
         Ok(())
     }
@@ -286,7 +290,15 @@ impl Vmem {
             kind: _,
         } = old_area;
 
-        let new_addr = self.mmap(VirtAddr::null(), new_size, prot, flags, -1, 0)?;
+        let new_addr = self.mmap(
+            VirtAddr::null(),
+            new_size,
+            prot,
+            flags,
+            -1,
+            0,
+            active_mapper,
+        )?;
 
         let old_pages = PageRange::new(
             Page::containing_address(start_addr),
@@ -309,6 +321,7 @@ impl Vmem {
         Ok(new_addr)
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn mmap(
         &mut self,
         start_addr: VirtAddr,
@@ -317,19 +330,39 @@ impl Vmem {
         flags: MMapFlags,
         _fd: FileDesc,
         _offset: usize,
+        active_mapper: &mut Mapper,
     ) -> KResult<VirtAddr> {
         if size == 0 {
             kbail!(EINVAL, "mmap(): size is zero");
         }
         if flags.contains(MMapFlags::MAP_FIXED) {
-            kbail!(ENOSYS, "mmap(): MAP_FIXED not yet implemented");
+            if start_addr.align_down(PAGE_SIZE) != start_addr {
+                kbail!(EINVAL, "mmap(): start_addr not page-aligned");
+            }
+            let end_addr = start_addr + size;
+            if end_addr.align_up(PAGE_SIZE) != end_addr {
+                kbail!(EINVAL, "mmap(): end_addr not page-aligned");
+            }
+            if self.area_containing(start_addr, end_addr).is_some() {
+                kbail!(ENOMEM, "mmap(): address already in use");
+            }
+
+            self.map_area(
+                start_addr,
+                end_addr,
+                flags,
+                protection,
+                MMapKind::Anonymous,
+                active_mapper,
+            )?;
+            return Ok(start_addr);
         }
 
         let size_aligned = align_up(size, PAGE_SIZE);
         if start_addr == VirtAddr::null() {
             let start = self.find_free_space_above(USER_VALLOC_BASE, size_aligned);
-            if let Some((start, prev)) = start {
-                if let Some(prev_idx) = prev {
+            if let Some((start, prev_idx)) = start {
+                if let Some(prev_idx) = prev_idx {
                     let prev = &mut self.areas[prev_idx];
                     if prev.end_addr == start && prev.prot == protection {
                         assert_eq!(prev.flags, flags);
@@ -363,6 +396,16 @@ impl Vmem {
 
         kbail!(ENOSYS, "mmap(): not yet implemented for start_addr != null");
     }
+
+    // pub fn brk(&mut self, active_mapper: &mut Mapper, new_brk: VirtAddr) -> KResult<VirtAddr> {
+    //     let current_brk = self
+    //         .areas
+    //         .iter()
+    //         .find(|area| matches!(area.kind, MMapKind::Anonymous))
+    //         .map(|area| area.end_addr)
+    //         .unwrap_or(USER_VALLOC_BASE);
+    //     Ok(current_brk)
+    // }
 
     fn find_free_space_above(
         &mut self,
@@ -398,10 +441,14 @@ impl Vmem {
         kind: MMapKind,
         active_mapper: &mut Mapper,
     ) -> KResult<()> {
-        let ap = self.page_allocator.allocate_range(PageRange::new(
+        let count = PageRange::new(
             Page::containing_address(start_addr),
-            Page::containing_address(end_addr - 1),
-        ))?;
+            Page::containing_address(end_addr),
+        )
+        .size_in_pages();
+        let ap = self
+            .page_allocator
+            .allocate_at(Page::containing_address(start_addr), count)?;
         let _mp = active_mapper.map(ap, prot.into())?;
         self.add_area(
             start_addr.align_down(PAGE_SIZE),
@@ -421,7 +468,7 @@ impl Vmem {
     ) -> Option<()> {
         let range = PageRange::new(
             Page::containing_address(start_addr),
-            Page::containing_address(end_addr - 1),
+            Page::containing_address(end_addr),
         );
         unsafe { self.page_allocator.insert_free_region(range) }
         for page in range.iter() {
@@ -438,11 +485,11 @@ impl Vmem {
             };
         }
 
-        KERNEL_FRAME_ALLOCATOR
-            .get()
-            .unwrap()
-            .lock()
-            .merge_contiguous_chunks();
+        // KERNEL_FRAME_ALLOCATOR
+        //     .get()
+        //     .unwrap()
+        //     .lock()
+        //     .merge_contiguous_chunks();
         Some(())
     }
 
@@ -544,27 +591,35 @@ impl Vmem {
 
     pub fn handle_page_fault(
         &mut self,
-        active_mapper: &mut Mapper,
+        process_addr_space: &mut AddressSpace,
         faulted_addr: VirtAddr,
         stack_frame: InterruptErrorFrame,
         reason: PageFaultErrorCode,
     ) -> KResult<()> {
         let dump_and_exit = || {
+            let current = current_task();
+            log::error!("PID: {}", current.pid().as_usize());
             log::error!("Instruction pointer: {:#x}", { stack_frame.frame.rip });
+            log::error!(
+                "Process page table: {:#x}",
+                process_addr_space.cr3().value()
+            );
+            log::error!("Current page table: {:#x}", unsafe { cr3() });
             log::error!("Faulted address: {:?}", faulted_addr);
             log::error!("Reason: {:?}", reason);
             log::debug!("{:#x?}", stack_frame);
             self.log();
             backtrace::unwind_user_stack_from(stack_frame.frame.rbp, stack_frame.frame.rip);
-            get_scheduler().send_signal_to(current_task(), SIGSEGV);
+            get_scheduler().send_signal_to(current, SIGSEGV);
             get_scheduler().exit_current(1)
         };
 
-        // let rip = stack_frame.frame.rip;
-        // log::debug!("User page fault at {:#x}", rip);
+        // log::debug!("User page fault at {:#x}", { stack_frame.frame.rip });
         // log::debug!("PID: {}", current_task().pid().as_usize());
         // log::debug!("Faulted address: {:?}", faulted_addr);
         // log::debug!("Reason: {:?}", reason);
+        // self.log();
+        // backtrace::unwind_user_stack_from(stack_frame.frame.rbp, stack_frame.frame.rip);
         if faulted_addr.align_down(PAGE_SIZE) == VirtAddr::null() {
             log::error!("User segmentation fault: null pointer access");
             dump_and_exit()
@@ -583,11 +638,27 @@ impl Vmem {
                 // allocate and map pages
                 let page = Page::containing_address(faulted_addr);
                 let ap = self.page_allocator.allocate_at(page, 1)?;
-                let _mp = active_mapper.map(ap, area.prot.into())?;
-                if !matches!(area.kind, MMapKind::File { .. }) {
-                    self.zero_memory(page.start_address(), page.start_address() + PAGE_SIZE)?;
-                } else {
-                    todo!("map new pages to a file in page fault handler")
+                process_addr_space.with_mapper(|mut mapper| mapper.map(ap, area.prot.into()))?;
+                match &area.kind {
+                    MMapKind::Anonymous => {
+                        self.zero_memory(page.start_address(), page.start_address() + PAGE_SIZE)?;
+                    }
+                    MMapKind::File { file, offset, size } => {
+                        let size = size.min(&PAGE_SIZE);
+                        let mut buf = alloc::vec![0; *size];
+                        let user_buf = UserBufferMut::from_slice(&mut buf);
+                        let read = file.read(*offset, user_buf, &OpenFlags::empty())?;
+                        if read == 0 {
+                            self.zero_memory(
+                                page.start_address(),
+                                page.start_address() + PAGE_SIZE,
+                            )?;
+                        } else {
+                            unsafe {
+                                page.start_address().write_bytes_user(&buf)?;
+                            }
+                        }
+                    }
                 }
                 return Ok(());
             } else if reason.contains(PageFaultErrorCode::CAUSED_BY_WRITE) {
@@ -613,14 +684,18 @@ impl Vmem {
                     )
                 };
                 new_page.copy_from_slice(old_page);
-                unsafe {
-                    active_mapper.unmap_single(Page::containing_address(faulted_addr));
-                }
-                active_mapper.map_to_single(
-                    Page::containing_address(faulted_addr),
-                    new_frame.start(),
-                    area.prot.into(),
-                )?;
+                process_addr_space.with_mapper(|mut mapper| -> KResult<()> {
+                    unsafe {
+                        mapper.unmap_single(Page::containing_address(faulted_addr));
+                    }
+                    mapper.map_to_single(
+                        Page::containing_address(faulted_addr),
+                        new_frame.start(),
+                        area.prot.into(),
+                    )?;
+                    Ok(())
+                })?;
+
                 return Ok(());
             }
             unreachable!(
@@ -631,6 +706,9 @@ impl Vmem {
             dump_and_exit()
         }
 
+        log::warn!("Unrecoverable page fault at {:#x}", {
+            stack_frame.frame.rip
+        });
         kbail!(EFAULT, "handle_page_fault(): couldn't handle page fault");
     }
 }

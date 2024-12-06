@@ -35,7 +35,7 @@ impl File for URandom {
         unsafe {
             rdrand_slice(&mut bytes);
         }
-        let mut writer = UserBufferWriter::from(buf);
+        let mut writer = UserBufferWriter::from_buf(buf);
         writer.write_bytes(&bytes)?;
         Ok(writer.written_len())
     }

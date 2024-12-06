@@ -104,7 +104,7 @@ impl Directory for InitRamFsDir {
         Ok(entry)
     }
 
-    fn unlink(&self, name: String) -> KResult<()> {
+    fn unlink(&self, name: &str) -> KResult<()> {
         self.inner
             .lock()
             .children

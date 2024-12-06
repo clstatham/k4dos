@@ -162,6 +162,7 @@ impl SyscallHandler<'_> {
                 crate::bitflags_from_user!(MMapProt, a3 as u64),
             ),
             SYS_MUNMAP => self.sys_munmap(VirtAddr::new(a1), a2),
+            // SYS_BRK => self.sys_brk(VirtAddr::new(a1)),
             SYS_MREMAP => self.sys_mremap(VirtAddr::new(a1), a2, a3),
             SYS_RT_SIGACTION => {
                 self.sys_rt_sigaction(a1 as c_int, VirtAddr::new(a2), VirtAddr::new(a3))

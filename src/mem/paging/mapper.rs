@@ -12,7 +12,7 @@ use crate::{
 
 use super::{
     table::PageTable,
-    units::{AllocatedFrames, AllocatedPages, Frame, MappedPages, Page},
+    units::{AllocatedFrames, AllocatedPages, Frame, MappedPages, MemoryUnit, Page},
 };
 
 #[derive(Debug)]
@@ -71,7 +71,19 @@ impl<'a> Mapper<'a> {
         let p1 = p2.next_table_create(addr.p2_index(), insert_flags)?;
         let entry = &mut p1[addr.p1_index()];
         if !entry.is_unused() {
-            kbail!(ENOMEM, "Page already mapped");
+            log::error!(
+                "Attempt to remap {:?} to {:?} with {:?}",
+                page,
+                frame,
+                flags
+            );
+            log::error!(
+                "-- {:?} already mapped to {:?}, with {:?}",
+                page,
+                entry.frame(),
+                entry.flags()
+            );
+            kbail!("Page already mapped to different frame");
         }
         entry.set_frame(frame, flags);
         unsafe { tlb::flush(addr.value()) }

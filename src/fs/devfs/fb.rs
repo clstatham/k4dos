@@ -38,7 +38,7 @@ impl File for FbDevice {
         assert_eq!(offset % 4, 0);
         let buf_len = buf.len();
         assert_eq!(buf_len % 4, 0);
-        let mut writer = UserBufferWriter::from(buf);
+        let mut writer = UserBufferWriter::from_buf(buf);
         let mut fb = fb();
         let mem = fb.frame_mut();
         let start = offset / 4;
@@ -55,7 +55,7 @@ impl File for FbDevice {
         assert_eq!(offset % 4, 0);
         let buf_len = buf.len();
         assert_eq!(buf_len % 4, 0);
-        let mut reader = UserBufferReader::from(buf);
+        let mut reader = UserBufferReader::from_buf(buf);
         let mut fb = fb();
         let mem = fb.frame_mut();
         let mut i = 0;
@@ -83,7 +83,7 @@ impl File for FbDevice {
                     bpp: fb.bpp() as u32,
                     ..FbVarScreenInfo::default()
                 };
-                unsafe { VirtAddr::new(arg).write_volatile(info) }?;
+                unsafe { VirtAddr::new(arg).write_user(info) }?;
             }
             // FBIOGET_FSCREENINFO => {
 

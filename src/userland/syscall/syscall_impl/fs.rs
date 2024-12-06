@@ -78,7 +78,7 @@ impl SyscallHandler<'_> {
         cwd.push('\0');
         let buf_val = buf.value();
         let ubuf = UserBufferMut::from_vaddr(buf, len);
-        let mut writer = UserBufferWriter::from(ubuf);
+        let mut writer = UserBufferWriter::from_buf(ubuf);
         writer.write_bytes(cwd.as_bytes()).unwrap(); // this currently never returns Err; may change
         Ok(buf_val as isize)
     }
@@ -130,7 +130,7 @@ impl SyscallHandler<'_> {
         unsafe {
             rdrand_slice(&mut v);
         }
-        unsafe { buf.write_bytes(&v) }?;
+        unsafe { buf.write_bytes_user(&v) }?;
         Ok(bufflen as isize)
     }
 }
@@ -178,7 +178,6 @@ impl SyscallHandler<'_> {
                 Err(err) => return Err(err),
             }
         }
-        // create(path, flags, mode).ok();
 
         let root = current.root_fs.lock();
         let mut opened_files = current.opened_files.lock();
@@ -246,7 +245,7 @@ impl SyscallHandler<'_> {
             .inode
             .as_dir()
             .unwrap()
-            .unlink(path_component.name.clone())?;
+            .unlink(&path_component.name)?;
         Ok(0)
     }
 }
@@ -262,7 +261,7 @@ impl SyscallHandler<'_> {
         POLL_WAIT_QUEUE.sleep_signalable_until(timeout, || {
             let mut ready_fds = 0;
             let fds_len = (nfds as usize) * (size_of::<FileDesc>() + 2 * size_of::<c_short>());
-            let mut reader = UserBufferReader::from(UserBuffer::from_vaddr(fds, fds_len));
+            let mut reader = UserBufferReader::from_vaddr(fds, fds_len);
             for _ in 0..nfds {
                 let fd = reader.read::<FileDesc>()?;
                 let events = bitflags_from_user!(PollStatus, reader.read::<c_short>()?);
@@ -310,21 +309,21 @@ impl SyscallHandler<'_> {
         // log::debug!("sys_stat-ing path {}", path);
         let stat = current_task().root_fs.lock().lookup(path, true)?.stat()?;
         unsafe {
-            buf.write(stat)?;
+            buf.write_user(stat)?;
         }
         Ok(0)
     }
 
     pub fn sys_lstat(&mut self, path: &Path, buf: VirtAddr) -> KResult<isize> {
         let stat = current_task().root_fs.lock().lookup(path, false)?.stat()?;
-        unsafe { buf.write(stat) }?;
+        unsafe { buf.write_user(stat) }?;
         Ok(0)
     }
 
     pub fn sys_fstat(&mut self, fd: FileDesc, buf: VirtAddr) -> KResult<isize> {
         let file = current_task().get_opened_file_by_fd(fd)?;
         let stat = file.path().inode.stat()?;
-        unsafe { buf.write(stat) }?;
+        unsafe { buf.write_user(stat) }?;
         Ok(0)
     }
 
@@ -356,7 +355,8 @@ impl SyscallHandler<'_> {
         let file = current_task().get_opened_file_by_fd(fd)?;
         let mut total: usize = 0;
         for i in 0..iov_count {
-            let mut iov: IoVec = unsafe { iov_base.add(i * size_of::<IoVec>()).read::<IoVec>() }?;
+            let mut iov: IoVec =
+                unsafe { iov_base.add(i * size_of::<IoVec>()).read_user::<IoVec>() }?;
 
             match total.checked_add(iov.len) {
                 Some(len) if len > isize::MAX as usize => {
@@ -389,7 +389,8 @@ impl SyscallHandler<'_> {
         let file = current_task().get_opened_file_by_fd(fd)?;
         let mut total: usize = 0;
         for i in 0..iov_count {
-            let mut iov: IoVec = unsafe { iov_base.add(i * size_of::<IoVec>()).read::<IoVec>() }?;
+            let mut iov: IoVec =
+                unsafe { iov_base.add(i * size_of::<IoVec>()).read_user::<IoVec>() }?;
 
             match total.checked_add(iov.len) {
                 Some(len) if len > isize::MAX as usize => {
@@ -421,23 +422,23 @@ impl SyscallHandler<'_> {
         file.lseek(offset, whence).map(|off| off as isize)
     }
 
-    pub fn sys_dup2(&mut self, oldfd: FileDesc, newfd: FileDesc) -> KResult<isize> {
+    pub fn sys_dup2(&mut self, old_fd: FileDesc, new_fd: FileDesc) -> KResult<isize> {
         let current = current_task();
-        let _old = current.get_opened_file_by_fd(oldfd)?;
+        let _old = current.get_opened_file_by_fd(old_fd)?;
         // now that we know it's valid, check if they're the same (as per the man page)
-        if newfd == oldfd {
-            return Ok(newfd as isize);
+        if new_fd == old_fd {
+            return Ok(new_fd as isize);
         }
 
-        if let Ok(_existing) = current.get_opened_file_by_fd(newfd) {
+        if let Ok(_existing) = current.get_opened_file_by_fd(new_fd) {
             let mut files = current.opened_files.lock();
-            files.close(newfd)?;
+            files.close(new_fd)?;
         }
 
         let mut files = current.opened_files.lock();
-        let newfd_dup = files.dup2(oldfd, newfd)?;
-        assert_eq!(newfd, newfd_dup);
-        Ok(newfd as isize)
+        let newfd_dup = files.dup2(old_fd, new_fd)?;
+        assert_eq!(new_fd, newfd_dup);
+        Ok(new_fd as isize)
     }
 
     pub fn sys_socket(&mut self, domain: usize, typ: usize, protocol: usize) -> KResult<isize> {

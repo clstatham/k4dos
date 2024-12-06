@@ -77,17 +77,11 @@ impl Scheduler {
         self.waiting_queue.lock().retain(|t| t.pid != task.pid);
         let already_in_queue = queue.iter().any(|t| t.pid == task.pid);
         if !already_in_queue {
-            // log::debug!("Pushing {} as runnable", task.pid.as_usize());
             if priority {
                 queue.push_front(task);
             } else {
                 queue.push_back(task);
             }
-        } else {
-            // log::warn!(
-            //     "Attempted to push {} as runnable, but it was already runnable",
-            //     task.pid.as_usize()
-            // );
         }
     }
 
@@ -101,13 +95,7 @@ impl Scheduler {
             .retain(|(t, _)| t.pid != task.pid);
         let already_in_queue = queue.iter().any(|t| t.pid == task.pid);
         if !already_in_queue {
-            // log::debug!("Pushing {} as waiting", task.pid.as_usize());
             queue.push_back(task);
-        } else {
-            // log::warn!(
-            //     "Attempted to push {} as waiting, but it was already waiting",
-            //     task.pid.as_usize()
-            // );
         }
     }
 
@@ -120,18 +108,7 @@ impl Scheduler {
         let already_in_queue = queue.iter().any(|(t, _)| t.pid == task.pid);
         if !already_in_queue {
             let deadline = arch::time::get_uptime_ms() + duration;
-            // log::debug!(
-            //     "Pushing {} as waiting with duration {} ms",
-            //     task.pid.as_usize(),
-            //     duration
-            // );
             queue.push_back((task, deadline));
-        } else {
-            // log::warn!(
-            //     "Attempted to push {} as waiting with duration {} ms, but it was already waiting",
-            //     task.pid.as_usize(),
-            //     duration
-            // );
         }
     }
 
@@ -142,11 +119,6 @@ impl Scheduler {
             if let Some((task, deadline)) = queue.pop_front() {
                 if deadline <= time {
                     // time's up!
-                    // log::debug!(
-                    //     "Deadline of {} ms reached for PID {}.",
-                    //     deadline,
-                    //     task.pid.as_usize()
-                    // );
                     drop(queue);
                     self.push_runnable(task, true);
                     queue = self.deadline_waiting_queue.lock();
@@ -307,7 +279,6 @@ impl Scheduler {
         if let Some(current_task) = current.as_ref().cloned() {
             // log::debug!("Switching from PID {:?} to preempt task", current_task.pid);
             drop(current);
-            // unsafe { Arc::decrement_strong_count(Arc::into_raw(current_task))};
             arch_context_switch(
                 current_task.arch_mut(),
                 self.preempt_task.as_ref().unwrap().arch_mut(),
@@ -360,12 +331,12 @@ pub fn switch() {
                 break;
             } else {
                 // we'll take the opportunity to purge the run queue of sleeping/dead tasks
-                // log::warn!("PID {} was in run queue but not runnable", t.pid.as_usize());
             }
         } else {
             break;
         }
     }
+
     if let Some(task) = task {
         if let Some(current_task) = current.as_ref() {
             if current_task.pid != task.pid {
@@ -374,10 +345,10 @@ pub fn switch() {
         }
 
         *current = Some(task.clone());
-        // log::debug!("Switching from preempt task to PID {:?}", task.pid);
         drop(queue);
         drop(current);
         task.start_time.call_once(time::get_uptime_ms);
+        // log::debug!("Switching from preempt task to PID {}", task.pid.as_usize());
         arch_context_switch(
             sched.preempt_task.as_ref().unwrap().arch_mut(),
             task.arch_mut(),
@@ -386,9 +357,12 @@ pub fn switch() {
         if let Some(current_task) = current.as_ref().cloned() {
             let state = { current_task.get_state() };
             if state == TaskState::Runnable {
-                // log::debug!("Switching from preempt task to PID {:?} (current task)", current_task.pid);
                 drop(current);
                 drop(queue);
+                // log::debug!(
+                //     "Switching from preempt task to PID {}",
+                //     current_task.pid.as_usize()
+                // );
                 arch_context_switch(
                     sched.preempt_task.as_ref().unwrap().arch_mut(),
                     current_task.arch_mut(),
@@ -400,6 +374,7 @@ pub fn switch() {
         *current = None;
         drop(current);
         drop(queue);
+
         // log::debug!("Switching from preempt task to idle thread");
         arch_context_switch(
             sched.preempt_task.as_ref().unwrap().arch_mut(),

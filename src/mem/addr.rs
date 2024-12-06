@@ -4,6 +4,7 @@ use core::ops::*;
 use core::ptr::NonNull;
 
 use crate::kbail;
+use crate::task::current_task;
 use crate::util::{align_down, align_up, KResult};
 
 use super::consts::PAGE_SIZE;
@@ -41,12 +42,13 @@ impl PhysAddr {
     }
 
     #[inline]
-    pub const fn new(addr: usize) -> Option<Self> {
-        if !is_canonical_physaddr(addr) {
-            return None;
-        }
+    pub const fn new(addr: usize) -> Self {
+        assert!(
+            is_canonical_physaddr(addr),
+            "PhysAddr::new(): non-canonical address"
+        );
 
-        Some(unsafe { Self::new_unchecked(addr) })
+        unsafe { Self::new_unchecked(addr) }
     }
 
     #[inline]
@@ -80,11 +82,11 @@ impl PhysAddr {
     }
 
     pub const fn const_add(&self, offset: usize) -> Self {
-        Self::new(self.addr + offset).unwrap()
+        Self::new(self.addr + offset)
     }
 
     pub const fn const_sub(&self, offset: usize) -> Self {
-        Self::new(self.addr - offset).unwrap()
+        Self::new(self.addr - offset)
     }
 }
 
@@ -129,7 +131,7 @@ impl fmt::Pointer for PhysAddr {
 impl Add<usize> for PhysAddr {
     type Output = Self;
     fn add(self, rhs: usize) -> Self::Output {
-        PhysAddr::new(self.addr + rhs).unwrap()
+        PhysAddr::new(self.addr + rhs)
     }
 }
 
@@ -142,7 +144,7 @@ impl AddAssign<usize> for PhysAddr {
 impl Sub<usize> for PhysAddr {
     type Output = Self;
     fn sub(self, rhs: usize) -> Self::Output {
-        PhysAddr::new(self.addr.checked_sub(rhs).unwrap()).unwrap()
+        PhysAddr::new(self.addr.checked_sub(rhs).unwrap())
     }
 }
 
@@ -173,8 +175,8 @@ impl VirtAddr {
 
     #[inline]
     pub const fn new(addr: usize) -> Self {
-        assert!(is_canonical_virtaddr(addr));
-        unsafe { Self::new_unchecked(addr) }
+        // assert!(is_canonical_virtaddr(addr));
+        unsafe { Self::new_unchecked(canonicalisze_virtaddr(addr)) }
     }
 
     #[inline]
@@ -236,7 +238,7 @@ impl VirtAddr {
 
     #[inline]
     pub fn as_hhdm_phys(&self) -> PhysAddr {
-        PhysAddr::new(self.value() - crate::phys_offset().value()).unwrap()
+        PhysAddr::new(self.value() - crate::phys_offset().value())
     }
 
     pub const fn align_ok<T: Sized>(&self) -> KResult<()> {
@@ -274,11 +276,26 @@ impl VirtAddr {
 
     pub unsafe fn read_volatile<T: Sized + Copy>(&self) -> KResult<T> {
         self.align_ok::<T>()?;
-        Ok(unsafe { self.as_raw_ptr::<T>().read_volatile() })
+        Ok(unsafe { core::ptr::read_volatile(self.as_raw_ptr::<T>().cast()) })
+    }
+
+    pub unsafe fn read_user<T: Sized + Copy>(&self) -> KResult<T> {
+        self.align_ok::<T>()?;
+        self.user_ok()?;
+        let _guard = current_task().arch_mut().address_space.temporarily_switch();
+        Ok(unsafe { core::ptr::read_volatile(self.as_raw_ptr::<T>().cast()) })
     }
 
     pub unsafe fn read_bytes(&self, buf: &mut [u8]) -> KResult<usize> {
         self.align_ok::<u8>()?;
+        unsafe { core::ptr::copy(self.as_raw_ptr(), buf.as_mut_ptr(), buf.len()) };
+        Ok(buf.len())
+    }
+
+    pub unsafe fn read_bytes_user(&self, buf: &mut [u8]) -> KResult<usize> {
+        self.align_ok::<u8>()?;
+        (*self + buf.len()).user_ok()?;
+        let _guard = current_task().arch_mut().address_space.temporarily_switch();
         unsafe { core::ptr::copy(self.as_raw_ptr(), buf.as_mut_ptr(), buf.len()) };
         Ok(buf.len())
     }
@@ -295,10 +312,32 @@ impl VirtAddr {
         Ok(())
     }
 
+    pub unsafe fn write_user<T: Sized + Copy>(&self, t: T) -> KResult<()> {
+        self.align_ok::<T>()?;
+        (*self + size_of::<T>()).user_ok()?;
+        let _guard = current_task().arch_mut().address_space.temporarily_switch();
+        unsafe { core::ptr::write_volatile(self.as_raw_ptr_mut(), t) };
+        Ok(())
+    }
+
     pub unsafe fn write_bytes(&self, bytes: &[u8]) -> KResult<usize> {
         if self.is_null() {
             kbail!(EFAULT, "write_bytes(): null VirtAddr");
         }
+        unsafe {
+            core::slice::from_raw_parts_mut(self.as_raw_ptr_mut(), bytes.len())
+                .copy_from_slice(bytes)
+        };
+        Ok(bytes.len())
+    }
+
+    pub unsafe fn write_bytes_user(&self, bytes: &[u8]) -> KResult<usize> {
+        if self.is_null() {
+            kbail!(EFAULT, "write_bytes_user(): null VirtAddr");
+        }
+        self.user_ok()?;
+        (*self + bytes.len()).user_ok()?;
+        let _guard = current_task().arch_mut().address_space.temporarily_switch();
         unsafe {
             core::slice::from_raw_parts_mut(self.as_raw_ptr_mut(), bytes.len())
                 .copy_from_slice(bytes)

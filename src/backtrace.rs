@@ -10,6 +10,8 @@ use xmas_elf::{
 };
 
 use crate::{
+    fb_println,
+    graphics::FRAMEBUFFER,
     kerror,
     mem::{addr::VirtAddr, addr_space::AddressSpace, consts::PAGE_SIZE},
     task::get_scheduler,
@@ -81,7 +83,7 @@ pub fn unwind_user_stack_from(mut rbp: usize, mut rip: usize) {
                 break;
             }
 
-            rip = unsafe { rip_rbp.read::<usize>().unwrap_unchecked() };
+            rip = unsafe { rip_rbp.read::<usize>().unwrap_or(0) };
             if rip == 0 || rbp == 0 {
                 break;
             }
@@ -141,7 +143,7 @@ pub fn unwind_stack() -> KResult<()> {
                 break;
             }
 
-            let rip = unsafe { rip_rbp.read::<usize>().unwrap_unchecked() };
+            let rip = unsafe { rip_rbp.read::<usize>().unwrap_or(0) };
             if rip == 0 || rbp == 0 {
                 break;
             }
@@ -181,21 +183,20 @@ fn rust_panic(info: &PanicInfo) -> ! {
     let panic_msg = info.message();
 
     serial0_println!("Panicked at '{}'", panic_msg);
-    // if FRAMEBUFFER.get().is_some() {
-    //     fb_println!("Panicked at '{}'", panic_msg);
-    // }
+    if FRAMEBUFFER.get().is_some() {
+        fb_println!("Panicked at '{}'", panic_msg);
+    }
 
     if let Some(panic_location) = info.location() {
         serial0_println!("{}", panic_location);
-        // if FRAMEBUFFER.get().is_some() {
-        //     fb_println!("{}", panic_location);
-        // }
+        if FRAMEBUFFER.get().is_some() {
+            fb_println!("{}", panic_location);
+        }
     }
 
-    // serial0_println!("");
     match unwind_stack() {
         Ok(()) => {}
-        Err(e) => serial0_println!("Error unwinding stack: {:?}", e.msg()),
+        Err(e) => crate::serial::_print0(format_args!("Error unwinding stack: {:?}\n", e.msg())),
     }
 
     crate::hcf();

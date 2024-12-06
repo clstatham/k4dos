@@ -4,7 +4,8 @@ use alloc::string::{String, ToString};
 
 use crate::{
     kbail, kerror,
-    mem::addr::VirtAddr,
+    mem::{addr::VirtAddr, addr_space::TmpAddrSpaceGuard},
+    task::current_task,
     util::{align_up, error::KResult},
 };
 
@@ -96,7 +97,9 @@ impl CStr {
             (vaddr + max_len).user_ok()?;
         }
         let mut tmp = alloc::vec![0; max_len];
+        let guard = current_task().arch_mut().address_space.temporarily_switch();
         let read_len = unsafe { user_strncpy_rust(tmp.as_mut_ptr(), vaddr.as_raw_ptr(), max_len) };
+        drop(guard);
         let string = core::str::from_utf8(&tmp[..read_len])
             .map_err(|_| kerror!(EINVAL, "UserCStr: UTF-8 parsing error"))?
             .to_string();
@@ -115,11 +118,23 @@ impl CStr {
 pub struct UserBufferReader<'a> {
     buf: UserBuffer<'a>,
     pos: usize,
+    #[allow(dead_code)]
+    guard: TmpAddrSpaceGuard,
 }
 
 impl<'a> UserBufferReader<'a> {
     pub fn from_vaddr(buf: VirtAddr, len: usize) -> UserBufferReader<'a> {
-        UserBufferReader::from(UserBuffer::from_vaddr(buf, len))
+        let guard = current_task().arch_mut().address_space.temporarily_switch();
+        UserBufferReader {
+            buf: UserBuffer::from_vaddr(buf, len),
+            pos: 0,
+            guard,
+        }
+    }
+
+    pub fn from_buf(buf: UserBuffer<'a>) -> UserBufferReader<'a> {
+        let guard = current_task().arch_mut().address_space.temporarily_switch();
+        UserBufferReader { buf, pos: 0, guard }
     }
 
     pub fn read_len(&self) -> usize {
@@ -181,20 +196,26 @@ impl<'a> UserBufferReader<'a> {
     }
 }
 
-impl<'a> From<UserBuffer<'a>> for UserBufferReader<'a> {
-    fn from(value: UserBuffer<'a>) -> Self {
-        UserBufferReader { buf: value, pos: 0 }
-    }
-}
-
 pub struct UserBufferWriter<'a> {
     buf: UserBufferMut<'a>,
     pos: usize,
+    #[allow(dead_code)]
+    guard: TmpAddrSpaceGuard,
 }
 
 impl<'a> UserBufferWriter<'a> {
     pub fn from_vaddr(buf: VirtAddr, len: usize) -> UserBufferWriter<'a> {
-        UserBufferWriter::from(UserBufferMut::from_vaddr(buf, len))
+        let guard = current_task().arch_mut().address_space.temporarily_switch();
+        UserBufferWriter {
+            buf: UserBufferMut::from_vaddr(buf, len),
+            pos: 0,
+            guard,
+        }
+    }
+
+    pub fn from_buf(buf: UserBufferMut<'a>) -> UserBufferWriter<'a> {
+        let guard = current_task().arch_mut().address_space.temporarily_switch();
+        UserBufferWriter { buf, pos: 0, guard }
     }
 
     pub fn written_len(&self) -> usize {
@@ -268,11 +289,5 @@ impl<'a> UserBufferWriter<'a> {
 
     pub fn remaining_len(&self) -> usize {
         self.buf.len() - self.pos
-    }
-}
-
-impl<'a> From<UserBufferMut<'a>> for UserBufferWriter<'a> {
-    fn from(value: UserBufferMut<'a>) -> Self {
-        UserBufferWriter { buf: value, pos: 0 }
     }
 }

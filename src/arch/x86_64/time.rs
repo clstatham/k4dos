@@ -4,7 +4,7 @@ use x86::io::{inb, outb};
 
 use crate::{userland::syscall::syscall_impl::time::TimeSpec, util::IrqMutex};
 
-const PIT_FREQUENCY_HZ: usize = 1000;
+const PIT_FREQUENCY_HZ: usize = 10000;
 pub const PIT_DIVIDEND: usize = 1193182;
 
 static UPTIME_RAW: AtomicUsize = AtomicUsize::new(0);

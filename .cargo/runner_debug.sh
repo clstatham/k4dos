@@ -1,4 +1,4 @@
-#! /bin/sh
+#! /bin/bash
 #
 # This script will be executed by `cargo run`.
 

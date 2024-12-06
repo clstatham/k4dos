@@ -12,7 +12,7 @@ use super::{
     paging::{
         mapper::Mapper,
         table::{active_table, PageTable},
-        units::{AllocatedFrames, Frame, FrameRange, Page},
+        units::{AllocatedFrames, Frame, FrameRange, MemoryUnit, Page},
     },
 };
 
@@ -64,7 +64,7 @@ impl AddressSpace {
 
     pub fn current() -> Self {
         let cr3 = Cr3::read().0.start_address().as_u64() as usize;
-        let cr3 = PhysAddr::new(cr3).unwrap();
+        let cr3 = PhysAddr::new(cr3);
         let cr3 = unsafe {
             AllocatedFrames::assume_allocated(FrameRange::new(
                 Frame::containing_address(cr3),
@@ -78,12 +78,6 @@ impl AddressSpace {
         self.cr3.start_address()
     }
 
-    pub fn with_page_table<R>(&self, mut f: impl FnMut(&PageTable) -> R) -> R {
-        let addr = self.cr3.start_address().as_hhdm_virt();
-        let pt: &PageTable = unsafe { addr.deref().unwrap_unchecked() };
-        f(pt)
-    }
-
     pub fn switch(&self) {
         unsafe {
             Cr3::write(
@@ -95,11 +89,19 @@ impl AddressSpace {
         }
     }
 
+    pub fn temporarily_switch(&self) -> TmpAddrSpaceGuard {
+        let previous = Self::current();
+        self.switch();
+        TmpAddrSpaceGuard { previous }
+    }
+
     pub fn with_mapper<R>(&mut self, f: impl FnOnce(Mapper) -> R) -> R {
         let mut addr = self.cr3.start_address().as_hhdm_virt();
-        let table = unsafe { addr.deref_mut().unwrap_unchecked() };
+        let table = unsafe { addr.deref_mut().unwrap() };
         let mapper = Mapper::new(table);
+        let _guard = self.temporarily_switch();
         f(mapper)
+        // _guard is dropped here
     }
 
     pub fn map_two<R>(
@@ -108,11 +110,11 @@ impl AddressSpace {
         f: impl FnOnce(Mapper, Mapper) -> R,
     ) -> R {
         let mut addr = first.cr3.start_address().as_hhdm_virt();
-        let table = unsafe { addr.deref_mut().unwrap_unchecked() };
+        let table = unsafe { addr.deref_mut().unwrap() };
         let mapper = Mapper::new(table);
 
         let mut addr = second.cr3.start_address().as_hhdm_virt();
-        let table = unsafe { addr.deref_mut().unwrap_unchecked() };
+        let table = unsafe { addr.deref_mut().unwrap() };
         let other_mapper = Mapper::new(table);
 
         f(mapper, other_mapper)
@@ -180,5 +182,16 @@ impl AddressSpace {
         })?;
 
         Ok(new)
+    }
+}
+
+#[must_use = "TmpAddrSpaceGuard restores previous address space on drop"]
+pub struct TmpAddrSpaceGuard {
+    previous: AddressSpace,
+}
+
+impl Drop for TmpAddrSpaceGuard {
+    fn drop(&mut self) {
+        self.previous.switch();
     }
 }

@@ -1,4 +1,4 @@
-use core::borrow::BorrowMut;
+use core::{borrow::BorrowMut, ops::Deref};
 
 use alloc::{sync::Arc, vec::Vec};
 use atomic_refcell::AtomicRefCell;
@@ -21,7 +21,7 @@ use super::{
 const FD_MAX: c_int = 1024;
 
 bitflags! {
-    #[derive(Clone, Copy)]
+    #[derive(Clone, Copy, Debug)]
     pub struct OpenFlags: i32 {
         const O_RDONLY    = 0o0;
         const O_WRONLY    = 0o1;
@@ -49,14 +49,15 @@ bitflags! {
 
 pub type FileDesc = c_int;
 
+#[repr(C)]
 pub struct OpenedFile {
-    path: Arc<PathComponent>,
+    path: PathComponent,
     pos: AtomicCell<usize>,
     options: AtomicRefCell<OpenFlags>,
 }
 
 impl OpenedFile {
-    pub fn new(path: Arc<PathComponent>, options: OpenFlags, pos: usize) -> OpenedFile {
+    pub fn new(path: PathComponent, options: OpenFlags, pos: usize) -> OpenedFile {
         OpenedFile {
             path,
             pos: AtomicCell::new(pos),
@@ -80,7 +81,7 @@ impl OpenedFile {
         *self.options.borrow()
     }
 
-    pub fn path(&self) -> &Arc<PathComponent> {
+    pub fn path(&self) -> &PathComponent {
         &self.path
     }
 
@@ -168,9 +169,16 @@ impl From<usize> for LseekWhence {
 }
 
 #[derive(Clone)]
-struct LocalOpenedFile {
+pub struct LocalOpenedFile {
     opened_file: Arc<OpenedFile>,
-    // close_on_exec: bool,
+}
+
+impl Deref for LocalOpenedFile {
+    type Target = OpenedFile;
+
+    fn deref(&self) -> &Self::Target {
+        &self.opened_file
+    }
 }
 
 #[derive(Clone)]
@@ -193,26 +201,17 @@ impl OpenedFileTable {
         }
     }
 
-    pub fn get(&self, fd: FileDesc) -> KResult<&Arc<OpenedFile>> {
+    pub fn get(&self, fd: FileDesc) -> KResult<LocalOpenedFile> {
         match self.files.get(fd as usize) {
-            Some(Some(LocalOpenedFile { opened_file, .. })) => Ok(opened_file),
+            Some(Some(file)) => Ok(file.clone()),
             _ => Err(kerror!(EBADF, "get(): file not opened")),
         }
     }
 
-    pub fn open(&mut self, path: Arc<PathComponent>, options: OpenFlags) -> KResult<FileDesc> {
-        self.alloc_fd(None).and_then(|fd| {
-            self.open_with_fd(
-                fd,
-                Arc::new(OpenedFile {
-                    path,
-                    options: AtomicRefCell::new(options),
-                    pos: AtomicCell::new(0),
-                }),
-                options,
-            )
-            .map(|_| fd)
-        })
+    pub fn open(&mut self, path: PathComponent, options: OpenFlags) -> KResult<FileDesc> {
+        let fd = self.alloc_fd(None)?;
+        self.open_with_fd(fd, OpenedFile::new(path, options, 0).into(), options)?;
+        Ok(fd)
     }
 
     pub fn open_with_fd(
@@ -223,15 +222,15 @@ impl OpenedFileTable {
     ) -> KResult<()> {
         if let INode::File(file) = &opened_file.path.inode {
             if let Some(new_inode) = file.open(&options)? {
-                opened_file = Arc::new(OpenedFile {
-                    pos: AtomicCell::new(0),
-                    options: AtomicRefCell::new(options),
-                    path: Arc::new(PathComponent {
+                opened_file = Arc::new(OpenedFile::new(
+                    PathComponent {
                         parent_dir: opened_file.path.parent_dir.clone(),
                         name: opened_file.path.name.clone(),
                         inode: INode::File(new_inode),
-                    }),
-                });
+                    },
+                    options,
+                    0,
+                ));
             }
         }
 
@@ -263,6 +262,7 @@ impl OpenedFileTable {
 
         while i != self.prev_fd && i >= gte {
             if matches!(self.files.get(i as usize), Some(None) | None) {
+                self.prev_fd = i;
                 return Ok(i);
             }
 
@@ -308,24 +308,18 @@ impl OpenedFileTable {
     }
 
     pub fn dup(&mut self, fd: FileDesc, gte: Option<i32>, options: OpenFlags) -> KResult<FileDesc> {
-        let file = match self.files.get(fd as usize) {
-            Some(Some(file)) => file.opened_file.clone(),
-            _ => return Err(kerror!(EBADF, "dup(): file not opened")),
-        };
+        let file = self.get(fd)?;
+        let new_fd = self.alloc_fd(gte)?;
+        self.open_with_fd(new_fd, file.opened_file, options)?;
 
-        self.alloc_fd(gte)
-            .and_then(|fd| self.open_with_fd(fd, file, options).map(|_| fd))
+        Ok(new_fd)
     }
 
-    pub fn dup2(&mut self, oldfd: FileDesc, newfd: FileDesc) -> KResult<FileDesc> {
-        let old_file = self
-            .files
-            .get(oldfd as usize)
-            .and_then(|file| file.as_ref().map(|file| file.opened_file.clone()))
-            .ok_or(kerror!(EBADF, "dup2(): file not opened"))?;
+    pub fn dup2(&mut self, old_fd: FileDesc, new_fd: FileDesc) -> KResult<FileDesc> {
+        let old_file = self.get(old_fd)?;
         let options = old_file.options();
-        self.open_with_fd(newfd, old_file, options)?;
-        Ok(newfd)
+        self.open_with_fd(new_fd, old_file.opened_file, options)?;
+        Ok(new_fd)
     }
 
     pub fn open_socket(&mut self, domain: usize, typ: usize, protocol: usize) -> KResult<FileDesc> {
@@ -339,11 +333,11 @@ impl OpenedFileTable {
         self.open_with_fd(
             fd,
             OpenedFile::new(
-                Arc::new(PathComponent {
+                PathComponent {
                     parent_dir: None,
-                    name: socket.get_name(),
+                    name: Arc::new(socket.get_name()),
                     inode: INode::File(socket.clone()),
-                }),
+                },
                 OpenFlags::empty(),
                 0,
             )
@@ -363,11 +357,11 @@ impl OpenedFileTable {
         self.open_with_fd(
             write_fd,
             OpenedFile::new(
-                Arc::new(PathComponent {
+                PathComponent {
                     parent_dir: None,
-                    name: pipe.get_name(),
+                    name: Arc::new(pipe.get_name()),
                     inode: INode::Pipe(pipe.clone()),
-                }),
+                },
                 options,
                 0,
             )
@@ -377,11 +371,11 @@ impl OpenedFileTable {
         self.open_with_fd(
             read_fd,
             OpenedFile::new(
-                Arc::new(PathComponent {
+                PathComponent {
                     parent_dir: None,
-                    name: pipe.get_name(),
+                    name: Arc::new(pipe.get_name()),
                     inode: INode::Pipe(pipe.clone()),
-                }),
+                },
                 options,
                 0,
             )

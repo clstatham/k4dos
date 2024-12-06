@@ -38,12 +38,12 @@ impl File for InitRamFsFile {
         if offset > lock.len() {
             return Ok(0);
         }
-        let mut writer = UserBufferWriter::from(buf);
+        let mut writer = UserBufferWriter::from_buf(buf);
         writer.write_bytes(&lock[offset..])
     }
 
     fn write(&self, offset: usize, buf: UserBuffer<'_>, options: &OpenFlags) -> KResult<usize> {
-        let mut reader = UserBufferReader::from(buf);
+        let mut reader = UserBufferReader::from_buf(buf);
         let mut data = self.data.lock();
         let data_len = data.len();
         if data.is_empty() {

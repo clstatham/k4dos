@@ -6,12 +6,12 @@ pub type KResult<T> = Result<T, KError<'static>>;
 
 #[derive(Clone, Default, Debug)]
 pub struct KError<'a> {
-    pub(crate) msg: Option<&'a str>,
+    pub(crate) msg: Option<core::fmt::Arguments<'a>>,
     pub(crate) errno: Option<Errno>,
 }
 
 impl<'a> KError<'a> {
-    pub fn msg(&self) -> Option<&'a str> {
+    pub fn msg(&self) -> Option<core::fmt::Arguments<'a>> {
         self.msg
     }
 
@@ -42,20 +42,26 @@ macro_rules! kerror {
     ($e:ident, $($tts:tt)*) => {
         $crate::util::error::KError {
             errno: Some($crate::util::errno::Errno::$e),
-            msg: format_args!($($tts)*).as_str(),
+            msg: Some(format_args!($($tts)*)),
         }
     };
     ($($tts:tt)*) => {
         $crate::util::error::KError {
             errno: None,
-            msg: format_args!($($tts)*).as_str(),
+            msg: Some(format_args!($($tts)*)),
         }
     };
 }
 
 #[macro_export]
 macro_rules! kbail {
-    ($($e:tt)*) => {
-        return Err($crate::kerror!($($e)*))
+    ($e:ident) => {
+        return Err($crate::kerror!($e))
+    };
+    ($e:ident, $($tts:tt)*) => {
+        return Err($crate::kerror!($e, $($tts)*))
+    };
+    ($($tts:tt)*) => {
+        return Err($crate::kerror!($($tts)*))
     };
 }

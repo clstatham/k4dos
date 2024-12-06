@@ -30,15 +30,15 @@ use super::{
     idt::{InterruptErrorFrame, InterruptFrame},
 };
 
-fn xsave(fpu: &mut Box<[u8]>) {
+fn fxsave(fpu: &mut Box<[u8]>) {
     unsafe {
-        core::arch::asm!("xsave [{}]", in(reg) fpu.as_ptr(), in("eax") 0xffffffffu32, in("edx") 0xffffffffu32)
+        core::arch::asm!("fxsave [{}]", in(reg) (**fpu).as_ptr(), in("rax") u64::MAX, in("rdx") u64::MAX)
     }
 }
 
-fn xrstor(fpu: &mut Box<[u8]>) {
+fn fxrstor(fpu: &mut Box<[u8]>) {
     unsafe {
-        core::arch::asm!("xrstor [{}]", in(reg) fpu.as_ptr(), in("eax") 0xffffffffu32, in("edx") 0xffffffffu32);
+        core::arch::asm!("fxrstor [{}]", in(reg) (**fpu).as_ptr(), in("rax") u64::MAX, in("rdx") u64::MAX)
     }
 }
 
@@ -48,6 +48,7 @@ pub fn arch_context_switch(prev: &mut ArchTask, next: &mut ArchTask) {
         // prev.gsbase = VirtAddr::new(rdmsr(IA32_GS_BASE) as usize);
         wrmsr(IA32_FS_BASE, next.fsbase.value() as u64);
         // swapgs();
+
         wrmsr(IA32_GS_BASE, next.gsbase.value() as u64);
         get_tss().privilege_stack_table[0] = x86_64::VirtAddr::new(
             (next.kernel_stack.as_ptr() as usize + next.kernel_stack.len()) as u64,
@@ -55,11 +56,11 @@ pub fn arch_context_switch(prev: &mut ArchTask, next: &mut ArchTask) {
         // swapgs();
 
         if let Some(fpu) = prev.fpu_storage.as_mut() {
-            xsave(fpu);
+            fxsave(fpu);
         }
 
         if let Some(fpu) = next.fpu_storage.as_mut() {
-            xrstor(fpu)
+            fxrstor(fpu)
         }
 
         next.address_space.switch();
@@ -247,7 +248,7 @@ impl ArchTask {
             kernel_stack: alloc::vec![0u8; KERNEL_STACK_SIZE].into_boxed_slice(),
             user: false,
             fsbase: VirtAddr::null(),
-            gsbase: unsafe { VirtAddr::new_unchecked(rdmsr(IA32_GS_BASE) as usize) },
+            gsbase: unsafe { VirtAddr::new(rdmsr(IA32_GS_BASE) as usize) },
             fpu_storage: None,
             symtab: None,
         }
@@ -342,10 +343,10 @@ impl ArchTask {
         }
     }
 
-    pub fn fork(&self) -> KResult<Self> {
+    pub fn fork(&mut self) -> KResult<Self> {
         assert!(self.user, "Cannot fork a kernel task");
 
-        let address_space = AddressSpace::current().fork(true)?;
+        let address_space = self.address_space.fork(true)?;
         unsafe { tlb::flush_all() };
 
         let switch_stack = Self::alloc_switch_stack()?.as_raw_ptr_mut::<u8>();
@@ -435,7 +436,7 @@ impl ArchTask {
     fn alloc_fpu_storage() -> Box<[u8]> {
         unsafe {
             let xsave_size = CpuId::new().get_extended_state_info().unwrap().xsave_size();
-            let layout = Layout::from_size_align(xsave_size as usize, 8).unwrap();
+            let layout = Layout::from_size_align(xsave_size as usize, 16).unwrap();
             let ptr = alloc_zeroed(layout);
             Box::from_raw(core::ptr::slice_from_raw_parts_mut(
                 ptr,

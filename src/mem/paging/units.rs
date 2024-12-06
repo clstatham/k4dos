@@ -30,7 +30,7 @@ impl PageIndex {
 
     #[inline]
     pub fn as_physaddr(self) -> PhysAddr {
-        PhysAddr::new(self.0 * PAGE_SIZE).unwrap()
+        PhysAddr::new(self.0 * PAGE_SIZE)
     }
 
     #[inline]
@@ -65,77 +65,136 @@ impl SubAssign<usize> for PageIndex {
     }
 }
 
-macro_rules! unit_impl {
-    ($name:ident, $addr:ident) => {
-        #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-        #[repr(transparent)]
-        pub struct $name {
-            index: PageIndex,
-        }
+pub trait MemoryUnit:
+    Copy
+    + Debug
+    + PartialEq
+    + Eq
+    + PartialOrd
+    + Ord
+    + Add<usize, Output = Self>
+    + Sub<usize, Output = Self>
+{
+    type Address: Copy
+        + Debug
+        + PartialEq
+        + Eq
+        + PartialOrd
+        + Ord
+        + Add<usize, Output = Self::Address>
+        + Sub<usize, Output = Self::Address>
+        + core::fmt::Pointer
+        + core::fmt::LowerHex;
 
-        impl $name {
-            #[inline]
-            pub fn containing_address(addr: $addr) -> Self {
-                Self {
-                    index: PageIndex(addr.value() / PAGE_SIZE),
-                }
-            }
-
-            #[inline]
-            pub fn at_index(index: PageIndex) -> Self {
-                Self { index }
-            }
-
-            #[inline]
-            pub fn start_address(self) -> $addr {
-                unsafe { $addr::new_unchecked(self.index.0 * PAGE_SIZE) }
-            }
-
-            #[inline]
-            pub fn inclusive_end_address(self) -> $addr {
-                unsafe { $addr::new_unchecked(self.index.0 * PAGE_SIZE + PAGE_SIZE - 1) }
-            }
-
-            #[inline]
-            pub fn index(self) -> PageIndex {
-                self.index
-            }
-        }
-
-        impl Add<usize> for $name {
-            type Output = Self;
-            fn add(self, rhs: usize) -> Self::Output {
-                Self::at_index(self.index + rhs)
-            }
-        }
-
-        impl Sub<usize> for $name {
-            type Output = Self;
-            fn sub(self, rhs: usize) -> Self::Output {
-                Self::at_index(self.index - rhs)
-            }
-        }
-
-        impl AddAssign<usize> for $name {
-            fn add_assign(&mut self, rhs: usize) {
-                self.index += rhs
-            }
-        }
-
-        impl SubAssign<usize> for $name {
-            fn sub_assign(&mut self, rhs: usize) {
-                self.index -= rhs
-            }
-        }
-    };
+    fn containing_address(addr: Self::Address) -> Self;
+    fn at_index(index: PageIndex) -> Self;
+    fn start_address(self) -> Self::Address;
+    fn inclusive_end_address(self) -> Self::Address;
+    fn index(self) -> PageIndex;
 }
 
-unit_impl!(Frame, PhysAddr);
-unit_impl!(Page, VirtAddr);
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[repr(transparent)]
+pub struct Frame {
+    index: PageIndex,
+}
+
+impl MemoryUnit for Frame {
+    type Address = PhysAddr;
+
+    #[inline]
+    fn containing_address(addr: PhysAddr) -> Self {
+        Self {
+            index: PageIndex::containing_physaddr(addr),
+        }
+    }
+
+    #[inline]
+    fn at_index(index: PageIndex) -> Self {
+        Self { index }
+    }
+
+    #[inline]
+    fn start_address(self) -> Self::Address {
+        self.index.as_physaddr()
+    }
+
+    #[inline]
+    fn inclusive_end_address(self) -> Self::Address {
+        self.start_address() + PAGE_SIZE - 1
+    }
+
+    #[inline]
+    fn index(self) -> PageIndex {
+        self.index
+    }
+}
 
 impl Debug for Frame {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         write!(f, "Frame<{:x}>", self.start_address())
+    }
+}
+
+impl Add<usize> for Frame {
+    type Output = Self;
+    fn add(self, rhs: usize) -> Self::Output {
+        Self::at_index(self.index + rhs)
+    }
+}
+
+impl Sub<usize> for Frame {
+    type Output = Self;
+    fn sub(self, rhs: usize) -> Self::Output {
+        Self::at_index(self.index - rhs)
+    }
+}
+
+impl AddAssign<usize> for Frame {
+    fn add_assign(&mut self, rhs: usize) {
+        self.index += rhs
+    }
+}
+
+impl SubAssign<usize> for Frame {
+    fn sub_assign(&mut self, rhs: usize) {
+        self.index -= rhs
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct Page {
+    index: PageIndex,
+}
+
+impl MemoryUnit for Page {
+    type Address = VirtAddr;
+
+    #[inline]
+    fn containing_address(addr: VirtAddr) -> Self {
+        Self {
+            index: PageIndex::containing_virtaddr(addr),
+        }
+    }
+
+    #[inline]
+    fn at_index(index: PageIndex) -> Self {
+        Self { index }
+    }
+
+    #[inline]
+    fn start_address(self) -> Self::Address {
+        self.index.as_virtaddr()
+    }
+
+    #[inline]
+    fn inclusive_end_address(self) -> Self::Address {
+        self.index.as_virtaddr() + PAGE_SIZE - 1
+    }
+
+    #[inline]
+    fn index(self) -> PageIndex {
+        self.index
     }
 }
 
@@ -145,269 +204,235 @@ impl Debug for Page {
     }
 }
 
+impl Add<usize> for Page {
+    type Output = Self;
+    fn add(self, rhs: usize) -> Self::Output {
+        Self::at_index(self.index + rhs)
+    }
+}
+
+impl Sub<usize> for Page {
+    type Output = Self;
+    fn sub(self, rhs: usize) -> Self::Output {
+        Self::at_index(self.index - rhs)
+    }
+}
+
+impl AddAssign<usize> for Page {
+    fn add_assign(&mut self, rhs: usize) {
+        self.index += rhs
+    }
+}
+
+impl SubAssign<usize> for Page {
+    fn sub_assign(&mut self, rhs: usize) {
+        self.index -= rhs
+    }
+}
+
 #[derive(Debug)]
 pub struct PageMergeError;
 
-macro_rules! range_impl {
-    ($name:ident, $addr:ident, $unit:ident, $iter:ident) => {
-        #[derive(Clone, Copy)]
-        pub struct $name {
-            start: $unit,
-            end: $unit,
-        }
-
-        impl $name {
-            #[inline]
-            pub fn new(start: $unit, end: $unit) -> Self {
-                Self { start, end }
-            }
-
-            #[inline]
-            pub fn empty() -> Self {
-                Self {
-                    start: $unit::at_index(PageIndex(1)),
-                    end: $unit::at_index(PageIndex(0)),
-                }
-            }
-
-            #[inline]
-            pub fn start(self) -> $unit {
-                self.start
-            }
-
-            #[inline]
-            pub fn end(self) -> $unit {
-                self.end
-            }
-
-            #[inline]
-            pub fn size_in_pages(self) -> usize {
-                (self.end.index().0 - self.start.index().0) + 1
-            }
-
-            #[inline]
-            pub fn size_in_bytes(self) -> usize {
-                self.size_in_pages() * PAGE_SIZE
-            }
-
-            #[inline]
-            pub fn is_empty(self) -> bool {
-                self.start > self.end
-            }
-
-            #[inline]
-            pub fn start_address(self) -> $addr {
-                self.start.start_address()
-            }
-
-            #[inline]
-            pub fn inclusive_end_address(self) -> $addr {
-                self.end.inclusive_end_address()
-            }
-
-            pub fn merge_with(&mut self, other: Self) -> $crate::util::error::KResult<()> {
-                if other.is_empty() {
-                    return Ok(());
-                }
-                if other.start != self.end + 1 && other.end + 1 != self.start {
-                    return Err($crate::kerror!("Error merging pages"));
-                }
-                if other.start < self.start {
-                    self.start = other.start;
-                }
-                if other.end > self.end {
-                    self.end = other.end;
-                }
-
-                Ok(())
-            }
-
-            pub fn overlaps(self, other: Self) -> bool {
-                if self.is_empty() || other.is_empty() {
-                    return false;
-                }
-                self.start <= other.end && other.start <= self.end
-            }
-
-            pub fn consumes(self, other: Self) -> bool {
-                if self.is_empty() || other.is_empty() {
-                    return false;
-                }
-                self.start <= other.start && self.end >= other.end
-            }
-
-            pub fn contains(self, unit: $unit) -> bool {
-                if self.is_empty() {
-                    return false;
-                }
-                self.start <= unit && self.end >= unit
-            }
-
-            pub fn iter(&self) -> $iter {
-                $iter {
-                    current: self.start,
-                    limit: self.end,
-                }
-            }
-        }
-
-        pub struct $iter {
-            current: $unit,
-            limit: $unit,
-        }
-
-        impl Iterator for $iter {
-            type Item = $unit;
-            fn next(&mut self) -> Option<Self::Item> {
-                if self.current > self.limit {
-                    None
-                } else {
-                    let current = self.current;
-                    self.current += 1;
-                    Some(current)
-                }
-            }
-        }
-    };
+#[derive(Debug, Clone, Copy)]
+pub struct MemoryRange<T: MemoryUnit> {
+    pub start: T,
+    pub end: T,
 }
 
-range_impl!(FrameRange, PhysAddr, Frame, FrameIter);
-range_impl!(PageRange, VirtAddr, Page, PageIter);
+impl<T: MemoryUnit> MemoryRange<T> {
+    #[inline]
+    pub fn new(start: T, end: T) -> Self {
+        Self { start, end }
+    }
 
-impl Debug for FrameRange {
+    #[inline]
+    pub fn empty() -> Self {
+        Self {
+            start: T::at_index(PageIndex(0)),
+            end: T::at_index(PageIndex(0)),
+        }
+    }
+
+    #[inline]
+    pub fn start(self) -> T {
+        self.start
+    }
+
+    #[inline]
+    pub fn end(self) -> T {
+        self.end
+    }
+
+    #[inline]
+    pub fn size_in_pages(self) -> usize {
+        if self.is_empty() {
+            return 0;
+        }
+        self.end.index().0 - self.start.index().0
+    }
+
+    #[inline]
+    pub fn size_in_bytes(self) -> usize {
+        self.size_in_pages() * PAGE_SIZE
+    }
+
+    #[inline]
+    pub fn is_empty(self) -> bool {
+        self.start >= self.end
+    }
+
+    #[inline]
+    pub fn start_address(self) -> T::Address {
+        self.start.start_address()
+    }
+
+    #[inline]
+    pub fn end_address(self) -> T::Address {
+        self.end.start_address()
+    }
+
+    #[inline]
+    pub fn inclusive_end_address(self) -> T::Address {
+        self.end_address() - 1
+    }
+
+    pub fn merge_with(&mut self, other: Self) -> Result<(), PageMergeError> {
+        if other.is_empty() {
+            return Ok(());
+        }
+        if other.start != self.end && other.end != self.start {
+            return Err(PageMergeError);
+        }
+        if other.start < self.start {
+            self.start = other.start;
+        }
+        if other.end > self.end {
+            self.end = other.end;
+        }
+
+        Ok(())
+    }
+
+    pub fn overlaps(self, other: Self) -> bool {
+        if self.is_empty() || other.is_empty() {
+            return false;
+        }
+        self.start <= other.end && other.start <= self.end
+    }
+
+    pub fn consumes(self, other: Self) -> bool {
+        if self.is_empty() || other.is_empty() {
+            return false;
+        }
+        self.start <= other.start && self.end >= other.end
+    }
+
+    pub fn contains(self, unit: T) -> bool {
+        if self.is_empty() {
+            return false;
+        }
+        self.start <= unit && self.end >= unit
+    }
+
+    pub fn iter(self) -> MemoryRangeIter<T> {
+        MemoryRangeIter {
+            current: self.start,
+            limit: self.end,
+        }
+    }
+}
+
+pub type FrameRange = MemoryRange<Frame>;
+pub type PageRange = MemoryRange<Page>;
+
+pub struct MemoryRangeIter<T: MemoryUnit> {
+    current: T,
+    limit: T,
+}
+
+impl<T: MemoryUnit> Iterator for MemoryRangeIter<T> {
+    type Item = T;
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.current >= self.limit {
+            None
+        } else {
+            let current = self.current;
+            self.current = self.current + 1;
+            Some(current)
+        }
+    }
+}
+
+pub struct Allocated<T: MemoryUnit> {
+    pub range: MemoryRange<T>,
+}
+
+impl<T: MemoryUnit> Allocated<T> {
+    pub unsafe fn assume_allocated(range: MemoryRange<T>) -> Self {
+        Self { range }
+    }
+}
+
+impl<T: MemoryUnit> Debug for Allocated<T> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         write!(
             f,
-            "FrameRange[{:x} ..= {:x}]",
-            self.start_address(),
-            self.inclusive_end_address()
+            "Allocated[{:x} .. {:x}]",
+            self.range.start_address(),
+            self.range.inclusive_end_address()
         )
     }
 }
 
-impl Debug for PageRange {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        write!(
-            f,
-            "PageRange[{:x} ..= {:x}]",
-            self.start_address(),
-            self.inclusive_end_address()
-        )
+pub type AllocatedFrames = Allocated<Frame>;
+pub type AllocatedPages = Allocated<Page>;
+
+impl<T: MemoryUnit> core::ops::Deref for Allocated<T> {
+    type Target = MemoryRange<T>;
+    fn deref(&self) -> &Self::Target {
+        &self.range
     }
 }
 
-macro_rules! allocated_impl {
-    ($name:ident, $range:ident) => {
-        /// Even though this implements Clone, you should be very careful about cloning allocations.
-        #[derive(Clone)]
-        pub struct $name {
-            inner: $range,
-        }
-
-        impl $name {
-            #[inline]
-            pub unsafe fn assume_allocated(inner: $range) -> Self {
-                Self { inner }
-            }
-        }
-
-        impl core::ops::Deref for $name {
-            type Target = $range;
-            fn deref(&self) -> &Self::Target {
-                &self.inner
-            }
-        }
-
-        impl core::ops::DerefMut for $name {
-            fn deref_mut(&mut self) -> &mut Self::Target {
-                &mut self.inner
-            }
-        }
-    };
-}
-
-allocated_impl!(AllocatedFrames, FrameRange);
-allocated_impl!(AllocatedPages, PageRange);
-
-impl Debug for AllocatedFrames {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        write!(
-            f,
-            "AllocatedFrames[{:x} .. {:x}]",
-            self.start_address(),
-            self.inclusive_end_address() + 1
-        )
-    }
-}
-
-impl Debug for AllocatedPages {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        write!(
-            f,
-            "AllocatedPages[{:x} .. {:x}]",
-            self.start_address(),
-            self.inclusive_end_address() + 1
-        )
-    }
-}
-
-impl Drop for AllocatedFrames {
-    fn drop(&mut self) {
-        // log::warn!("Dropping {:?}", self);
-    }
-}
-
-impl Drop for AllocatedPages {
-    fn drop(&mut self) {
-        // log::warn!("Dropping {:?}", self);
+impl<T: MemoryUnit> core::ops::DerefMut for Allocated<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.range
     }
 }
 
 use x86_64::structures::paging::PageTableFlags;
 
-macro_rules! mapped_impl {
-    ($name:ident, $ap:ident) => {
-        /// Even though this implements Clone, you should be very careful about cloning mappings.
-        #[derive(Clone)]
-        pub struct $name {
-            pages: $ap,
-            frames: AllocatedFrames,
-            pub(super) flags: PageTableFlags,
-        }
-
-        impl $name {
-            #[inline]
-            pub unsafe fn assume_mapped(
-                pages: $ap,
-                frames: AllocatedFrames,
-                flags: PageTableFlags,
-            ) -> Self {
-                Self {
-                    pages,
-                    frames,
-                    flags,
-                }
-            }
-
-            #[inline]
-            pub fn pages(&self) -> &$ap {
-                &self.pages
-            }
-
-            #[inline]
-            pub fn frames(&self) -> &AllocatedFrames {
-                &self.frames
-            }
-
-            #[inline]
-            pub fn flags(&self) -> PageTableFlags {
-                self.flags
-            }
-        }
-    };
+pub struct MappedPages {
+    pages: AllocatedPages,
+    frames: AllocatedFrames,
+    pub(super) flags: PageTableFlags,
 }
 
-mapped_impl!(MappedPages, AllocatedPages);
+impl MappedPages {
+    pub unsafe fn assume_mapped(
+        pages: AllocatedPages,
+        frames: AllocatedFrames,
+        flags: PageTableFlags,
+    ) -> Self {
+        Self {
+            pages,
+            frames,
+            flags,
+        }
+    }
+
+    pub fn pages(&self) -> &AllocatedPages {
+        &self.pages
+    }
+
+    pub fn frames(&self) -> &AllocatedFrames {
+        &self.frames
+    }
+
+    pub fn flags(&self) -> PageTableFlags {
+        self.flags
+    }
+}
 
 impl Debug for MappedPages {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
@@ -415,11 +440,5 @@ impl Debug for MappedPages {
             .field("pages", &self.pages)
             .field("frames", &self.frames)
             .finish()
-    }
-}
-
-impl Drop for MappedPages {
-    fn drop(&mut self) {
-        // log::warn!("Dropping {:#?}", self);
     }
 }

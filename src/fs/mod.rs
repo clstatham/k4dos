@@ -251,7 +251,7 @@ pub trait Directory: FsNode {
 
     fn readdir(&self, index: usize) -> KResult<Option<DirEntry>>;
 
-    fn unlink(&self, name: String) -> KResult<()>;
+    fn unlink(&self, name: &str) -> KResult<()>;
 }
 
 #[derive(Clone)]

@@ -40,7 +40,8 @@ target/limine/limine-deploy $KERNEL.iso
 # -machine q35 -cpu EPYC
 echo "Running in release mode." >&2
 qemu-system-x86_64 \
-    -machine q35 -cpu EPYC -M smm=off \
+    -M smm=off \
+    -machine q35 -cpu EPYC \
     -D target/log.txt -d int,guest_errors -no-reboot -no-shutdown \
     -s \
     -serial stdio \

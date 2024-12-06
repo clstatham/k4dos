@@ -23,10 +23,15 @@ impl SyscallHandler<'_> {
             todo!("mmap file");
         }
 
-        current_task()
-            .vmem()
-            .lock()
-            .mmap(addr, size, prot, flags, fd, offset)
+        let current = current_task();
+        let vmem = current.vmem();
+        current
+            .arch_mut()
+            .address_space
+            .with_mapper(|mut mapper| {
+                vmem.lock()
+                    .mmap(addr, size, prot, flags, fd, offset, &mut mapper)
+            })
             .map(|addr| addr.value() as isize)
     }
 
@@ -34,6 +39,15 @@ impl SyscallHandler<'_> {
         current_task().vmem().lock().mprotect(addr, size, prot)?;
         Ok(0)
     }
+
+    // pub fn sys_brk(&mut self, addr: VirtAddr) -> KResult<isize> {
+    //     let current = current_task();
+    //     let new_addr = current
+    //         .arch_mut()
+    //         .address_space
+    //         .with_mapper(|mut mapper| current.vmem().lock().brk(&mut mapper, addr))?;
+    //     Ok(new_addr.value() as isize)
+    // }
 
     pub fn sys_munmap(&mut self, addr: VirtAddr, size: usize) -> KResult<isize> {
         let current = current_task();

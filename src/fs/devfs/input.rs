@@ -59,7 +59,7 @@ impl FsNode for KbdDevice {
 
 impl File for KbdDevice {
     fn read(&self, _offset: usize, buf: UserBufferMut, _options: &OpenFlags) -> KResult<usize> {
-        let mut writer = UserBufferWriter::from(buf);
+        let mut writer = UserBufferWriter::from_buf(buf);
         let keys = *self.keys_pressed.lock();
         writer.write(keys)
     }
