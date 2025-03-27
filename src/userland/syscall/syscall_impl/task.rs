@@ -192,7 +192,7 @@ impl SyscallHandler<'_> {
             .retain(|p| p.pid() != got_pid);
 
         if status.value() != 0 {
-            unsafe { status.write::<c_int>(status_val) }?;
+            unsafe { status.write_user::<c_int>(status_val) }?;
         }
 
         Ok(got_pid.as_usize() as isize)

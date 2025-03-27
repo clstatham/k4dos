@@ -148,6 +148,7 @@ impl SyscallHandler<'_> {
             SYS_GETPGID => self.sys_getpgid(TaskId::new(a1)),
             SYS_SETPGID => self.sys_setpgid(TaskId::new(a1), a2 as PgId),
             SYS_EXIT => self.sys_exit(a1 as c_int),
+            SYS_EXIT_GROUP => self.sys_exit(a1 as c_int), // todo
             SYS_MMAP => self.sys_mmap(
                 VirtAddr::new(a1),
                 a2,

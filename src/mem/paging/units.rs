@@ -3,10 +3,14 @@ use core::{
     ops::{Add, AddAssign, Sub, SubAssign},
 };
 
+use x86_64::structures::paging::PageTableFlags;
+
 use crate::mem::{
     addr::{PhysAddr, VirtAddr},
     consts::PAGE_SIZE,
 };
+
+use super::mapper::Mapper;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[repr(transparent)]
@@ -400,11 +404,9 @@ impl<T: MemoryUnit> core::ops::DerefMut for Allocated<T> {
     }
 }
 
-use x86_64::structures::paging::PageTableFlags;
-
 pub struct MappedPages {
-    pages: AllocatedPages,
-    frames: AllocatedFrames,
+    pub(super) pages: AllocatedPages,
+    pub(super) frames: AllocatedFrames,
     pub(super) flags: PageTableFlags,
 }
 
@@ -419,6 +421,10 @@ impl MappedPages {
             frames,
             flags,
         }
+    }
+
+    pub unsafe fn unmap(self, table: &mut Mapper) -> (AllocatedPages, AllocatedFrames) {
+        unsafe { table.unmap(self) }
     }
 
     pub fn pages(&self) -> &AllocatedPages {

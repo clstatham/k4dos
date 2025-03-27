@@ -16,23 +16,23 @@ pub struct PhysAddr {
 }
 
 #[inline]
-pub const fn canonicalisze_physaddr(addr: usize) -> usize {
+pub const fn canonicalize_physaddr(addr: usize) -> usize {
     addr & 0x000F_FFFF_FFFF_FFFF
 }
 
 #[inline]
 pub const fn is_canonical_physaddr(addr: usize) -> bool {
-    canonicalisze_physaddr(addr) == addr
+    canonicalize_physaddr(addr) == addr
 }
 
 #[inline]
-pub const fn canonicalisze_virtaddr(addr: usize) -> usize {
+pub const fn canonicalize_virtaddr(addr: usize) -> usize {
     ((addr << 16) as isize >> 16) as usize
 }
 
 #[inline]
 pub const fn is_canonical_virtaddr(addr: usize) -> bool {
-    canonicalisze_virtaddr(addr) == addr
+    canonicalize_virtaddr(addr) == addr
 }
 
 impl PhysAddr {
@@ -176,7 +176,7 @@ impl VirtAddr {
     #[inline]
     pub const fn new(addr: usize) -> Self {
         // assert!(is_canonical_virtaddr(addr));
-        unsafe { Self::new_unchecked(canonicalisze_virtaddr(addr)) }
+        unsafe { Self::new_unchecked(canonicalize_virtaddr(addr)) }
     }
 
     #[inline]

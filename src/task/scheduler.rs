@@ -249,9 +249,7 @@ impl Scheduler {
     pub fn restore_signaled_user_stack(&self, current_frame: &mut InterruptFrame) {
         let current = self.current_task();
         if let Some(signaled_frame) = current.signaled_frame.swap(None) {
-            current
-                .arch_mut()
-                .setup_sigreturn_stack(current_frame, &signaled_frame);
+            *current_frame = signaled_frame;
         } else {
             log::warn!("User called sigreturn(2) while it is not signaled");
         }

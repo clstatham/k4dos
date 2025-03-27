@@ -71,19 +71,20 @@ impl<'a> Mapper<'a> {
         let p1 = p2.next_table_create(addr.p2_index(), insert_flags)?;
         let entry = &mut p1[addr.p1_index()];
         if !entry.is_unused() {
-            log::error!(
-                "Attempt to remap {:?} to {:?} with {:?}",
-                page,
-                frame,
-                flags
-            );
-            log::error!(
-                "-- {:?} already mapped to {:?}, with {:?}",
-                page,
-                entry.frame(),
-                entry.flags()
-            );
-            kbail!("Page already mapped to different frame");
+            unsafe { self.unmap_single(page) };
+            // log::error!(
+            //     "Attempt to remap {:?} to {:?} with {:?}",
+            //     page,
+            //     frame,
+            //     flags
+            // );
+            // log::error!(
+            //     "-- {:?} already mapped to {:?}, with {:?}",
+            //     page,
+            //     entry.frame(),
+            //     entry.flags()
+            // );
+            // kbail!("Page already mapped to different frame");
         }
         entry.set_frame(frame, flags);
         unsafe { tlb::flush(addr.value()) }
@@ -126,7 +127,7 @@ impl<'a> Mapper<'a> {
         mp.flags = flags;
     }
 
-    pub fn unmap(&mut self, mp: &mut MappedPages) {
+    pub unsafe fn unmap(&mut self, mp: MappedPages) -> (AllocatedPages, AllocatedFrames) {
         for page in mp.pages().iter() {
             let addr = page.start_address();
             // these unwraps should be safe since we know the pages are already mapped
@@ -136,6 +137,8 @@ impl<'a> Mapper<'a> {
             p1[addr.p1_index()].set_unused();
             unsafe { tlb::flush(addr.value()) };
         }
+        let MappedPages { pages, frames, .. } = mp;
+        (pages, frames)
     }
 
     pub unsafe fn unmap_single(&mut self, page: Page) -> Option<Frame> {

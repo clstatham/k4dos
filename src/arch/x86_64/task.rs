@@ -185,7 +185,7 @@ unsafe extern "C" fn exec_entry(rcx: usize, rsp: usize, r11: usize) -> ! {
 
             sysretq
             ",
-            user_ds = const((USER_DS_IDX as u64) << 3 | 3),
+            user_ds = const(((USER_DS_IDX as u64) << 3) | 3),
         )
     }
 }
