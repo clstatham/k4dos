@@ -2,7 +2,6 @@ use x86::tlb;
 use x86_64::structures::paging::PageTableFlags;
 
 use crate::{
-    kbail,
     mem::{
         addr::{PhysAddr, VirtAddr},
         allocator::alloc_kernel_frames,
