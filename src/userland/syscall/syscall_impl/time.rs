@@ -22,3 +22,12 @@ pub struct TimeSpec {
     pub tv_sec: isize,
     pub tv_nsec: isize,
 }
+
+impl TimeSpec {
+    pub const fn zero() -> Self {
+        TimeSpec {
+            tv_sec: 0,
+            tv_nsec: 0,
+        }
+    }
+}

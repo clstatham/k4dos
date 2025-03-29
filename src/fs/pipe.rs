@@ -89,7 +89,6 @@ impl File for Pipe {
         _offset: usize,
         buf: UserBufferMut,
         _options: &super::opened_file::OpenFlags,
-        // len: usize,
     ) -> KResult<usize> {
         self.read_pipe(buf)
     }

@@ -9,7 +9,9 @@ pub mod consts;
 #[allow(clippy::missing_safety_doc)]
 pub extern "C" fn syscall0(n: usize) -> isize {
     let ret: isize;
-    unsafe { asm!("syscall", in("rax") n, lateout("rax") ret); }
+    unsafe {
+        asm!("syscall", in("rax") n, lateout("rax") ret);
+    }
     ret
 }
 
@@ -18,7 +20,9 @@ pub extern "C" fn syscall0(n: usize) -> isize {
 #[allow(clippy::missing_safety_doc)]
 pub extern "C" fn syscall1(n: usize, a1: usize) -> isize {
     let ret: isize;
-    unsafe { asm!("syscall", in("rax") n, in("rdi") a1, lateout("rax") ret); }
+    unsafe {
+        asm!("syscall", in("rax") n, in("rdi") a1, lateout("rax") ret);
+    }
     ret
 }
 
@@ -27,7 +31,9 @@ pub extern "C" fn syscall1(n: usize, a1: usize) -> isize {
 #[allow(clippy::missing_safety_doc)]
 pub extern "C" fn syscall2(n: usize, a1: usize, a2: usize) -> isize {
     let ret: isize;
-    unsafe { asm!("syscall", in("rax") n, in("rdi") a1, in("rsi") a2, lateout("rax") ret); }
+    unsafe {
+        asm!("syscall", in("rax") n, in("rdi") a1, in("rsi") a2, lateout("rax") ret);
+    }
     ret
 }
 
@@ -36,7 +42,9 @@ pub extern "C" fn syscall2(n: usize, a1: usize, a2: usize) -> isize {
 #[allow(clippy::missing_safety_doc)]
 pub extern "C" fn syscall3(n: usize, a1: usize, a2: usize, a3: usize) -> isize {
     let ret: isize;
-    unsafe { asm!("syscall", in("rax") n, in("rdi") a1, in("rsi") a2, in("rdx") a3, lateout("rax") ret); }
+    unsafe {
+        asm!("syscall", in("rax") n, in("rdi") a1, in("rsi") a2, in("rdx") a3, lateout("rax") ret);
+    }
     ret
 }
 
@@ -45,25 +53,46 @@ pub extern "C" fn syscall3(n: usize, a1: usize, a2: usize, a3: usize) -> isize {
 #[allow(clippy::missing_safety_doc)]
 pub extern "C" fn syscall4(n: usize, a1: usize, a2: usize, a3: usize, a4: usize) -> isize {
     let ret: isize;
-    unsafe { asm!("syscall", in("rax") n, in("rdi") a1, in("rsi") a2, in("rdx") a3, in("r10") a4, lateout("rax") ret); }
+    unsafe {
+        asm!("syscall", in("rax") n, in("rdi") a1, in("rsi") a2, in("rdx") a3, in("r10") a4, lateout("rax") ret);
+    }
     ret
 }
 
 #[no_mangle]
 #[inline(always)]
 #[allow(clippy::missing_safety_doc)]
-pub extern "C" fn syscall5(n: usize, a1: usize, a2: usize, a3: usize, a4: usize, a5: usize) -> isize {
+pub extern "C" fn syscall5(
+    n: usize,
+    a1: usize,
+    a2: usize,
+    a3: usize,
+    a4: usize,
+    a5: usize,
+) -> isize {
     let ret: isize;
-    unsafe { asm!("syscall", in("rax") n, in("rdi") a1, in("rsi") a2, in("rdx") a3, in("r10") a4, in("r8") a5, lateout("rax") ret); }
+    unsafe {
+        asm!("syscall", in("rax") n, in("rdi") a1, in("rsi") a2, in("rdx") a3, in("r10") a4, in("r8") a5, lateout("rax") ret);
+    }
     ret
 }
 
 #[no_mangle]
 #[inline(always)]
 #[allow(clippy::missing_safety_doc)]
-pub extern "C" fn syscall6(n: usize, a1: usize, a2: usize, a3: usize, a4: usize, a5: usize, a6: usize) -> isize {
+pub extern "C" fn syscall6(
+    n: usize,
+    a1: usize,
+    a2: usize,
+    a3: usize,
+    a4: usize,
+    a5: usize,
+    a6: usize,
+) -> isize {
     let ret: isize;
-    unsafe { asm!("syscall", in("rax") n, in("rdi") a1, in("rsi") a2, in("rdx") a3, in("r10") a4, in("r8") a5, in("r9") a6, lateout("rax") ret); }
+    unsafe {
+        asm!("syscall", in("rax") n, in("rdi") a1, in("rsi") a2, in("rdx") a3, in("r10") a4, in("r8") a5, in("r9") a6, lateout("rax") ret);
+    }
     ret
 }
 
@@ -92,7 +121,13 @@ pub fn sys_fork() -> SyscallResult {
 }
 
 pub fn sys_wait4(pid: i32, status_addr: usize, options: i32, rusage_addr: usize) -> SyscallResult {
-    syscall_result(syscall4(SYS_WAIT4, pid as usize, status_addr, options as usize, rusage_addr))
+    syscall_result(syscall4(
+        SYS_WAIT4,
+        pid as usize,
+        status_addr,
+        options as usize,
+        rusage_addr,
+    ))
 }
 
 pub fn sys_execve(path_addr: usize, argv_addr: usize, envp_addr: usize) -> SyscallResult {

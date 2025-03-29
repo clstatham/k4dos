@@ -11,10 +11,7 @@ static UPTIME_RAW: AtomicUsize = AtomicUsize::new(0);
 static UPTIME_SEC: AtomicUsize = AtomicUsize::new(0);
 
 pub static EPOCH: AtomicUsize = AtomicUsize::new(usize::MAX);
-pub static RT_CLOCK: IrqMutex<TimeSpec> = IrqMutex::new(TimeSpec {
-    tv_sec: 0,
-    tv_nsec: 0,
-});
+pub static RT_CLOCK: IrqMutex<TimeSpec> = IrqMutex::new(TimeSpec::zero());
 
 pub fn get_uptime_ns() -> usize {
     let ts = get_rt_clock();
