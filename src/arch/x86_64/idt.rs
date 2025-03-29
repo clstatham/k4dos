@@ -1,12 +1,12 @@
 use lazy_static::lazy_static;
 
-use pc_keyboard::{layouts::Us104Key, DecodedKey, HandleControl, Keyboard, ScancodeSet1};
+use pc_keyboard::{DecodedKey, HandleControl, Keyboard, ScancodeSet1, layouts::Us104Key};
 use pic8259::ChainedPics;
 use spin::Mutex;
 
 use x86::{
     io::outb,
-    msr::{rdmsr, IA32_FS_BASE},
+    msr::{IA32_FS_BASE, rdmsr},
 };
 use x86_64::{
     instructions::port::Port,
@@ -210,7 +210,7 @@ interrupt_handler!(com2_handler, 35, no_error!());
 
 use x86::irq::*;
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 extern "C" fn x64_handle_interrupt(vector: u8, stack_frame: *mut InterruptErrorFrame) {
     let stack_frame = unsafe { &mut *stack_frame };
     let error_code = stack_frame.code;

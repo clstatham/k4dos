@@ -45,7 +45,7 @@ pub fn phys_offset() -> VirtAddr {
     unsafe { VirtAddr::new_unchecked(*PHYSICAL_OFFSET.get().unwrap()) }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn start() -> ! {
     arch::arch_main();
 

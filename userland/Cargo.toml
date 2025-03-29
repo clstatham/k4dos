@@ -1,0 +1,3 @@
+[workspace]
+members = ["kash", "kados_syscall"]
+resolver = "3"

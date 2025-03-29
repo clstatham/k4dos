@@ -4,7 +4,7 @@ use x86::msr::{rdmsr, wrmsr};
 
 use crate::mem::kernel_addr_space_scope;
 use crate::userland::syscall::{
-    errno_to_isize, syscall_name_by_number, SyscallHandler, QUIET_SYSCALLS,
+    QUIET_SYSCALLS, SyscallHandler, errno_to_isize, syscall_name_by_number,
 };
 
 use super::gdt::{KERNEL_CS_IDX, USER_DS_IDX};
@@ -119,7 +119,7 @@ pub unsafe extern "C" fn syscall_entry() {
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 unsafe extern "C" fn x64_handle_syscall(ctx: *mut InterruptFrame) -> isize {
     let context = unsafe { core::ptr::read(ctx) };
     handle_syscall(

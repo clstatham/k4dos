@@ -4,9 +4,9 @@ use alloc::vec::Vec;
 use spin::Once;
 use x86_64::instructions::interrupts;
 use xmas_elf::{
+    ElfFile,
     sections::{SectionData, ShType},
     symbol_table::Entry,
-    ElfFile,
 };
 
 use crate::{
@@ -22,7 +22,7 @@ use crate::{
 pub static KERNEL_ELF: Once<ElfFile<'static>> = Once::new();
 
 fn print_symbol(rip: usize, symtab: &Option<Vec<SymTabEntry>>, depth: usize) {
-    if let Some(ref symbol_table) = symtab {
+    if let Some(symbol_table) = symtab {
         let mut name = None;
         for data in symbol_table {
             let st_value = data.value as usize;
@@ -203,14 +203,14 @@ fn rust_panic(info: &PanicInfo) -> ! {
 }
 
 #[allow(non_snake_case)]
-#[no_mangle]
+#[unsafe(no_mangle)]
 extern "C" fn _Unwind_Resume(unwind_context_ptr: usize) -> ! {
     serial0_println!("{:#x}", unwind_context_ptr);
     crate::hcf();
 }
 
 #[lang = "eh_personality"]
-#[no_mangle]
+#[unsafe(no_mangle)]
 extern "C" fn rust_eh_personality() -> ! {
     serial0_println!("Poisoned function `rust_eh_personality` was called.");
     crate::hcf()

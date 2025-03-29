@@ -3,7 +3,7 @@
 set -e
 
 if [[ -z "$@" ]]; then
-    echo "Usage: extern.sh [COMMANDS]..."
+    echo "Usage: deps.sh [COMMANDS]..."
     echo "Available commands:"
     echo "download       Downloads Busybox"
     echo "menuconfig     Configures Busybox with menuconfig"
@@ -39,7 +39,6 @@ then
     sudo ln -s /usr/bin/ar /usr/bin/musl-ar
     sudo ln -s /usr/bin/strip /usr/bin/musl-strip
     echo "Now run 'deps.sh menuconfig' and load kados.config, located in the same directory as this script"
-    
 fi
 
 
@@ -70,7 +69,7 @@ fi
 if [[ $@ =~ "kash" ]];
 then
     cd $STARTDIR/userland/kash
-    ./build.sh
+    cargo build
     cd -
 fi
 if [[ $@ =~ "makeimg" ]];
