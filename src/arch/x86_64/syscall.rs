@@ -62,10 +62,10 @@ macro_rules! pop_regs {
     };
 }
 
-#[naked]
+#[unsafe(naked)]
 pub unsafe extern "C" fn syscall_entry() {
     use x86_64::structures::tss::TaskStateSegment;
-    unsafe {
+    {
         core::arch::naked_asm!(
             concat!(
                 "

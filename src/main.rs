@@ -3,7 +3,6 @@
 #![feature(
     lang_items,
     abi_x86_interrupt,
-    naked_functions,
     ptr_internals,
     slice_pattern,
     map_try_insert,
@@ -11,7 +10,7 @@
     alloc_error_handler
 )]
 #![allow(internal_features)]
-#![allow(clippy::missing_safety_doc)]
+#![allow(clippy::missing_safety_doc, clippy::uninlined_format_args)]
 #![deny(unsafe_op_in_unsafe_fn)]
 // #![warn(clippy::unwrap_used)]
 

@@ -3,7 +3,7 @@ use core::{alloc::Layout, ptr::Unique, slice::SlicePattern};
 use alloc::{alloc::alloc_zeroed, boxed::Box, vec::Vec};
 use x86::{
     cpuid::CpuId,
-    msr::{rdmsr, wrmsr, IA32_FS_BASE, IA32_GS_BASE},
+    msr::{IA32_FS_BASE, IA32_GS_BASE, rdmsr, wrmsr},
     tlb,
 };
 use x86_64::instructions::interrupts;
@@ -21,7 +21,7 @@ use crate::{
         vmem::{MMapFlags, MMapKind, MMapProt, Vmem},
     },
     userland::elf::{self, AuxvType, SymTabEntry},
-    util::{stack::Stack, KResult},
+    util::{KResult, stack::Stack},
 };
 
 use super::{
@@ -69,9 +69,9 @@ pub fn arch_context_switch(prev: &mut ArchTask, next: &mut ArchTask) {
     }
 }
 
-#[naked]
+#[unsafe(naked)]
 unsafe extern "C" fn iretq_init() -> ! {
-    unsafe {
+    {
         core::arch::naked_asm!(
             "
     cli
@@ -87,9 +87,9 @@ unsafe extern "C" fn iretq_init() -> ! {
     }
 }
 
-#[naked]
+#[unsafe(naked)]
 unsafe extern "C" fn fork_init() -> ! {
-    unsafe {
+    {
         core::arch::naked_asm!(concat!(
             "
         cli
@@ -106,9 +106,9 @@ unsafe extern "C" fn fork_init() -> ! {
     }
 }
 
-#[naked]
+#[unsafe(naked)]
 unsafe extern "C" fn context_switch(_prev: &mut Unique<Context>, _next: &Context) {
-    unsafe {
+    {
         core::arch::naked_asm!(
             "
         pushfq
@@ -152,9 +152,9 @@ pub struct Context {
     rip: usize,
 }
 
-#[naked]
+#[unsafe(naked)]
 unsafe extern "C" fn exec_entry(rcx: usize, rsp: usize, r11: usize) -> ! {
-    unsafe {
+    {
         core::arch::naked_asm!(
             "
             cli

@@ -132,9 +132,9 @@ pub fn notify_eoi(index: u8) {
 
 macro_rules! interrupt_handler {
     ($name:ident, $num:literal, $push_error:expr) => {
-        #[naked]
+        #[unsafe(naked)]
         unsafe extern "C" fn $name() {
-            unsafe {
+            {
                 core::arch::naked_asm!(concat!(
                     $push_error,
                     "

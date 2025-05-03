@@ -9,16 +9,16 @@ use spin::Once;
 
 use crate::{
     fs::{
+        DirRef, FileMode, FileSize, FsNode, INode, Stat,
         initramfs::{
             dir::{DirInner, InitRamFsDir},
             file::InitRamFsFile,
             symlink::InitRamFsSymlink,
         },
         path::{Components, Path, PathBuf},
-        DirRef, FileMode, FileSize, FsNode, INode, Stat,
     },
     kbail, kerror,
-    util::{align_up, IrqMutex, KResult},
+    util::{IrqMutex, KResult, align_up},
 };
 
 use self::root::RootFs;
